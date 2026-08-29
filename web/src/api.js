@@ -44,6 +44,10 @@ export function createTodo(todo) {
   });
 }
 
+export function getTodo(id) {
+  return request(`/todos/${id}`);
+}
+
 export function getCalendar(from, to) {
   const params = new URLSearchParams({ from, to });
   return request(`/calendar?${params}`);

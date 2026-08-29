@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	_ "time/tzdata"
 
 	"note/internal"
 )

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CalendarBlank,
   CaretDown,
   CaretUp,
   Check,
   Clock,
   DotsThree,
+  GearSix,
+  Minus,
   Palette,
   Plus,
   Sparkle,
@@ -99,6 +102,7 @@ function getShanghaiTodayKey() {
 }
 
 const TODAY_KEY = getShanghaiTodayKey();
+const IS_DESKTOP = Boolean(window.noteDesktop?.isDesktop);
 
 function isPastDateKey(dateKey) {
   return dateKey < TODAY_KEY;
@@ -346,6 +350,24 @@ function CustomColorSwatch({ value, selected, onChange }) {
   );
 }
 
+function WindowControls({ primary = false }) {
+  if (!IS_DESKTOP) return null;
+
+  return (
+    <div className="window-controls" aria-label="窗口控制">
+      {primary ? (
+        <button className="is-close" type="button" onClick={() => void window.noteDesktop.closeCurrent()} aria-label="隐藏到后台">
+          <X size={17} />
+        </button>
+      ) : (
+        <button type="button" onClick={() => void window.noteDesktop.closeCurrent()} aria-label="收起当前区域">
+          <Minus size={16} weight="bold" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SelectField({ label, value, options, onChange }) {
   const [open, setOpen] = useState(false);
 
@@ -493,11 +515,14 @@ function TimeField({ label = "时间", value, onChange, compact = false }) {
   );
 }
 
-function DayAgendaItem({ item, onSave, onOpenDetails }) {
+function DayAgendaItem({ item, onSave, onOpenDetails, onComplete, onDelete }) {
   const [content, setContent] = useState(item.content);
   const [time, setTime] = useState(item.time);
   const [saving, setSaving] = useState(false);
+  const [action, setAction] = useState(null);
   const [error, setError] = useState("");
+  const done = isEventDone(item);
+  const busy = saving || action !== null;
 
   useEffect(() => {
     setContent(item.content);
@@ -533,19 +558,58 @@ function DayAgendaItem({ item, onSave, onOpenDetails }) {
     if (nextTime !== item.time) void commit({ time: nextTime });
   }
 
+  async function completeForDay() {
+    if (done || !onComplete || busy) return;
+
+    setAction("complete");
+    setError("");
+    try {
+      await onComplete(item);
+    } catch (completeError) {
+      setError(completeError.message);
+    } finally {
+      setAction(null);
+    }
+  }
+
+  async function removeItem() {
+    if (!onDelete || busy) return;
+
+    setAction("delete");
+    setError("");
+    try {
+      await onDelete(item);
+    } catch (deleteError) {
+      setError(deleteError.message);
+    } finally {
+      setAction(null);
+    }
+  }
+
   return (
     <article
-      className={`agenda-item ${isEventDone(item) ? "is-complete" : "is-pending"} ${saving ? "is-saving" : ""}`}
+      className={`agenda-item ${done ? "is-complete" : "is-pending"} ${busy ? "is-saving" : ""} ${onDelete ? "has-delete" : ""}`}
       style={{
         "--agenda-color": item.color,
         "--agenda-soft": colorWithAlpha(item.color, 0.18),
       }}
     >
-      <span className="agenda-dot" aria-hidden="true" />
+      <button
+        className={`agenda-dot-button ${action === "complete" ? "is-confirming" : ""}`}
+        type="button"
+        disabled={done || !onComplete || busy}
+        onClick={completeForDay}
+        aria-label={done ? `${item.content}当天已完成` : `标记${item.content}为当天完成`}
+      >
+        {action === "complete"
+          ? <Check className="agenda-complete-check" size={13} weight="bold" aria-hidden="true" />
+          : <span className="agenda-dot" aria-hidden="true" />}
+      </button>
       <input
         className="agenda-content"
         value={content}
         maxLength={500}
+        disabled={busy}
         aria-label={`${item.content}的内容`}
         onChange={(event) => setContent(event.target.value)}
         onBlur={commitContent}
@@ -557,16 +621,39 @@ function DayAgendaItem({ item, onSave, onOpenDetails }) {
           }
         }}
       />
-      <TimeField compact label={`${item.content}的时间`} value={time} onChange={commitTime} />
-      <button className="agenda-detail-button" type="button" onClick={() => onOpenDetails(item)}>
-        进入详情
+      <button
+        className="agenda-detail-chevron"
+        type="button"
+        disabled={busy}
+        onClick={() => onOpenDetails(item)}
+        aria-label={`进入${item.content}的详情`}
+      >
+        <span aria-hidden="true">&gt;</span>
       </button>
+      <TimeField compact label={`${item.content}的时间`} value={time} onChange={commitTime} />
+      {onDelete && (
+        <button
+          className="agenda-delete-button"
+          type="button"
+          disabled={busy}
+          onClick={removeItem}
+          aria-label={`删除${item.content}`}
+          title="删除日程"
+        >
+          <Trash size={16} weight="regular" aria-hidden="true" />
+        </button>
+      )}
       {error && <small className="agenda-error">{error}</small>}
     </article>
   );
 }
 
-function DayAgendaPanel({ dateKey, items, onClear, onSave, onOpenDetails }) {
+function DayAgendaPanel({ dateKey, items, onAdd, onClear, onSave, onOpenCalendar, onOpenDetails, onComplete, onDelete, primaryWindow = false, windowControls = false }) {
+  const groups = [
+    { key: "pending", label: "未完成", items: items.filter((item) => !isEventDone(item)) },
+    { key: "complete", label: "已完成", items: items.filter(isEventDone) },
+  ].filter((group) => group.items.length > 0);
+
   return (
     <section
       className={`day-agenda-panel ${dateKey ? "has-selection" : ""}`}
@@ -577,27 +664,63 @@ function DayAgendaPanel({ dateKey, items, onClear, onSave, onOpenDetails }) {
           <span className="panel-accent" aria-hidden="true" />
           <div>
             <strong>{dateKey ? preciseDateLabel(dateKey) : "日程"}</strong>
+            {onOpenCalendar && (
+              <button
+                className="day-agenda-calendar-button"
+                type="button"
+                onClick={onOpenCalendar}
+                aria-label="打开日历"
+              >
+                <CalendarBlank size={17} weight="regular" aria-hidden="true" />
+              </button>
+            )}
             <small>{dateKey ? `${items.length} 条` : "选择一个日期"}</small>
+            {onAdd && (
+              <button className="day-agenda-inline-add" type="button" onClick={onAdd} aria-label="添加日程">
+                <Plus size={18} weight="regular" aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
 
-        {dateKey && (
-          <button type="button" onClick={onClear} aria-label="清空选中日期">
-            <X size={18} />
-          </button>
-        )}
+        <div className="day-agenda-header-actions">
+          {onAdd && (
+            <button className="day-agenda-settings" type="button" aria-label="设置（暂未开放）" title="设置（暂未开放）">
+              <GearSix size={18} weight="regular" aria-hidden="true" />
+            </button>
+          )}
+          {windowControls ? (
+            <WindowControls primary={primaryWindow} />
+          ) : dateKey && (
+            <button type="button" onClick={onClear} aria-label="清空选中日期">
+              <X size={18} />
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="day-agenda-panel-body">
         {dateKey && items.length > 0 ? (
           <div className="day-agenda-list">
-            {items.map((item) => (
-              <DayAgendaItem
-                item={item}
-                onSave={onSave}
-                onOpenDetails={onOpenDetails}
-                key={item.id}
-              />
+            {groups.map((group) => (
+              <section className={`agenda-section is-${group.key}`} key={group.key} aria-label={group.label}>
+                <header className="agenda-section-heading">
+                  <span>{group.label}</span>
+                  <small>{group.items.length}</small>
+                </header>
+                <div className="agenda-section-items">
+                  {group.items.map((item) => (
+                    <DayAgendaItem
+                      item={item}
+                      onSave={onSave}
+                      onOpenDetails={onOpenDetails}
+                      onComplete={onComplete}
+                      onDelete={onDelete}
+                      key={item.id}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         ) : (
@@ -648,15 +771,28 @@ function App() {
   const [detailDeleting, setDetailDeleting] = useState(false);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [hoveredStartDate, setHoveredStartDate] = useState(null);
+  const [desktopPicker, setDesktopPicker] = useState(null);
   const dragSelection = useRef({ active: false, select: true, lastKey: null });
+  const desktopPickerRef = useRef(null);
+  const desktopPickerSessionRef = useRef(null);
 
   const monthDays = useMemo(() => buildMonthDays(currentMonth), [currentMonth]);
   const range = useMemo(() => calendarRange(currentMonth), [currentMonth]);
-  const customDateSet = useMemo(() => new Set(customDates), [customDates]);
   const selectedEvent = events.find((item) => item.id === selectedEventId);
   const focusedTodoId = selectedEvent?.todoId ?? null;
-  const customPicking = editorOpen && form.repeat === "自定义";
-  const startDatePicking = editorOpen && START_DATE_REPEATS.has(form.repeat);
+  const desktopDatePicking = IS_DESKTOP && Boolean(desktopPicker);
+  const pickingRepeat = desktopDatePicking
+    ? REPEAT_LABELS[desktopPicker.repeatMode] || "仅一次"
+    : form.repeat;
+  const pickingDate = desktopDatePicking ? desktopPicker.date : form.date;
+  const pickingCustomDates = desktopDatePicking ? desktopPicker.customDates : customDates;
+  const customDateSet = useMemo(() => new Set(pickingCustomDates), [pickingCustomDates]);
+  const customPicking = desktopDatePicking
+    ? pickingRepeat === "自定义"
+    : editorOpen && form.repeat === "自定义";
+  const startDatePicking = desktopDatePicking
+    ? pickingRepeat !== "自定义"
+    : editorOpen && START_DATE_REPEATS.has(form.repeat);
   const calendarPicking = customPicking || startDatePicking;
   const calendarLocked = editorOpen && !calendarPicking;
   const outlinedCellIndexes = monthDays.reduce((indexes, day, index) => {
@@ -699,6 +835,47 @@ function App() {
   }, [range.from, range.to]);
 
   useEffect(() => {
+    if (!window.noteDesktop?.onDataChanged) return undefined;
+
+    return window.noteDesktop.onDataChanged(() => {
+      refreshCalendar().catch((error) => setNotice(error.message));
+    });
+  }, [range.from, range.to]);
+
+  useEffect(() => {
+    if (!window.noteDesktop?.getDatePickerState || !window.noteDesktop?.onDatePickerStateChanged) {
+      return undefined;
+    }
+
+    let disposed = false;
+    function applyPickerState(state) {
+      if (disposed) return;
+      desktopPickerRef.current = state;
+      setDesktopPicker(state);
+      setHoveredStartDate(null);
+
+      if (state && desktopPickerSessionRef.current !== state.sessionId) {
+        desktopPickerSessionRef.current = state.sessionId;
+        setCurrentMonth(monthFromKey(state.date));
+        setExpandedDayKey(null);
+        setSelectedEventId(null);
+        setDayViewKey(null);
+      }
+      if (!state) desktopPickerSessionRef.current = null;
+    }
+
+    const removeListener = window.noteDesktop.onDatePickerStateChanged(applyPickerState);
+    window.noteDesktop.getDatePickerState()
+      .then(applyPickerState)
+      .catch((error) => setNotice(error.message));
+
+    return () => {
+      disposed = true;
+      removeListener?.();
+    };
+  }, []);
+
+  useEffect(() => {
     function endDragSelection() {
       dragSelection.current.active = false;
       dragSelection.current.lastKey = null;
@@ -713,10 +890,14 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!editorOpen && !selectedEventId && !dayViewKey) return undefined;
+    if (!editorOpen && !selectedEventId && !dayViewKey && !desktopDatePicking) return undefined;
 
     function closeOnEscape(event) {
       if (event.key !== "Escape") return;
+      if (desktopPickerRef.current) {
+        finishDesktopDatePicking();
+        return;
+      }
       setEditorOpen(false);
       setSelectedEventId(null);
       setExpandedDayKey(null);
@@ -725,7 +906,7 @@ function App() {
 
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [dayViewKey, editorOpen, selectedEventId]);
+  }, [dayViewKey, desktopDatePicking, editorOpen, selectedEventId]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -747,6 +928,11 @@ function App() {
   }
 
   function openEditor() {
+    if (IS_DESKTOP) {
+      window.noteDesktop.openCreate({ date: TODAY_KEY }).catch((error) => setNotice(error.message));
+      return;
+    }
+
     setSelectedEventId(null);
     setExpandedDayKey(null);
     setDayViewKey(null);
@@ -780,6 +966,20 @@ function App() {
   }
 
   function updateCustomDate(dateKey, shouldSelect) {
+    const activeDesktopPicker = desktopPickerRef.current;
+    if (activeDesktopPicker) {
+      const nextDates = new Set(activeDesktopPicker.customDates || []);
+      if (shouldSelect) nextDates.add(dateKey);
+      else nextDates.delete(dateKey);
+      const customDates = [...nextDates].sort();
+      publishDesktopDateSelection({
+        ...activeDesktopPicker,
+        date: customDates[0] || activeDesktopPicker.date,
+        customDates,
+      });
+      return;
+    }
+
     setCustomDates((current) => {
       const next = new Set(current);
       if (shouldSelect) next.add(dateKey);
@@ -793,7 +993,12 @@ function App() {
     event.preventDefault();
 
     if (startDatePicking) {
-      setForm((current) => ({ ...current, date: dateKey }));
+      const activeDesktopPicker = desktopPickerRef.current;
+      if (activeDesktopPicker) {
+        publishDesktopDateSelection({ ...activeDesktopPicker, date: dateKey, customDates: [] });
+      } else {
+        setForm((current) => ({ ...current, date: dateKey }));
+      }
       return;
     }
 
@@ -813,7 +1018,12 @@ function App() {
     if (!calendarPicking || isPastDateKey(dateKey) || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
     if (startDatePicking) {
-      setForm((current) => ({ ...current, date: dateKey }));
+      const activeDesktopPicker = desktopPickerRef.current;
+      if (activeDesktopPicker) {
+        publishDesktopDateSelection({ ...activeDesktopPicker, date: dateKey, customDates: [] });
+      } else {
+        setForm((current) => ({ ...current, date: dateKey }));
+      }
     } else {
       updateCustomDate(dateKey, !customDateSet.has(dateKey));
     }
@@ -823,9 +1033,9 @@ function App() {
     if (!anchorDate || isPastDateKey(anchorDate) || isPastDateKey(day.key)) return false;
     const active = dateFromKey(anchorDate);
 
-    if (form.repeat === "仅一次") return day.key === anchorDate;
-    if (form.repeat === "每周") return dateFromKey(day.key).getUTCDay() === active.getUTCDay();
-    return day.day === active.getUTCDate();
+    if (pickingRepeat === "每周") return dateFromKey(day.key).getUTCDay() === active.getUTCDay();
+    if (pickingRepeat === "每月") return day.day === active.getUTCDate();
+    return day.key === anchorDate;
   }
 
   function isHoveredStartPattern(day) {
@@ -833,7 +1043,21 @@ function App() {
   }
 
   function isSelectedStartPattern(day) {
-    return startDatePicking && Boolean(form.date) && matchesStartPattern(day, form.date);
+    return startDatePicking && Boolean(pickingDate) && matchesStartPattern(day, pickingDate);
+  }
+
+  function publishDesktopDateSelection(nextState) {
+    desktopPickerRef.current = nextState;
+    setDesktopPicker(nextState);
+    window.noteDesktop?.selectDatePicker?.({
+      date: nextState.date,
+      customDates: nextState.customDates,
+    }).catch((error) => setNotice(error.message));
+  }
+
+  function finishDesktopDatePicking() {
+    if (!desktopPickerRef.current) return;
+    window.noteDesktop?.finishDatePicker?.().catch((error) => setNotice(error.message));
   }
 
   function closeEventDetails() {
@@ -844,6 +1068,13 @@ function App() {
   }
 
   function openEventDetails(item) {
+    if (IS_DESKTOP) {
+      window.noteDesktop
+        .openDetail({ todoId: item.todoId, date: item.date })
+        .catch((error) => setNotice(error.message));
+      return;
+    }
+
     setDeleteConfirming(false);
     if (selectedEvent?.todoId === item.todoId) {
       closeEventDetails();
@@ -867,6 +1098,11 @@ function App() {
   }
 
   function openDayAgenda(dateKey) {
+    if (IS_DESKTOP) {
+      window.noteDesktop.openDay({ date: dateKey }).catch((error) => setNotice(error.message));
+      return;
+    }
+
     setEditorOpen(false);
     setSelectedEventId(null);
     setExpandedDayKey(null);
@@ -883,6 +1119,29 @@ function App() {
     await patchTodo(item.todoId, payload);
     await refreshCalendar();
     setNotice("已保存");
+  }
+
+  async function completeAgendaItem(item) {
+    if (isEventDone(item)) return;
+
+    const [result] = await Promise.all([
+      patchOccurrence(item.todoId, item.date, true),
+      new Promise((resolve) => window.setTimeout(resolve, 280)),
+    ]);
+
+    setEvents((current) => current.map((eventItem) => {
+      const isTarget = eventItem.todoId === result.todo_id && eventItem.date === result.occurs_on;
+      return isTarget
+        ? { ...eventItem, occurrenceDone: Boolean(result.occurrence_done) }
+        : eventItem;
+    }));
+    setNotice("已完成");
+  }
+
+  async function deleteAgendaItem(item) {
+    await deleteTodo(item.todoId);
+    setEvents((current) => current.filter((eventItem) => eventItem.todoId !== item.todoId));
+    setNotice("已删除");
   }
 
   function updateDetailField(event) {
@@ -967,7 +1226,7 @@ function App() {
     const payload = {
       content,
       color: detailForm.color,
-      reminder: { notify_mode: REMINDER_VALUES[detailForm.reminder] },
+      notify_mode: REMINDER_VALUES[detailForm.reminder],
       version: selectedEvent.version,
       starts_at: dateTimeAt(detailForm.date, detailForm.time),
     };
@@ -1073,7 +1332,7 @@ function App() {
   const detailUsesCustomColor = Boolean(detailForm.color) && !selectedDetailColor;
   const previousMonth = addMonths(currentMonth, -1);
   const nextMonth = addMonths(currentMonth, 1);
-  const selectionColor = form.color || "#F3B51B";
+  const selectionColor = desktopPicker?.color || form.color || "#F3B51B";
 
   return (
     <main
@@ -1082,7 +1341,9 @@ function App() {
         focusedTodoId ? "has-event-focus has-detail-panel" : "",
         editorOpen ? "has-editor-panel" : "",
         calendarPicking ? "is-calendar-picking" : "",
+        desktopDatePicking ? "is-desktop-date-picking" : "",
         calendarLocked ? "is-calendar-locked" : "",
+        IS_DESKTOP ? "is-desktop-calendar" : "",
       ].filter(Boolean).join(" ")}
       style={{
         "--selection-color": selectionColor,
@@ -1103,6 +1364,8 @@ function App() {
           onClear={() => setDayViewKey(null)}
           onSave={saveAgendaItem}
           onOpenDetails={openEventDetails}
+          onComplete={completeAgendaItem}
+          onDelete={deleteAgendaItem}
         />
 
         <div className="month-stack">
@@ -1124,6 +1387,20 @@ function App() {
                   <CaretDown size={19} weight="bold" />
                 </button>
               </div>
+              {desktopPicker && (
+                <div className="desktop-picker-status" role="status">
+                  <span className="desktop-picker-dot" aria-hidden="true" />
+                  <div>
+                    <strong>{pickingRepeat === "自定义" ? "选择自定义日期" : `选择${pickingRepeat}的开始日期`}</strong>
+                    <small>{pickingRepeat === "自定义" ? `已选 ${pickingCustomDates.length} 天` : pickingDate}</small>
+                  </div>
+                  <button type="button" onClick={finishDesktopDatePicking}>
+                    <Check size={15} weight="bold" />
+                    返回填写
+                  </button>
+                </div>
+              )}
+              <WindowControls />
             </header>
 
             <div className="weekday-row" role="row">
@@ -1157,8 +1434,8 @@ function App() {
               const pastDateDisabled = calendarPicking && isPastDateKey(day.key);
               const hoveredStartPattern = isHoveredStartPattern(day);
               const selectedStartPattern = isSelectedStartPattern(day);
-              const selectedStartDate = form.repeat === "仅一次" && selectedStartPattern;
-              const selectedRepeatPattern = ["每周", "每月"].includes(form.repeat) && selectedStartPattern;
+              const selectedStartDate = !["每周", "每月"].includes(pickingRepeat) && selectedStartPattern;
+              const selectedRepeatPattern = ["每周", "每月"].includes(pickingRepeat) && selectedStartPattern;
 
               return (
                 <div
@@ -1220,8 +1497,8 @@ function App() {
                   <div
                     className="day-events"
                     aria-label={`${day.key}日程`}
-                    aria-hidden={editorOpen ? "true" : undefined}
-                    inert={editorOpen ? true : undefined}
+                    aria-hidden={editorOpen || calendarPicking ? "true" : undefined}
+                    inert={editorOpen || calendarPicking ? true : undefined}
                   >
                     {visibleEvents.map((item) => (
                       <EventDot
@@ -1271,9 +1548,11 @@ function App() {
         </div>
       </div>
 
-      <button className="add-fab" type="button" onClick={openEditor} aria-label="添加日程">
-        <Plus size={28} aria-hidden="true" />
-      </button>
+      {!IS_DESKTOP && (
+        <button className="add-fab" type="button" onClick={openEditor} aria-label="添加日程">
+          <Plus size={28} aria-hidden="true" />
+        </button>
+      )}
 
       {notice && <div className="toast" role="status">{notice}</div>}
 
@@ -1516,5 +1795,36 @@ function App() {
     </main>
   );
 }
+
+export {
+  CustomColorSwatch,
+  DayAgendaPanel,
+  EVENT_COLORS,
+  REMINDER_LABELS,
+  REMINDER_VALUES,
+  REPEAT_LABELS,
+  REPEAT_VALUES,
+  SelectField,
+  SHANGHAI_TIME_ZONE,
+  TODAY_KEY,
+  TimeField,
+  WindowControls,
+  WEEKDAYS,
+  addDays,
+  addMonths,
+  buildGridOutlinePath,
+  buildMonthDays,
+  calendarEventFromOccurrence,
+  calendarNote,
+  colorWithAlpha,
+  dateFromKey,
+  dateKeyFromUTC,
+  dateTimeAt,
+  monthFromKey,
+  monthLabel,
+  preciseDateLabel,
+  readableSelectionInk,
+  shanghaiDateTimeParts,
+};
 
 export default App;

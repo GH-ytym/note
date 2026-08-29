@@ -38,6 +38,9 @@ coverage.xml
 /web/coverage/
 /web/.vite/
 /web/.cache/
+/desktop/node_modules/
+/desktop/release/
+/desktop/resources/
 *.tsbuildinfo
 .eslintcache
 

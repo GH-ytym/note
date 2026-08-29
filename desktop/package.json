@@ -1,0 +1,62 @@
+{
+  "name": "note-desktop",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Note 独立窗口桌面日历",
+  "main": "main.cjs",
+  "scripts": {
+    "prepare:app": "node scripts/prepare.cjs",
+    "start": "npm run prepare:app && electron .",
+    "pack": "npm run prepare:app && electron-builder --dir --win --x64",
+    "dist": "npm run prepare:app && electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "cn.note.calendar",
+    "productName": "Note",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/note-api.exe",
+        "to": "backend/note-api.exe"
+      },
+      {
+        "from": "../web/dist",
+        "to": "web"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -96,9 +98,14 @@ func Run() (runErr error) {
 
 	server := &http.Server{
 		Addr:              serverAddress,
-		Handler:           router.New(hdlr),
+		Handler:           router.NewWithWeb(hdlr, os.Getenv("NOTE_WEB_DIR")),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	listener, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", server.Addr, err)
+	}
+	server.Addr = listener.Addr().String()
 
 	// 使用容量为 1 的缓冲 channel。
 	// Shutdown 会使 ListenAndServe 返回 http.ErrServerClosed。
@@ -107,12 +114,25 @@ func Run() (runErr error) {
 	serverErr := make(chan error, 1)
 	go func() {
 		log.Printf("HTTP server listening on %s", server.Addr)
-		serverErr <- server.ListenAndServe()
+		serverErr <- server.Serve(listener)
 	}()
+	fmt.Printf("NOTE_SERVER_URL=http://%s\n", server.Addr)
 
 	//监听关闭信号
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Electron 关闭时会关闭子进程的 stdin。只在桌面模式启用，
+	// 普通终端运行仍然完全由 Ctrl+C 或 SIGTERM 控制。
+	var parentClosed <-chan struct{}
+	if os.Getenv("NOTE_STOP_ON_STDIN_CLOSE") == "1" {
+		closed := make(chan struct{})
+		parentClosed = closed
+		go func() {
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			close(closed)
+		}()
+	}
 
 	select {
 	case err := <-serverErr:
@@ -122,6 +142,8 @@ func Run() (runErr error) {
 		return fmt.Errorf("serve HTTP: %w", err)
 	case <-stopCtx.Done():
 		log.Print("shutdown signal received")
+	case <-parentClosed:
+		log.Print("desktop parent process closed")
 	}
 
 	//最多等待10秒

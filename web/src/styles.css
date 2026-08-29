@@ -1,25 +1,27 @@
 :root {
   color: #f2f4ef;
-  background: #070908;
+  background: #000000;
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --page: #070908;
-  --panel: #0c0f0e;
-  --cell: #0d100f;
-  --cell-hover: #111512;
-  --cell-disabled: #090c0a;
+  --page: #000000;
+  --panel: #0A0A0A;
+  --cell: #0E0E0E;
+  --cell-hover: #141414;
+  --cell-disabled: #070707;
   --line: rgb(225 229 221 / 12%);
   --text: #f2f4ef;
   --muted: #8b918b;
   --dim: #4f554f;
   --yellow: #f3b51b;
+  --theme-rgb: 243 181 27;
+  --on-theme: #171100;
   --side-width: min(390px, 34vw);
 }
 
 * {
   box-sizing: border-box;
-  scrollbar-color: rgb(243 181 27 / 78%) transparent;
+  scrollbar-color: rgb(var(--theme-rgb) / 78%) transparent;
   scrollbar-width: thin;
 }
 
@@ -35,7 +37,7 @@
 
 *::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgb(243 181 27 / 72%);
+  background: rgb(var(--theme-rgb) / 72%);
 }
 
 *::-webkit-scrollbar-thumb:hover {
@@ -86,7 +88,7 @@ textarea:focus-visible {
   padding: 14px clamp(20px, 3vw, 44px);
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 45%, rgb(243 181 27 / 2.5%), transparent 42%),
+    radial-gradient(circle at 50% 45%, rgb(var(--theme-rgb) / 2.5%), transparent 42%),
     var(--page);
 }
 
@@ -248,8 +250,8 @@ textarea:focus-visible {
 }
 
 .month-controls button:hover {
-  color: #ffd15a;
-  background: rgb(243 181 27 / 10%);
+  color: color-mix(in srgb, var(--yellow) 82%, white);
+  background: rgb(var(--theme-rgb) / 10%);
 }
 
 .month-controls button:first-child:hover {
@@ -427,7 +429,7 @@ textarea:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2;
-  filter: drop-shadow(0 0 3px var(--selection-soft, rgb(243 181 27 / 30%)));
+  filter: drop-shadow(0 0 3px var(--selection-soft, rgb(var(--theme-rgb) / 30%)));
 }
 
 .day-cell {
@@ -746,7 +748,7 @@ textarea:focus-visible {
 
 .day-cell.is-start-highlighted {
   z-index: 3;
-  background: var(--selection-soft, rgb(243 181 27 / 7%));
+  background: var(--selection-soft, rgb(var(--theme-rgb) / 7%));
 }
 
 .day-cell.is-start-highlighted .date-mark strong {
@@ -758,7 +760,7 @@ textarea:focus-visible {
 .day-cell.is-custom-selected .date-mark {
   color: var(--selection-ink, #171100);
   background: var(--selection-color, var(--yellow));
-  box-shadow: 0 0 0 3px var(--selection-soft, rgb(243 181 27 / 12%));
+  box-shadow: 0 0 0 3px var(--selection-soft, rgb(var(--theme-rgb) / 12%));
 }
 
 .day-cell.is-start-selected .date-mark strong,
@@ -770,12 +772,12 @@ textarea:focus-visible {
 }
 
 .day-cell.is-custom-selected {
-  background: var(--selection-soft, rgb(243 181 27 / 6%));
+  background: var(--selection-soft, rgb(var(--theme-rgb) / 6%));
 }
 
 .day-cell.is-agenda-selected {
-  box-shadow: inset 0 -2px rgb(243 181 27 / 78%);
-  background: rgb(243 181 27 / 3.5%);
+  box-shadow: inset 0 -2px rgb(var(--theme-rgb) / 78%);
+  background: rgb(var(--theme-rgb) / 3.5%);
 }
 
 .day-agenda-panel {
@@ -788,8 +790,8 @@ textarea:focus-visible {
   border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 12px;
   background:
-    linear-gradient(110deg, rgb(243 181 27 / 4%), transparent 34%),
-    #0c0f0e;
+    linear-gradient(110deg, rgb(var(--theme-rgb) / 4%), transparent 34%),
+    var(--panel);
   box-shadow: 0 14px 42px rgb(0 0 0 / 28%);
 }
 
@@ -814,7 +816,7 @@ textarea:focus-visible {
   height: 22px;
   border-radius: 999px;
   background: var(--yellow);
-  box-shadow: 0 0 14px rgb(243 181 27 / 22%);
+  box-shadow: 0 0 14px rgb(var(--theme-rgb) / 22%);
 }
 
 .day-agenda-panel-title > div {
@@ -856,8 +858,8 @@ textarea:focus-visible {
 .day-agenda-inline-add:hover,
 .day-agenda-inline-add:focus-visible {
   outline: 0;
-  color: #ffd05a;
-  background: rgb(243 181 27 / 8%);
+  color: color-mix(in srgb, var(--yellow) 82%, white);
+  background: rgb(var(--theme-rgb) / 8%);
 }
 
 .day-agenda-calendar-button {
@@ -876,7 +878,7 @@ textarea:focus-visible {
 .day-agenda-calendar-button:focus-visible {
   outline: 0;
   color: var(--yellow);
-  background: rgb(243 181 27 / 7%);
+  background: rgb(var(--theme-rgb) / 7%);
 }
 
 .day-agenda-header-actions {
@@ -907,6 +909,13 @@ textarea:focus-visible {
 
 .day-agenda-header-actions > .day-agenda-settings {
   color: #7f867f;
+}
+
+.day-agenda-header-actions > .day-agenda-settings:hover,
+.day-agenda-header-actions > .day-agenda-settings:focus-visible {
+  outline: 0;
+  color: var(--yellow);
+  background: rgb(var(--theme-rgb) / 8%);
 }
 
 .day-agenda-panel-body {
@@ -980,7 +989,7 @@ textarea:focus-visible {
   padding: 4px 7px 4px 9px;
   border: 1px solid transparent;
   border-radius: 8px;
-  background: #111512;
+  background: var(--cell-hover);
   transition: opacity 150ms ease;
 }
 
@@ -1164,15 +1173,15 @@ textarea:focus-visible {
   height: 54px;
   place-items: center;
   border-radius: 50%;
-  color: #171100;
+  color: var(--on-theme);
   background: var(--yellow);
-  box-shadow: 0 12px 30px rgb(0 0 0 / 44%), 0 0 22px rgb(243 181 27 / 13%);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 44%), 0 0 22px rgb(var(--theme-rgb) / 13%);
   cursor: pointer;
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
 .add-fab:hover {
-  box-shadow: 0 15px 34px rgb(0 0 0 / 50%), 0 0 26px rgb(243 181 27 / 20%);
+  box-shadow: 0 15px 34px rgb(0 0 0 / 50%), 0 0 26px rgb(var(--theme-rgb) / 20%);
   transform: translateY(-2px);
 }
 
@@ -1187,7 +1196,7 @@ textarea:focus-visible {
   bottom: 116px;
   z-index: 90;
   padding: 8px 11px;
-  border: 1px solid rgb(243 181 27 / 30%);
+  border: 1px solid rgb(var(--theme-rgb) / 30%);
   border-radius: 6px;
   color: #f5d574;
   background: #151814;
@@ -1225,13 +1234,13 @@ textarea:focus-visible {
   height: 100%;
   overflow: hidden;
   border-radius: 12px;
-  background: #101311;
+  background: var(--panel);
   pointer-events: auto;
 }
 
 .detail-panel {
   border: 1px solid color-mix(in srgb, var(--detail-color) 36%, transparent);
-  background: linear-gradient(145deg, var(--detail-soft), #101311 25%);
+  background: linear-gradient(145deg, var(--detail-soft), var(--panel) 25%);
   box-shadow: 0 16px 44px rgb(0 0 0 / 38%);
   animation: detail-panel-in 190ms ease-out;
 }
@@ -1324,16 +1333,49 @@ textarea:focus-visible {
 
 .side-form label,
 .color-field,
-.select-field {
+.select-field,
+.content-editor-field {
   display: grid;
   gap: 7px;
 }
 
 .side-form label > span,
-.field-label {
+.field-label,
+.content-editor-field > label {
   color: #9da29c;
   font-size: 11px;
   font-weight: 620;
+}
+
+.content-editor-field-shell {
+  position: relative;
+}
+
+.content-editor-field-shell textarea {
+  padding-right: 50px;
+  padding-bottom: 42px;
+}
+
+.content-editor-expand-button {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 7px;
+  color: #8d948d;
+  background: transparent;
+  cursor: pointer;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.content-editor-expand-button:hover,
+.content-editor-expand-button:focus-visible {
+  color: var(--yellow);
+  background: transparent;
+  transform: translate(1px, 1px);
 }
 
 .side-form input,
@@ -1374,7 +1416,7 @@ textarea:focus-visible {
 }
 
 .side-form select option:checked {
-  color: #171100;
+  color: var(--on-theme);
   background: var(--yellow);
 }
 
@@ -1394,8 +1436,8 @@ textarea:focus-visible {
 .select-trigger:focus-visible,
 .select-trigger[aria-expanded="true"] {
   outline: 0;
-  border-color: rgb(243 181 27 / 65%);
-  box-shadow: 0 0 0 3px rgb(243 181 27 / 8%);
+  border-color: rgb(var(--theme-rgb) / 65%);
+  box-shadow: 0 0 0 3px rgb(var(--theme-rgb) / 8%);
 }
 
 .select-field {
@@ -1432,7 +1474,7 @@ textarea:focus-visible {
   display: grid;
   gap: 2px;
   padding: 5px;
-  border: 1px solid rgb(243 181 27 / 34%);
+  border: 1px solid rgb(var(--theme-rgb) / 34%);
   border-radius: 8px;
   background: #111512;
   box-shadow: 0 16px 34px rgb(0 0 0 / 48%);
@@ -1454,12 +1496,12 @@ textarea:focus-visible {
 .select-menu button:hover,
 .select-menu button:focus-visible {
   outline: 0;
-  color: #f7d169;
-  background: rgb(243 181 27 / 10%);
+  color: color-mix(in srgb, var(--yellow) 78%, white);
+  background: rgb(var(--theme-rgb) / 10%);
 }
 
 .select-menu button[aria-selected="true"] {
-  color: #171100;
+  color: var(--on-theme);
   background: var(--yellow);
 }
 
@@ -1505,8 +1547,8 @@ textarea:focus-visible {
 
 .time-trigger[aria-expanded="true"],
 .time-trigger:focus-visible {
-  border-color: rgb(243 181 27 / 65%);
-  box-shadow: 0 0 0 3px rgb(243 181 27 / 8%);
+  border-color: rgb(var(--theme-rgb) / 65%);
+  box-shadow: 0 0 0 3px rgb(var(--theme-rgb) / 8%);
 }
 
 .time-trigger[aria-expanded="true"] > svg:last-child {
@@ -1520,7 +1562,7 @@ textarea:focus-visible {
   z-index: 220;
   width: 210px;
   padding: 10px;
-  border: 1px solid rgb(243 181 27 / 34%);
+  border: 1px solid rgb(var(--theme-rgb) / 34%);
   border-radius: 9px;
   background: #111512;
   box-shadow: 0 16px 34px rgb(0 0 0 / 48%);
@@ -1554,7 +1596,7 @@ textarea:focus-visible {
 .time-unit > button:focus-visible {
   outline: 0;
   color: var(--yellow);
-  background: rgb(243 181 27 / 9%);
+  background: rgb(var(--theme-rgb) / 9%);
 }
 
 .time-unit output {
@@ -1581,7 +1623,7 @@ textarea:focus-visible {
   height: 34px;
   margin-top: 8px;
   border-radius: 6px;
-  color: #171100;
+  color: var(--on-theme);
   background: var(--yellow);
   font-size: 11px;
   font-weight: 680;
@@ -1677,10 +1719,10 @@ textarea:focus-visible {
   height: 44px;
   align-items: center;
   padding: 0 11px;
-  border: 1px solid rgb(243 181 27 / 28%);
+  border: 1px solid rgb(var(--theme-rgb) / 28%);
   border-radius: 7px;
   color: #f4cd64;
-  background: rgb(243 181 27 / 6%);
+  background: rgb(var(--theme-rgb) / 6%);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -1756,7 +1798,7 @@ textarea:focus-visible {
   padding: 11px 12px;
   border-left: 2px solid var(--yellow);
   color: #b7bcb6;
-  background: rgb(243 181 27 / 6%);
+  background: rgb(var(--theme-rgb) / 6%);
   font-size: 11px;
 }
 
@@ -1787,7 +1829,7 @@ textarea:focus-visible {
 
 .color-trigger:hover,
 .color-trigger[aria-expanded="true"] {
-  border-color: rgb(243 181 27 / 44%);
+  border-color: rgb(var(--theme-rgb) / 44%);
   background: #1a1e1b;
 }
 
@@ -1886,7 +1928,7 @@ textarea:focus-visible {
 
 .custom-color-swatch:focus-within {
   border-color: #f5f7f2;
-  box-shadow: 0 0 0 2px #0f1210, 0 0 0 4px rgb(243 181 27 / 42%);
+  box-shadow: 0 0 0 2px #0f1210, 0 0 0 4px rgb(var(--theme-rgb) / 42%);
 }
 
 .form-error {
@@ -1953,12 +1995,12 @@ textarea:focus-visible {
 }
 
 .save-button {
-  color: #171100;
+  color: var(--on-theme);
   background: var(--yellow);
 }
 
 .save-button:hover {
-  background: #ffc52d;
+  background: color-mix(in srgb, var(--yellow) 88%, white);
 }
 
 .save-button:disabled {
@@ -1973,7 +2015,7 @@ textarea:focus-visible {
   min-height: 0;
   padding: 0;
   overflow: hidden;
-  background: #101311;
+  background: var(--panel);
 }
 
 .utility-panel {
@@ -1982,7 +2024,7 @@ textarea:focus-visible {
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: #101311;
+  background: var(--panel);
   box-shadow: none;
 }
 
@@ -1993,58 +2035,268 @@ textarea:focus-visible {
   overscroll-behavior: contain;
 }
 
-.utility-window.has-detail-search .utility-panel {
-  display: grid;
-  grid-template-rows: 72px minmax(0, 1fr) 52px;
-}
-
-.utility-window.has-detail-search .utility-form {
-  height: auto;
-  min-height: 0;
-}
-
-.detail-search-bar {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
-  margin: 6px 20px 8px;
-  padding: 0 11px;
-  border: 1px solid rgb(255 255 255 / 11%);
-  border-radius: 8px;
-  color: #7f867f;
-  background: #151816;
-}
-
-.detail-search-bar:focus-within {
-  border-color: rgb(243 181 27 / 48%);
-  color: var(--yellow);
-}
-
-.detail-search-bar input {
-  width: 100%;
-  min-width: 0;
-  height: 38px;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  color: #dfe3dc;
-  background: transparent;
-  font-size: 12px;
-}
-
-.detail-search-bar input::placeholder {
-  color: #666d66;
-}
-
 .utility-footer {
   position: sticky;
   bottom: -24px;
   z-index: 20;
   margin-inline: -2px;
   padding: 16px 2px 24px;
-  background: linear-gradient(to bottom, rgb(16 19 17 / 72%), #101311 28%);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--panel) 72%, transparent), var(--panel) 28%);
+}
+
+.appearance-settings-form {
+  display: flex;
+  height: calc(100% - 72px);
+  min-height: 0;
+  flex-direction: column;
+  gap: 20px;
+  padding: 22px;
+  overflow-y: auto;
+}
+
+.appearance-settings-intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.appearance-setting-list {
+  display: grid;
+  gap: 10px;
+}
+
+.appearance-color-setting,
+.appearance-opacity-setting {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--cell);
+}
+
+.appearance-color-setting {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.appearance-color-setting > span:first-child,
+.appearance-opacity-setting > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.appearance-color-setting strong,
+.appearance-opacity-setting strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 640;
+}
+
+.appearance-color-setting small,
+.appearance-opacity-setting small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.appearance-color-control {
+  display: grid;
+  grid-template-columns: 44px minmax(66px, auto);
+  align-items: center;
+  gap: 9px;
+}
+
+.appearance-color-control input[type="color"] {
+  width: 44px;
+  height: 44px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.appearance-color-control input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.appearance-color-control input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+
+.appearance-color-control output,
+.appearance-opacity-setting > output {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.appearance-opacity-setting {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.appearance-opacity-setting input[type="range"] {
+  width: 100%;
+  height: 28px;
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  accent-color: var(--yellow);
+  cursor: pointer;
+}
+
+.appearance-opacity-setting input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--yellow) 0 var(--range-value),
+    color-mix(in srgb, var(--text) 16%, transparent) var(--range-value) 100%
+  );
+}
+
+.appearance-opacity-setting input[type="range"]::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  appearance: none;
+  background: var(--yellow);
+  box-shadow: 0 0 0 2px rgb(var(--theme-rgb) / 28%);
+}
+
+.appearance-settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.appearance-settings-footer button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.appearance-reset-button {
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.appearance-reset-button:hover:not(:disabled),
+.appearance-reset-button:focus-visible:not(:disabled) {
+  color: var(--text);
+  border-color: rgb(var(--theme-rgb) / 40%);
+}
+
+.appearance-reset-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.appearance-done-button {
+  color: var(--on-theme);
+  background: var(--yellow);
+}
+
+.appearance-done-button:hover,
+.appearance-done-button:focus-visible {
+  background: color-mix(in srgb, var(--yellow) 88%, white);
+}
+
+.focused-editor-form {
+  display: grid;
+  height: calc(100% - 72px);
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 22px;
+}
+
+.focused-editor-form > label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.focused-editor-form > textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: 0;
+  color: var(--text);
+  background: var(--cell);
+  font-size: clamp(16px, 1.7vw, 20px);
+  line-height: 1.75;
+  resize: none;
+  caret-color: var(--yellow);
+}
+
+.focused-editor-form > textarea:focus {
+  border-color: rgb(var(--theme-rgb) / 62%);
+  box-shadow: 0 0 0 3px rgb(var(--theme-rgb) / 9%);
+}
+
+.focused-editor-status {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.focused-editor-status > span {
+  color: var(--dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.focused-editor-status > span.is-error {
+  color: #F3C64F;
+}
+
+.focused-editor-save {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 4px;
+  border-radius: 7px;
+  color: var(--yellow);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.focused-editor-save:hover,
+.focused-editor-save:focus-visible {
+  color: color-mix(in srgb, var(--yellow) 84%, white);
+  background: transparent;
+  transform: translateX(-1px);
+}
+
+.focused-editor-save:disabled {
+  cursor: wait;
+  opacity: 0.55;
+  transform: none;
 }
 
 .custom-dates-field {
@@ -2060,10 +2312,10 @@ textarea:focus-visible {
 
 .custom-date-adder > button {
   min-height: 44px;
-  border: 1px solid rgb(243 181 27 / 34%);
+  border: 1px solid rgb(var(--theme-rgb) / 34%);
   border-radius: 7px;
   color: #f3cc63;
-  background: rgb(243 181 27 / 7%);
+  background: rgb(var(--theme-rgb) / 7%);
   font-size: 12px;
   font-weight: 670;
   cursor: pointer;
@@ -2072,8 +2324,8 @@ textarea:focus-visible {
 .custom-date-adder > button:hover,
 .custom-date-adder > button:focus-visible {
   outline: 0;
-  border-color: rgb(243 181 27 / 66%);
-  background: rgb(243 181 27 / 12%);
+  border-color: rgb(var(--theme-rgb) / 66%);
+  background: rgb(var(--theme-rgb) / 12%);
 }
 
 .custom-date-list {
@@ -2100,10 +2352,10 @@ textarea:focus-visible {
   align-items: center;
   gap: 5px;
   padding: 0 5px 0 9px;
-  border: 1px solid rgb(243 181 27 / 26%);
+  border: 1px solid rgb(var(--theme-rgb) / 26%);
   border-radius: 14px;
   color: #e9cb77;
-  background: rgb(243 181 27 / 7%);
+  background: rgb(var(--theme-rgb) / 7%);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -2166,7 +2418,7 @@ textarea:focus-visible {
   bottom: 24px;
   z-index: 50;
   padding: 9px 12px;
-  border: 1px solid rgb(243 181 27 / 28%);
+  border: 1px solid rgb(var(--theme-rgb) / 28%);
   border-radius: 7px;
   color: #f4cd64;
   background: #171a18;

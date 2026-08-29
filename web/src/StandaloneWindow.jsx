@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowSquareOut, CalendarBlank, Check, MagnifyingGlass, Palette, Sparkle, Trash } from "@phosphor-icons/react";
+import { ArrowsOutSimple, ArrowSquareOut, CalendarBlank, Check, CheckCircle, Palette, Sparkle, Trash } from "@phosphor-icons/react";
 import { createTodo, deleteTodo, getCalendar, getTodo, patchOccurrence, patchTodo } from "./api";
+import { AppearanceSettingsForm } from "./appearance";
 import {
   CustomColorSwatch,
   DayAgendaPanel,
@@ -390,6 +391,37 @@ function DetailWindow() {
     return () => window.clearTimeout(timer);
   }, [deleteConfirming]);
 
+  useEffect(() => window.noteDesktop?.onContentEditorSaved?.((result) => {
+    if (Number(result?.todoId) !== todoID) return;
+    setForm((current) => current ? { ...current, content: result.content } : current);
+    setRecord((current) => current ? {
+      ...current,
+      todo: {
+        ...current.todo,
+        content: result.content,
+        version: result.version,
+      },
+    } : current);
+    setError("");
+  }), [todoID]);
+
+  useEffect(() => {
+    function receiveBrowserEditorResult(event) {
+      if (event.origin !== window.location.origin || event.data?.type !== "note:content-editor-saved") return;
+      const result = event.data.payload;
+      if (Number(result?.todoId) !== todoID) return;
+      setForm((current) => current ? { ...current, content: result.content } : current);
+      setRecord((current) => current ? {
+        ...current,
+        todo: { ...current.todo, content: result.content, version: result.version },
+      } : current);
+      setError("");
+    }
+
+    window.addEventListener("message", receiveBrowserEditorResult);
+    return () => window.removeEventListener("message", receiveBrowserEditorResult);
+  }, [todoID]);
+
   function setField(name, value) {
     const nextForm = { ...form, [name]: value };
     setForm(nextForm);
@@ -409,6 +441,31 @@ function DetailWindow() {
   function setNativeDate(value) {
     setField("date", value);
     if (form.repeat === "自定义") setCustomDates(value ? [value] : []);
+  }
+
+  function openContentEditor() {
+    if (!record || !form) return;
+    if (window.noteDesktop?.openContentEditor) {
+      window.noteDesktop.openContentEditor({
+        todoId: todoID,
+        date: occurrenceDate,
+        content: form.content,
+        version: record.todo.version,
+      }).catch((openError) => setError(openError.message));
+      return;
+    }
+
+    const editorURL = new URL(window.location.href);
+    editorURL.search = "";
+    editorURL.searchParams.set("window", "content-editor");
+    editorURL.searchParams.set("todo_id", String(todoID));
+    editorURL.searchParams.set("date", occurrenceDate);
+    const editorWindow = window.open(
+      editorURL,
+      `note-content-editor-${todoID}`,
+      "popup,width=760,height=560,resizable=yes",
+    );
+    editorWindow?.focus();
   }
 
   async function setOccurrenceDone(done) {
@@ -500,7 +557,7 @@ function DetailWindow() {
   if (!record || !form) return <LoadingWindow title="日程详情" message={error || "没有找到这条日程"} />;
 
   return (
-    <WindowFrame title="日程详情" subtitle={preciseDateLabel(occurrenceDate)} className="is-form-window has-detail-search">
+    <WindowFrame title="日程详情" subtitle={preciseDateLabel(occurrenceDate)} className="is-form-window">
       <form
         className="side-form utility-form"
         onSubmit={submit}
@@ -530,10 +587,21 @@ function DetailWindow() {
           </label>
         </div>
 
-        <label>
-          <span>内容</span>
-          <textarea value={form.content} rows={5} maxLength={500} autoFocus onChange={(event) => setField("content", event.target.value)} />
-        </label>
+        <div className="content-editor-field">
+          <label htmlFor="detail-content">内容</label>
+          <div className="content-editor-field-shell">
+            <textarea id="detail-content" value={form.content} rows={5} maxLength={500} autoFocus onChange={(event) => setField("content", event.target.value)} />
+            <button
+              className="content-editor-expand-button"
+              type="button"
+              onClick={openContentEditor}
+              aria-label="在独立的大窗口中编辑内容"
+              title="专注编辑"
+            >
+              <ArrowsOutSimple size={18} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
 
         <SelectField label="重复" value={form.repeat} options={Object.keys(REPEAT_VALUES)} onChange={setRepeat} />
 
@@ -563,10 +631,119 @@ function DetailWindow() {
           <button className="save-button" type="submit" disabled={saving || deleting || Boolean(completionSaving)}>{saving ? "保存中" : "保存"}</button>
         </footer>
       </form>
-      <div className="detail-search-bar">
-        <MagnifyingGlass size={17} aria-hidden="true" />
-        <input type="search" placeholder="搜索日程" aria-label="搜索日程" />
-      </div>
+    </WindowFrame>
+  );
+}
+
+function SettingsWindow() {
+  return (
+    <WindowFrame title="外观设置" subtitle="按自己的工作环境调整 Note" className="is-settings-window">
+      <AppearanceSettingsForm onDone={closeCurrentWindow} />
+    </WindowFrame>
+  );
+}
+
+function ContentEditorWindow() {
+  const [editorState, setEditorState] = useState(null);
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fallbackTodoID = Number(params.get("todo_id"));
+    const request = window.noteDesktop?.getContentEditorState?.()
+      || (Number.isSafeInteger(fallbackTodoID) && fallbackTodoID > 0
+        ? getTodo(fallbackTodoID).then((todo) => ({
+            todoId: todo.id,
+            date: validDate(params.get("date")),
+            content: todo.content,
+            version: todo.version,
+          }))
+        : null);
+    if (!request) {
+      setError("专注编辑窗口仅在桌面版中可用");
+      setLoading(false);
+      return;
+    }
+    request
+      .then((state) => {
+        if (!state) throw new Error("编辑会话已经结束");
+        setEditorState(state);
+        setContent(state.content || "");
+      })
+      .catch((loadError) => setError(loadError.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function saveAndReturn(event) {
+    event.preventDefault();
+    const nextContent = content.trim();
+    if (!nextContent) {
+      setError("内容不能为空");
+      return;
+    }
+    if (!editorState) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await patchTodo(editorState.todoId, {
+        content: nextContent,
+        version: editorState.version,
+      });
+      await notifyDataChanged({ type: "updated", todoId: editorState.todoId });
+      const result = {
+        todoId: editorState.todoId,
+        content: updated.content,
+        version: updated.version,
+      };
+      if (window.noteDesktop?.finishContentEditor) {
+        await window.noteDesktop.finishContentEditor(result);
+      } else {
+        window.opener?.postMessage({ type: "note:content-editor-saved", payload: result }, window.location.origin);
+        closeCurrentWindow();
+      }
+    } catch (saveError) {
+      setError(saveError.message);
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <LoadingWindow title="专注编辑" />;
+  if (!editorState) return <LoadingWindow title="专注编辑" message={error || "编辑会话已经结束"} />;
+
+  return (
+    <WindowFrame title="专注编辑" subtitle="Ctrl + Enter 保存并返回" className="is-content-editor-window">
+      <form className="focused-editor-form" onSubmit={saveAndReturn}>
+        <label htmlFor="focused-content">日程内容</label>
+        <textarea
+          id="focused-content"
+          value={content}
+          maxLength={500}
+          autoFocus
+          disabled={saving}
+          onChange={(event) => {
+            setContent(event.target.value);
+            setError("");
+          }}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+        />
+        <div className="focused-editor-status">
+          <span className={error ? "is-error" : ""} role={error ? "alert" : undefined}>
+            {error || `${content.length} / 500`}
+          </span>
+          <button className="focused-editor-save" type="submit" disabled={saving}>
+            <CheckCircle size={21} weight="fill" aria-hidden="true" />
+            {saving ? "保存中" : "保存并返回"}
+          </button>
+        </div>
+      </form>
     </WindowFrame>
   );
 }
@@ -666,6 +843,18 @@ function DayWindow() {
     request?.catch((openError) => setError(openError.message));
   }
 
+  function openSettings() {
+    const request = window.noteDesktop?.openSettings?.();
+    if (request) {
+      request.catch((openError) => setError(openError.message));
+      return;
+    }
+    const settingsURL = new URL(window.location.href);
+    settingsURL.search = "";
+    settingsURL.searchParams.set("window", "settings");
+    window.location.assign(settingsURL);
+  }
+
   const content = useMemo(() => {
     if (loading) return [];
     return events;
@@ -693,6 +882,7 @@ function DayWindow() {
         items={content}
         onAdd={openComposer}
         onOpenCalendar={openCalendar}
+        onOpenSettings={openSettings}
         onSave={saveItem}
         onOpenDetails={openDetails}
         onComplete={completeItem}
@@ -709,5 +899,7 @@ export default function StandaloneWindow({ role }) {
   if (role === "create") return <CreateWindow />;
   if (role === "detail") return <DetailWindow />;
   if (role === "day") return <DayWindow />;
+  if (role === "settings") return <SettingsWindow />;
+  if (role === "content-editor") return <ContentEditorWindow />;
   return <LoadingWindow title="Note" message="未知窗口" />;
 }

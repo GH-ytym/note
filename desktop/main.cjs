@@ -19,7 +19,14 @@ const WINDOW_PROFILES = {
   calendar: { width: 660, height: 300, minWidth: 320, minHeight: 200 },
   create: { width: 340, height: 540, minWidth: 260, minHeight: 240 },
   detail: { width: 360, height: 540, minWidth: 280, minHeight: 240 },
+  settings: { width: 430, height: 500, minWidth: 360, minHeight: 420 },
+  "content-editor": { width: 760, height: 560, minWidth: 500, minHeight: 360 },
 };
+const DEFAULT_APPEARANCE = Object.freeze({
+  backgroundColor: "#000000",
+  themeColor: "#F3B51B",
+  opacity: 100,
+});
 const TRAY_ICON_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACtSURBVFhH7c7RDQIhFETRbcJEY/8lWJkFaPjkCCw8XLOJ3OR+wZuZbVssBng+7q9evZ3Ggh7NCGFoRDO7MWhGs3cxQK+3S6bvJe1o4rEeOsDDkpEBSbs+8KBmdEDSzgw/1/yfARaNat65B/jx5wMSfjZwVPOGB9TsKappZ4afa64Bhw1IeFAyOsCuKh5qZIAdTTz+hnbsYsCMZndjUEQzQxjaoxnTWNDS28VpeQN+CwQ4E8tohAAAAABJRU5ErkJggg==";
 
 const windows = new Map();
@@ -31,6 +38,7 @@ let datePickerSession = null;
 let datePickerSequence = 0;
 let tray = null;
 let hiddenToTray = false;
+let appearanceSettings = { ...DEFAULT_APPEARANCE };
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -64,6 +72,7 @@ if (!hasSingleInstanceLock) {
 async function startApplication() {
   app.setAppUserModelId("cn.note.calendar");
   app.setAppLogsPath();
+  appearanceSettings = loadAppearanceSettings();
 
   backendURL = await startBackend();
   registerIPC();
@@ -178,6 +187,75 @@ function registerIPC() {
   ipcMain.handle("note:open-day", (event, payload = {}) => {
     assertTrustedSender(event);
     return windowResult(createDayWindow(normalizeDate(payload.date)));
+  });
+
+  ipcMain.handle("note:open-settings", (event) => {
+    assertTrustedSender(event);
+    return windowResult(createSettingsWindow());
+  });
+
+  ipcMain.handle("note:open-content-editor", (event, payload = {}) => {
+    assertTrustedSender(event);
+    const sourceWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!sourceWindow || sourceWindow.noteWindowRole !== "detail") {
+      throw new Error("content editor must be opened from a detail window");
+    }
+
+    const state = {
+      todoId: normalizeTodoID(payload.todoId),
+      date: normalizeDate(payload.date),
+      content: normalizeTodoContent(payload.content, true),
+      version: normalizeTodoVersion(payload.version),
+      sourceWindow,
+    };
+    return windowResult(createContentEditorWindow(sourceWindow, state));
+  });
+
+  ipcMain.handle("note:content-editor-state", (event) => {
+    assertTrustedSender(event);
+    const target = BrowserWindow.fromWebContents(event.sender);
+    const state = target?.noteContentEditorState;
+    if (!target || target.noteWindowRole !== "content-editor" || !state) return null;
+    return {
+      todoId: state.todoId,
+      date: state.date,
+      content: state.content,
+      version: state.version,
+    };
+  });
+
+  ipcMain.handle("note:content-editor-finish", (event, payload = {}) => {
+    assertTrustedSender(event);
+    const target = BrowserWindow.fromWebContents(event.sender);
+    const state = target?.noteContentEditorState;
+    if (!target || target.noteWindowRole !== "content-editor" || !state) {
+      throw new Error("content editor session is not active");
+    }
+
+    const todoId = normalizeTodoID(payload.todoId);
+    if (todoId !== state.todoId) throw new Error("content editor todo does not match");
+    const result = {
+      todoId,
+      content: normalizeTodoContent(payload.content, false),
+      version: normalizeTodoVersion(payload.version),
+    };
+    sendToWindow(state.sourceWindow, "note:content-editor-saved", result);
+    target.close();
+    return result;
+  });
+
+  ipcMain.handle("note:get-appearance", (event) => {
+    assertTrustedSender(event);
+    return appearanceSettings;
+  });
+
+  ipcMain.handle("note:update-appearance", (event, payload = {}) => {
+    assertTrustedSender(event);
+    appearanceSettings = normalizeAppearance(payload);
+    persistAppearanceSettings(appearanceSettings);
+    for (const target of windows.values()) applyAppearanceToWindow(target);
+    broadcastAppearanceChanged();
+    return appearanceSettings;
   });
 
   ipcMain.handle("note:close-window", (event) => {
@@ -310,6 +388,64 @@ function normalizeTodoID(value) {
   return todoID;
 }
 
+function normalizeTodoVersion(value) {
+  const version = Number(value);
+  if (!Number.isSafeInteger(version) || version < 1) throw new Error("invalid todo version");
+  return version;
+}
+
+function normalizeTodoContent(value, allowEmpty) {
+  const content = String(value ?? "");
+  if (content.length > 500 || (!allowEmpty && !content.trim())) throw new Error("invalid todo content");
+  return content;
+}
+
+function normalizeHexColor(value, fallback) {
+  const color = String(value || "").trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(color) ? color : fallback;
+}
+
+function normalizeAppearance(value = {}) {
+  const rawOpacity = Number(value.opacity);
+  return {
+    backgroundColor: normalizeHexColor(value.backgroundColor, DEFAULT_APPEARANCE.backgroundColor),
+    themeColor: normalizeHexColor(value.themeColor, DEFAULT_APPEARANCE.themeColor),
+    opacity: Number.isFinite(rawOpacity)
+      ? clamp(Math.round(rawOpacity), 20, 100)
+      : DEFAULT_APPEARANCE.opacity,
+  };
+}
+
+function appearanceSettingsPath() {
+  return path.join(app.getPath("userData"), "appearance.json");
+}
+
+function loadAppearanceSettings() {
+  try {
+    return normalizeAppearance(JSON.parse(fs.readFileSync(appearanceSettingsPath(), "utf8")));
+  } catch {
+    return { ...DEFAULT_APPEARANCE };
+  }
+}
+
+function persistAppearanceSettings(settings) {
+  const settingsPath = appearanceSettingsPath();
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+}
+
+function applyAppearanceToWindow(target) {
+  if (!target || target.isDestroyed()) return;
+  target.setBackgroundColor(appearanceSettings.backgroundColor);
+  target.setOpacity(appearanceSettings.opacity / 100);
+}
+
+function broadcastAppearanceChanged() {
+  for (const target of windows.values()) {
+    sendToWindow(target, "note:appearance-changed", appearanceSettings);
+  }
+}
+
 function requireDatePickerSource(event) {
   const sourceWindow = BrowserWindow.fromWebContents(event.sender);
   const key = sourceWindow?.noteWindowKey || "";
@@ -425,6 +561,25 @@ function createDetailWindow(todoID, date) {
   });
 }
 
+function createSettingsWindow() {
+  return createWindow({
+    key: "settings",
+    role: "settings",
+    title: "外观设置 · Note",
+  });
+}
+
+function createContentEditorWindow(sourceWindow, state) {
+  return createWindow({
+    key: `content-editor:${sourceWindow.noteWindowKey}`,
+    role: "content-editor",
+    title: "专注编辑 · Note",
+    parent: sourceWindow,
+    modal: true,
+    contentEditorState: state,
+  });
+}
+
 function createDayWindow(date) {
   const existing = windows.get(PRIMARY_WINDOW_KEY);
   if (existing && !existing.isDestroyed()) {
@@ -447,7 +602,7 @@ function createDayWindow(date) {
   return target;
 }
 
-function createWindow({ key, role, title, query = {} }) {
+function createWindow({ key, role, title, query = {}, parent = null, modal = false, contentEditorState = null }) {
   const existing = windows.get(key);
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
@@ -457,7 +612,7 @@ function createWindow({ key, role, title, query = {} }) {
   }
 
   const sizing = windowSizing(role);
-  const initialBounds = initialWindowBounds(role, sizing);
+  const initialBounds = initialWindowBounds(role, sizing, parent);
   const target = new BrowserWindow({
     ...initialBounds,
     minWidth: sizing.minWidth,
@@ -471,8 +626,10 @@ function createWindow({ key, role, title, query = {} }) {
     minimizable: true,
     maximizable: true,
     autoHideMenuBar: true,
-    backgroundColor: "#080B09",
+    backgroundColor: appearanceSettings.backgroundColor,
+    opacity: appearanceSettings.opacity / 100,
     title,
+    ...(parent ? { parent, modal } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       backgroundThrottling: false,
@@ -481,10 +638,11 @@ function createWindow({ key, role, title, query = {} }) {
       sandbox: true,
     },
   });
-  target.setBackgroundColor("#080B09");
+  applyAppearanceToWindow(target);
 
   target.noteWindowKey = key;
   target.noteWindowRole = role;
+  target.noteContentEditorState = contentEditorState;
   windows.set(key, target);
 
   const url = new URL(backendURL);
@@ -494,6 +652,7 @@ function createWindow({ key, role, title, query = {} }) {
   target.loadURL(url.toString());
   target.once("ready-to-show", () => {
     target.show();
+    if (modal) target.focus();
   });
 
   target.on("maximize", () => sendToWindow(target, "note:window-maximized-changed", true));
@@ -507,6 +666,10 @@ function createWindow({ key, role, title, query = {} }) {
   target.on("closed", () => {
     windows.delete(key);
     if (datePickerSession?.sourceWindow === target) finishDatePicker(false);
+    if (contentEditorState?.sourceWindow && !contentEditorState.sourceWindow.isDestroyed()) {
+      contentEditorState.sourceWindow.show();
+      contentEditorState.sourceWindow.focus();
+    }
   });
   target.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   return target;
@@ -532,11 +695,13 @@ function windowSizing(role) {
   };
 }
 
-function initialWindowBounds(role, sizing) {
+function initialWindowBounds(role, sizing, parent = null) {
   const primary = windows.get(PRIMARY_WINDOW_KEY);
   const primaryBounds = primary && !primary.isDestroyed() ? primary.getBounds() : null;
-  const display = primaryBounds
-    ? screen.getDisplayMatching(primaryBounds)
+  const parentBounds = parent && !parent.isDestroyed() ? parent.getBounds() : null;
+  const anchorBounds = parentBounds || primaryBounds;
+  const display = anchorBounds
+    ? screen.getDisplayMatching(anchorBounds)
     : screen.getPrimaryDisplay();
   const area = display.workArea;
   const gap = 14;
@@ -544,11 +709,14 @@ function initialWindowBounds(role, sizing) {
   let x = area.x + Math.round((area.width - sizing.width) / 2);
   let y = area.y + Math.round((area.height - sizing.height) / 2);
 
-  if (primaryBounds && role !== "day") {
+  if (parentBounds && role === "content-editor") {
+    x = parentBounds.x + Math.round((parentBounds.width - sizing.width) / 2);
+    y = parentBounds.y + Math.round((parentBounds.height - sizing.height) / 2);
+  } else if (primaryBounds && role !== "day") {
     if (role === "calendar") {
       x = primaryBounds.x + Math.round((primaryBounds.width - sizing.width) / 2);
       y = primaryBounds.y - sizing.height - gap;
-    } else if (role === "create") {
+    } else if (role === "create" || role === "settings") {
       x = primaryBounds.x + primaryBounds.width + gap;
       y = primaryBounds.y;
     } else if (role === "detail") {

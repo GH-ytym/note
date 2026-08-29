@@ -7,6 +7,12 @@ contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
   openCreate: (payload) => ipcRenderer.invoke("note:open-create", payload),
   openDetail: (payload) => ipcRenderer.invoke("note:open-detail", payload),
   openDay: (payload) => ipcRenderer.invoke("note:open-day", payload),
+  openSettings: () => ipcRenderer.invoke("note:open-settings"),
+  openContentEditor: (payload) => ipcRenderer.invoke("note:open-content-editor", payload),
+  getContentEditorState: () => ipcRenderer.invoke("note:content-editor-state"),
+  finishContentEditor: (payload) => ipcRenderer.invoke("note:content-editor-finish", payload),
+  getAppearance: () => ipcRenderer.invoke("note:get-appearance"),
+  updateAppearance: (payload) => ipcRenderer.invoke("note:update-appearance", payload),
   closeCurrent: () => ipcRenderer.invoke("note:close-window"),
   minimizeCurrent: () => ipcRenderer.invoke("note:minimize-window"),
   toggleMaximizeCurrent: () => ipcRenderer.invoke("note:toggle-maximize-window"),
@@ -23,6 +29,16 @@ contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("note:data-changed", listener);
     return () => ipcRenderer.removeListener("note:data-changed", listener);
+  },
+  onContentEditorSaved: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("note:content-editor-saved", listener);
+    return () => ipcRenderer.removeListener("note:content-editor-saved", listener);
+  },
+  onAppearanceChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("note:appearance-changed", listener);
+    return () => ipcRenderer.removeListener("note:appearance-changed", listener);
   },
   onDayDateChanged: (callback) => {
     const listener = (_event, payload) => callback(payload);

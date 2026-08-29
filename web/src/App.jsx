@@ -648,7 +648,7 @@ function DayAgendaItem({ item, onSave, onOpenDetails, onComplete, onDelete }) {
   );
 }
 
-function DayAgendaPanel({ dateKey, items, onAdd, onClear, onSave, onOpenCalendar, onOpenDetails, onComplete, onDelete, primaryWindow = false, windowControls = false }) {
+function DayAgendaPanel({ dateKey, items, onAdd, onClear, onSave, onOpenCalendar, onOpenDetails, onOpenSettings, onComplete, onDelete, primaryWindow = false, windowControls = false }) {
   const groups = [
     { key: "pending", label: "未完成", items: items.filter((item) => !isEventDone(item)) },
     { key: "complete", label: "已完成", items: items.filter(isEventDone) },
@@ -684,8 +684,8 @@ function DayAgendaPanel({ dateKey, items, onAdd, onClear, onSave, onOpenCalendar
         </div>
 
         <div className="day-agenda-header-actions">
-          {onAdd && (
-            <button className="day-agenda-settings" type="button" aria-label="设置（暂未开放）" title="设置（暂未开放）">
+          {onOpenSettings && (
+            <button className="day-agenda-settings" type="button" onClick={onOpenSettings} aria-label="打开外观设置" title="外观设置">
               <GearSix size={18} weight="regular" aria-hidden="true" />
             </button>
           )}

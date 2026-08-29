@@ -1,6 +1,7 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { ReminderScheduler, dateKeyAt } = require("./reminder-scheduler.cjs");
 const {
   app,
   BrowserWindow,
@@ -8,6 +9,7 @@ const {
   ipcMain,
   Menu,
   nativeImage,
+  Notification,
   screen,
   Tray,
 } = require("electron");
@@ -19,6 +21,7 @@ const WINDOW_PROFILES = {
   calendar: { width: 660, height: 300, minWidth: 320, minHeight: 200 },
   create: { width: 340, height: 540, minWidth: 260, minHeight: 240 },
   detail: { width: 360, height: 540, minWidth: 280, minHeight: 240 },
+  reminder: { width: 390, height: 250, minWidth: 320, minHeight: 230 },
   settings: { width: 430, height: 500, minWidth: 360, minHeight: 420 },
   "content-editor": { width: 760, height: 560, minWidth: 500, minHeight: 360 },
 };
@@ -30,6 +33,7 @@ const DEFAULT_APPEARANCE = Object.freeze({
 const TRAY_ICON_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACtSURBVFhH7c7RDQIhFETRbcJEY/8lWJkFaPjkCCw8XLOJ3OR+wZuZbVssBng+7q9evZ3Ggh7NCGFoRDO7MWhGs3cxQK+3S6bvJe1o4rEeOsDDkpEBSbs+8KBmdEDSzgw/1/yfARaNat65B/jx5wMSfjZwVPOGB9TsKappZ4afa64Bhw1IeFAyOsCuKh5qZIAdTTz+hnbsYsCMZndjUEQzQxjaoxnTWNDS28VpeQN+CwQ4E8tohAAAAABJRU5ErkJggg==";
 
 const windows = new Map();
+const activeNotifications = new Map();
 let backendProcess = null;
 let backendURL = "";
 let quitting = false;
@@ -39,6 +43,7 @@ let datePickerSequence = 0;
 let tray = null;
 let hiddenToTray = false;
 let appearanceSettings = { ...DEFAULT_APPEARANCE };
+let reminderScheduler = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -79,6 +84,7 @@ async function startApplication() {
   installApplicationMenu();
   installTray();
   createDayWindow(todayKey());
+  startReminderScheduler();
 
   if (focusPrimaryAfterReady) {
     focusPrimaryAfterReady = false;
@@ -224,6 +230,13 @@ function registerIPC() {
     };
   });
 
+  ipcMain.handle("note:reminder-state", (event) => {
+    assertTrustedSender(event);
+    const target = BrowserWindow.fromWebContents(event.sender);
+    if (!target || target.noteWindowRole !== "reminder") return null;
+    return target.noteReminderState || null;
+  });
+
   ipcMain.handle("note:content-editor-finish", (event, payload = {}) => {
     assertTrustedSender(event);
     const target = BrowserWindow.fromWebContents(event.sender);
@@ -303,6 +316,7 @@ function registerIPC() {
   ipcMain.handle("note:data-changed", (event, payload = {}) => {
     assertTrustedSender(event);
     broadcastDataChanged(payload, event.sender);
+    void reminderScheduler?.refresh();
   });
 
   ipcMain.handle("note:date-picker-start", (event, payload = {}) => {
@@ -414,6 +428,84 @@ function normalizeAppearance(value = {}) {
       ? clamp(Math.round(rawOpacity), 20, 100)
       : DEFAULT_APPEARANCE.opacity,
   };
+}
+
+function normalizeReminderOccurrence(value = {}) {
+  const occursAt = new Date(value.occurs_at);
+  if (Number.isNaN(occursAt.getTime())) throw new Error("invalid reminder time");
+
+  const notifyMode = String(value.notify_mode || "");
+  if (!["silent", "popup"].includes(notifyMode)) throw new Error("invalid reminder mode");
+
+  return {
+    todoId: normalizeTodoID(value.todo_id),
+    content: normalizeTodoContent(value.content, false),
+    color: normalizeHexColor(value.color, appearanceSettings.themeColor),
+    occursAt: occursAt.toISOString(),
+    date: dateKeyAt(occursAt),
+    notifyMode,
+  };
+}
+
+async function loadReminderOccurrences(from, to) {
+  const url = new URL("/api/calendar", backendURL);
+  url.searchParams.set("from", from);
+  url.searchParams.set("to", to);
+
+  const response = await fetch(url);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || `calendar request failed with status ${response.status}`);
+  }
+  return payload.data;
+}
+
+function startReminderScheduler() {
+  reminderScheduler?.stop();
+  reminderScheduler = new ReminderScheduler({
+    loadOccurrences: loadReminderOccurrences,
+    onReminder: deliverReminder,
+    onError: (error) => console.error("Reminder scheduler:", error),
+  });
+  void reminderScheduler.start();
+}
+
+function deliverReminder(occurrence) {
+  const reminder = normalizeReminderOccurrence(occurrence);
+  if (reminder.notifyMode === "silent") {
+    showNativeReminder(reminder);
+    return;
+  }
+  createReminderWindow(reminder);
+}
+
+function showNativeReminder(reminder) {
+  if (!Notification.isSupported()) {
+    createReminderWindow(reminder);
+    return;
+  }
+
+  const key = `${reminder.todoId}:${reminder.occursAt}`;
+  if (activeNotifications.has(key)) return;
+
+  const notification = new Notification({
+    title: "Note · 日程到点了",
+    body: reminder.content,
+    silent: true,
+  });
+  const cleanup = () => activeNotifications.delete(key);
+  notification.on("click", () => {
+    cleanup();
+    createDetailWindow(reminder.todoId, reminder.date);
+  });
+  notification.on("close", cleanup);
+  notification.on("failed", (_event, error) => {
+    cleanup();
+    console.error("Native reminder failed:", error);
+    createReminderWindow(reminder);
+  });
+  activeNotifications.set(key, notification);
+  notification.show();
 }
 
 function appearanceSettingsPath() {
@@ -580,6 +672,17 @@ function createContentEditorWindow(sourceWindow, state) {
   });
 }
 
+function createReminderWindow(state) {
+  return createWindow({
+    key: `reminder:${state.todoId}:${state.occursAt}`,
+    role: "reminder",
+    title: "日程到点了 · Note",
+    reminderState: state,
+    alwaysOnTop: true,
+    maximizable: false,
+  });
+}
+
 function createDayWindow(date) {
   const existing = windows.get(PRIMARY_WINDOW_KEY);
   if (existing && !existing.isDestroyed()) {
@@ -602,7 +705,18 @@ function createDayWindow(date) {
   return target;
 }
 
-function createWindow({ key, role, title, query = {}, parent = null, modal = false, contentEditorState = null }) {
+function createWindow({
+  key,
+  role,
+  title,
+  query = {},
+  parent = null,
+  modal = false,
+  contentEditorState = null,
+  reminderState = null,
+  alwaysOnTop = false,
+  maximizable = true,
+}) {
   const existing = windows.get(key);
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
@@ -624,7 +738,8 @@ function createWindow({ key, role, title, query = {}, parent = null, modal = fal
     titleBarStyle: "hidden",
     resizable: true,
     minimizable: true,
-    maximizable: true,
+    maximizable,
+    alwaysOnTop,
     autoHideMenuBar: true,
     backgroundColor: appearanceSettings.backgroundColor,
     opacity: appearanceSettings.opacity / 100,
@@ -643,6 +758,7 @@ function createWindow({ key, role, title, query = {}, parent = null, modal = fal
   target.noteWindowKey = key;
   target.noteWindowRole = role;
   target.noteContentEditorState = contentEditorState;
+  target.noteReminderState = reminderState;
   windows.set(key, target);
 
   const url = new URL(backendURL);
@@ -652,7 +768,8 @@ function createWindow({ key, role, title, query = {}, parent = null, modal = fal
   target.loadURL(url.toString());
   target.once("ready-to-show", () => {
     target.show();
-    if (modal) target.focus();
+    if (modal || role === "reminder") target.focus();
+    if (role === "reminder") target.flashFrame(true);
   });
 
   target.on("maximize", () => sendToWindow(target, "note:window-maximized-changed", true));
@@ -897,6 +1014,10 @@ function stopBackend() {
 async function requestQuit() {
   if (quitting) return;
   quitting = true;
+  reminderScheduler?.stop();
+  reminderScheduler = null;
+  for (const notification of activeNotifications.values()) notification.close();
+  activeNotifications.clear();
   await stopBackend();
   app.quit();
 }

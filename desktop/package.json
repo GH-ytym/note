@@ -6,6 +6,7 @@
   "main": "main.cjs",
   "scripts": {
     "prepare:app": "node scripts/prepare.cjs",
+    "test": "node --test reminder-scheduler.test.cjs",
     "start": "npm run prepare:app && electron .",
     "pack": "npm run prepare:app && electron-builder --dir --win --x64",
     "dist": "npm run prepare:app && electron-builder --win --x64"
@@ -24,6 +25,7 @@
     "files": [
       "main.cjs",
       "preload.cjs",
+      "reminder-scheduler.cjs",
       "package.json"
     ],
     "extraResources": [

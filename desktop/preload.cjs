@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
   openSettings: () => ipcRenderer.invoke("note:open-settings"),
   openContentEditor: (payload) => ipcRenderer.invoke("note:open-content-editor", payload),
   getContentEditorState: () => ipcRenderer.invoke("note:content-editor-state"),
+  getReminderState: () => ipcRenderer.invoke("note:reminder-state"),
   finishContentEditor: (payload) => ipcRenderer.invoke("note:content-editor-finish", payload),
   getAppearance: () => ipcRenderer.invoke("note:get-appearance"),
   updateAppearance: (payload) => ipcRenderer.invoke("note:update-appearance", payload),

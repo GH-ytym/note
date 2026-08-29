@@ -350,7 +350,7 @@ function CustomColorSwatch({ value, selected, onChange }) {
   );
 }
 
-function WindowControls({ primary = false }) {
+function WindowControls({ primary = false, closeLabel = "收起当前区域" }) {
   if (!IS_DESKTOP) return null;
 
   return (
@@ -360,7 +360,7 @@ function WindowControls({ primary = false }) {
           <X size={17} />
         </button>
       ) : (
-        <button type="button" onClick={() => void window.noteDesktop.closeCurrent()} aria-label="收起当前区域">
+        <button type="button" onClick={() => void window.noteDesktop.closeCurrent()} aria-label={closeLabel}>
           <Minus size={16} weight="bold" />
         </button>
       )}

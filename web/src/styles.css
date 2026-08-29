@@ -2299,6 +2299,126 @@ textarea:focus-visible {
   transform: none;
 }
 
+.is-reminder-window .utility-panel {
+  background:
+    radial-gradient(circle at 16% 34%, rgb(var(--theme-rgb) / 7%), transparent 38%),
+    var(--panel);
+}
+
+.reminder-dialog {
+  display: grid;
+  height: calc(100% - 72px);
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  padding: 14px 18px 18px;
+}
+
+.reminder-summary {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--reminder-color) 34%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(140deg, var(--reminder-soft), rgb(255 255 255 / 1.5%) 44%);
+}
+
+.reminder-bell {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--reminder-color) 44%, transparent);
+  border-radius: 50%;
+  color: var(--reminder-color);
+  background: color-mix(in srgb, var(--reminder-color) 12%, #0a0a0a);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--reminder-color) 12%, transparent);
+  animation: reminder-bell-in 220ms ease-out;
+}
+
+.reminder-summary > div {
+  min-width: 0;
+}
+
+.reminder-time {
+  display: block;
+  color: var(--reminder-color);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.reminder-summary p {
+  display: -webkit-box;
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 640;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.reminder-error {
+  margin: 0;
+  color: #f0a49b;
+  font-size: 11px;
+}
+
+.reminder-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 10px;
+}
+
+.reminder-actions button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 680;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.reminder-dismiss {
+  border: 1px solid rgb(255 255 255 / 12%);
+  color: #aeb3ad;
+  background: #141714;
+}
+
+.reminder-dismiss:hover,
+.reminder-dismiss:focus-visible {
+  color: var(--text);
+  background: #1a1e1b;
+}
+
+.reminder-open {
+  color: var(--on-theme);
+  background: var(--yellow);
+}
+
+.reminder-open:hover,
+.reminder-open:focus-visible {
+  background: color-mix(in srgb, var(--yellow) 88%, white);
+  transform: translateY(-1px);
+}
+
+@keyframes reminder-bell-in {
+  from { opacity: 0; transform: scale(0.82) rotate(-8deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
 .custom-dates-field {
   display: grid;
   gap: 7px;

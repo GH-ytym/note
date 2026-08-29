@@ -17,27 +17,22 @@ func (h *Handler) CreateTodo(c *gin.Context) {
 		return
 	}
 
-	// 组装command
-	command := todoapp.CreateCommand{
-		Content:    req.Content,
-		Color:      req.Color,
-		StartsAt:   req.StartsAt,
-		RepeatMode: req.RepeatMode,
-	}
 	customDates, err := parseCustomDates(req.CustomDates)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid custom date"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid custom date",
+		})
 		return
 	}
-	command.CustomDates = customDates
 
-	//req.Reminder是*CreateReminderRequest
-	//command.Reminder是*CreateReminderCommand
-	//没法直接赋值，但里面的NotifyMode是一样的
-	if req.Reminder != nil {
-		command.Reminder = &todoapp.CreateReminderCommand{
-			NotifyMode: req.Reminder.NotifyMode,
-		}
+	// 组装command
+	command := todoapp.CreateCommand{
+		Content:     req.Content,
+		Color:       req.Color,
+		StartsAt:    req.StartsAt,
+		RepeatMode:  req.RepeatMode,
+		NotifyMode:  req.NotifyMode,
+		CustomDates: customDates,
 	}
 	//进入service，传递command
 	item, err := h.todoService.Create(
@@ -137,16 +132,13 @@ func (h *Handler) PatchTodo(c *gin.Context) {
 	command := todoapp.PatchCommand{
 		Content:    req.Content,
 		Color:      req.Color,
-		Done:       req.Done,
 		StartsAt:   req.StartsAt,
 		RepeatMode: req.RepeatMode,
+		NotifyMode: req.NotifyMode,
+		AllDone:    req.AllDone,
 		Version:    req.Version,
 	}
-	if req.Reminder != nil {
-		command.Reminder = &todoapp.PatchReminderCommand{
-			NotifyMode: req.Reminder.NotifyMode,
-		}
-	}
+
 	if req.CustomDates != nil {
 		customDates, err := parseCustomDates(*req.CustomDates)
 		if err != nil {
@@ -215,6 +207,68 @@ func (h *Handler) DeleteTodo(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) PatchOccurrenceDone(c *gin.Context) {
+	id, ok := parseTodoID(c)
+	if !ok {
+		return
+	}
+
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to load timezone",
+		})
+		return
+	}
+
+	occursOn, err := time.ParseInLocation(
+		time.DateOnly,
+		c.Param("date"),
+		location,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid occurrence date",
+		})
+		return
+	}
+
+	var req PatchOccurrenceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "done is required",
+		})
+		return
+	}
+
+	err = h.todoService.SetOccurrenceDone(
+		c.Request.Context(),
+		id,
+		occursOn,
+		*req.Done,
+	)
+
+	if errors.Is(err, todoapp.ErrNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "todo not found",
+		})
+		return
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to update occurrence",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"todo_id":         id,
+		"occurs_on":       occursOn.Format(time.DateOnly),
+		"occurrence_done": *req.Done,
+	})
 }
 
 // 解析从前端返回的string时间数组

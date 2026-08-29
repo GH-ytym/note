@@ -17,6 +17,7 @@ pnpm-debug.log*
 /build/
 /dist/
 /tmp/
+/data/
 *.exe
 *.exe~
 *.dll
@@ -24,6 +25,8 @@ pnpm-debug.log*
 *.dylib
 *.test
 *.out
+*.db-shm
+*.db-wal
 coverage.txt
 coverage.html
 coverage.xml

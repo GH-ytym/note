@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CaretLeft,
   CaretDown,
   CaretUp,
   Check,
@@ -9,9 +8,10 @@ import {
   Palette,
   Plus,
   Sparkle,
+  Trash,
   X,
 } from "@phosphor-icons/react";
-import { createTodo, getCalendar, patchTodo } from "./api";
+import { createTodo, deleteTodo, getCalendar, patchOccurrence, patchTodo } from "./api";
 
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 const SHANGHAI_TIME_ZONE = "Asia/Shanghai";
@@ -99,6 +99,10 @@ function getShanghaiTodayKey() {
 }
 
 const TODAY_KEY = getShanghaiTodayKey();
+
+function isPastDateKey(dateKey) {
+  return dateKey < TODAY_KEY;
+}
 
 const LUNAR_FORMATTER = new Intl.DateTimeFormat("zh-CN-u-ca-chinese", {
   month: "long",
@@ -274,9 +278,14 @@ function calendarEventFromOccurrence(item) {
     startTime: start.time,
     reminder: REMINDER_LABELS[item.notify_mode] || "弹窗提醒",
     repeat: REPEAT_LABELS[item.repeat_mode] || item.repeat_mode,
-    done: item.done,
+    occurrenceDone: Boolean(item.occurrence_done),
+    allDone: Boolean(item.all_done),
     version: item.version,
   };
+}
+
+function isEventDone(item) {
+  return Boolean(item?.allDone || item?.occurrenceDone);
 }
 
 function colorWithAlpha(color, alpha) {
@@ -285,16 +294,29 @@ function colorWithAlpha(color, alpha) {
   return `rgb(${(value >> 16) & 255} ${(value >> 8) & 255} ${value & 255} / ${alpha})`;
 }
 
+function readableSelectionInk(color) {
+  const hex = (color || "#F3B51B").replace("#", "");
+  const value = Number.parseInt(hex, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  const brightness = (red * 299 + green * 587 + blue * 114) / 255000;
+
+  return brightness > 0.58 ? "#171100" : "#F7F9F5";
+}
+
 function EventDot({ item, selected, onSelect }) {
+  const done = isEventDone(item);
+
   return (
     <button
-      className="event-dot-button"
+      className={`event-dot-button ${done ? "is-complete" : "is-pending"}`}
       type="button"
       style={{
         "--event-color": item.color,
         "--event-soft": colorWithAlpha(item.color, 0.17),
       }}
-      aria-label={`${item.content}，${item.time}`}
+      aria-label={`${item.content}，${item.time}，${done ? "已完成" : "待完成"}`}
       aria-pressed={selected}
       onClick={(event) => {
         event.stopPropagation();
@@ -513,7 +535,7 @@ function DayAgendaItem({ item, onSave, onOpenDetails }) {
 
   return (
     <article
-      className={`agenda-item ${saving ? "is-saving" : ""}`}
+      className={`agenda-item ${isEventDone(item) ? "is-complete" : "is-pending"} ${saving ? "is-saving" : ""}`}
       style={{
         "--agenda-color": item.color,
         "--agenda-soft": colorWithAlpha(item.color, 0.18),
@@ -541,6 +563,50 @@ function DayAgendaItem({ item, onSave, onOpenDetails }) {
       </button>
       {error && <small className="agenda-error">{error}</small>}
     </article>
+  );
+}
+
+function DayAgendaPanel({ dateKey, items, onClear, onSave, onOpenDetails }) {
+  return (
+    <section
+      className={`day-agenda-panel ${dateKey ? "has-selection" : ""}`}
+      aria-label={dateKey ? `${preciseDateLabel(dateKey)}的日程` : "日期日程"}
+    >
+      <header className="day-agenda-panel-header">
+        <div className="day-agenda-panel-title">
+          <span className="panel-accent" aria-hidden="true" />
+          <div>
+            <strong>{dateKey ? preciseDateLabel(dateKey) : "日程"}</strong>
+            <small>{dateKey ? `${items.length} 条` : "选择一个日期"}</small>
+          </div>
+        </div>
+
+        {dateKey && (
+          <button type="button" onClick={onClear} aria-label="清空选中日期">
+            <X size={18} />
+          </button>
+        )}
+      </header>
+
+      <div className="day-agenda-panel-body">
+        {dateKey && items.length > 0 ? (
+          <div className="day-agenda-list">
+            {items.map((item) => (
+              <DayAgendaItem
+                item={item}
+                onSave={onSave}
+                onOpenDetails={onOpenDetails}
+                key={item.id}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="day-agenda-panel-empty" aria-hidden="true">
+            <span />
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -578,6 +644,9 @@ function App() {
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [detailSaving, setDetailSaving] = useState(false);
+  const [completionSaving, setCompletionSaving] = useState(null);
+  const [detailDeleting, setDetailDeleting] = useState(false);
+  const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [hoveredStartDate, setHoveredStartDate] = useState(null);
   const dragSelection = useRef({ active: false, select: true, lastKey: null });
 
@@ -591,6 +660,7 @@ function App() {
   const calendarPicking = customPicking || startDatePicking;
   const calendarLocked = editorOpen && !calendarPicking;
   const outlinedCellIndexes = monthDays.reduce((indexes, day, index) => {
+    if (isPastDateKey(day.key)) return indexes;
     if ((customPicking && customDateSet.has(day.key)) || isHoveredStartPattern(day)) indexes.push(index);
     return indexes;
   }, []);
@@ -663,6 +733,12 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  useEffect(() => {
+    if (!deleteConfirming) return undefined;
+    const timer = window.setTimeout(() => setDeleteConfirming(false), 3500);
+    return () => window.clearTimeout(timer);
+  }, [deleteConfirming]);
+
   function moveMonth(amount) {
     setCurrentMonth((month) => addMonths(month, amount));
     setExpandedDayKey(null);
@@ -713,7 +789,7 @@ function App() {
   }
 
   function beginDateSelection(dateKey, event) {
-    if (!calendarPicking || event.button !== 0) return;
+    if (!calendarPicking || isPastDateKey(dateKey) || event.button !== 0) return;
     event.preventDefault();
 
     if (startDatePicking) {
@@ -728,13 +804,13 @@ function App() {
 
   function continueDateSelection(dateKey) {
     const drag = dragSelection.current;
-    if (!customPicking || !drag.active || drag.lastKey === dateKey) return;
+    if (!customPicking || isPastDateKey(dateKey) || !drag.active || drag.lastKey === dateKey) return;
     drag.lastKey = dateKey;
     updateCustomDate(dateKey, drag.select);
   }
 
   function toggleCustomDateFromKeyboard(dateKey, event) {
-    if (!calendarPicking || !["Enter", " "].includes(event.key)) return;
+    if (!calendarPicking || isPastDateKey(dateKey) || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
     if (startDatePicking) {
       setForm((current) => ({ ...current, date: dateKey }));
@@ -744,7 +820,7 @@ function App() {
   }
 
   function matchesStartPattern(day, anchorDate) {
-    if (!anchorDate) return false;
+    if (!anchorDate || isPastDateKey(anchorDate) || isPastDateKey(day.key)) return false;
     const active = dateFromKey(anchorDate);
 
     if (form.repeat === "仅一次") return day.key === anchorDate;
@@ -760,14 +836,22 @@ function App() {
     return startDatePicking && Boolean(form.date) && matchesStartPattern(day, form.date);
   }
 
+  function closeEventDetails() {
+    setSelectedEventId(null);
+    setDetailPaletteOpen(false);
+    setDeleteConfirming(false);
+    setDetailError("");
+  }
+
   function openEventDetails(item) {
+    setDeleteConfirming(false);
     if (selectedEvent?.todoId === item.todoId) {
-      setSelectedEventId(null);
+      closeEventDetails();
       return;
     }
 
     setEditorOpen(false);
-    setDayViewKey(null);
+    setDayViewKey(item.date);
     setExpandedDayKey(null);
     setDetailPaletteOpen(false);
     setDetailError("");
@@ -778,7 +862,6 @@ function App() {
       reminder: item.reminder,
       repeat: item.repeat,
       color: item.color,
-      done: item.done,
     });
     setSelectedEventId(item.id);
   }
@@ -810,6 +893,69 @@ function App() {
     }));
   }
 
+  async function updateOccurrenceDone(nextDone) {
+    if (!selectedEvent || selectedEvent.allDone) return;
+
+    const target = selectedEvent;
+    setCompletionSaving("occurrence");
+    setDetailError("");
+
+    try {
+      const result = await patchOccurrence(target.todoId, target.date, nextDone);
+
+      setEvents((current) =>
+        current.map((item) => {
+          const isTarget = item.todoId === result.todo_id && item.date === result.occurs_on;
+          if (!isTarget) return item;
+
+          return {
+            ...item,
+            occurrenceDone: Boolean(result.occurrence_done),
+          };
+        }),
+      );
+
+      setNotice(result.occurrence_done ? "已完成" : "已恢复为待完成");
+    } catch (error) {
+      setDetailError(error.message);
+    } finally {
+      setCompletionSaving(null);
+    }
+  }
+
+  async function updateAllDone(nextAllDone) {
+    if (!selectedEvent) return;
+
+    const target = selectedEvent;
+    setCompletionSaving("all");
+    setDetailError("");
+
+    try {
+      const updatedTodo = await patchTodo(target.todoId, {
+        all_done: nextAllDone,
+        version: target.version,
+      });
+
+      setEvents((current) =>
+        current.map((item) => {
+          if (item.todoId !== target.todoId) return item;
+
+          return {
+            ...item,
+            allDone: Boolean(updatedTodo.all_done),
+            version: updatedTodo.version,
+          };
+        }),
+      );
+
+      setNotice(updatedTodo.all_done ? "已全部完成" : "已恢复单日完成状态");
+    } catch (error) {
+      setDetailError(error.message);
+    } finally {
+      setCompletionSaving(null);
+    }
+  }
+
   async function saveEventDetails(event) {
     event.preventDefault();
     const content = detailForm.content.trim();
@@ -821,7 +967,6 @@ function App() {
     const payload = {
       content,
       color: detailForm.color,
-      done: detailForm.done,
       reminder: { notify_mode: REMINDER_VALUES[detailForm.reminder] },
       version: selectedEvent.version,
       starts_at: dateTimeAt(detailForm.date, detailForm.time),
@@ -837,12 +982,37 @@ function App() {
     try {
       await patchTodo(selectedEvent.todoId, payload);
       await refreshCalendar();
-      setSelectedEventId(null);
+      closeEventDetails();
       setNotice("已保存");
     } catch (error) {
       setDetailError(error.message);
     } finally {
       setDetailSaving(false);
+    }
+  }
+
+  async function deleteSelectedTodo() {
+    if (!selectedEvent) return;
+
+    if (!deleteConfirming) {
+      setDeleteConfirming(true);
+      return;
+    }
+
+    const todoID = selectedEvent.todoId;
+    setDetailDeleting(true);
+    setDetailError("");
+
+    try {
+      await deleteTodo(todoID);
+      setEvents((current) => current.filter((item) => item.todoId !== todoID));
+      closeEventDetails();
+      setNotice("已删除");
+    } catch (error) {
+      setDeleteConfirming(false);
+      setDetailError(error.message);
+    } finally {
+      setDetailDeleting(false);
     }
   }
 
@@ -876,7 +1046,7 @@ function App() {
       content,
       starts_at: dateTimeAt(startDate, startTime),
       repeat_mode: REPEAT_VALUES[form.repeat],
-      reminder: { notify_mode: REMINDER_VALUES[form.reminder] },
+      notify_mode: REMINDER_VALUES[form.reminder],
       ...(isCustom ? { custom_dates: customDates } : {}),
       ...(form.color ? { color: form.color } : {}),
     };
@@ -903,6 +1073,7 @@ function App() {
   const detailUsesCustomColor = Boolean(detailForm.color) && !selectedDetailColor;
   const previousMonth = addMonths(currentMonth, -1);
   const nextMonth = addMonths(currentMonth, 1);
+  const selectionColor = form.color || "#F3B51B";
 
   return (
     <main
@@ -912,44 +1083,50 @@ function App() {
         editorOpen ? "has-editor-panel" : "",
         calendarPicking ? "is-calendar-picking" : "",
         calendarLocked ? "is-calendar-locked" : "",
-        dayViewKey ? "is-day-view" : "",
       ].filter(Boolean).join(" ")}
-      style={
-        selectedEvent
+      style={{
+        "--selection-color": selectionColor,
+        "--selection-soft": colorWithAlpha(selectionColor, 0.12),
+        "--selection-ink": readableSelectionInk(selectionColor),
+        ...(selectedEvent
           ? {
               "--focus-color": selectedEvent.color,
               "--focus-soft": colorWithAlpha(selectedEvent.color, 0.13),
             }
-          : undefined
-      }
+          : {}),
+      }}
     >
-      <div className="month-stack">
-        <MonthPeek month={previousMonth} direction="previous" />
+      <div className="workspace-stack">
+        <DayAgendaPanel
+          dateKey={dayViewKey}
+          items={dayViewEvents}
+          onClear={() => setDayViewKey(null)}
+          onSave={saveAgendaItem}
+          onOpenDetails={openEventDetails}
+        />
 
-        <section
-          className={`calendar-panel ${calendarLoading ? "is-loading" : ""}`}
-          aria-label={dayViewKey ? `${preciseDateLabel(dayViewKey)}日程` : `${monthLabel(currentMonth)}日历`}
-          aria-busy={calendarLoading}
-        >
-          <header className="calendar-header">
-            {dayViewKey && (
-              <button className="day-view-back" type="button" onClick={() => setDayViewKey(null)} aria-label="返回月历">
-                <CaretLeft size={20} weight="bold" />
-              </button>
-            )}
-            <span className="title-accent" aria-hidden="true" />
-            <h1>{dayViewKey ? preciseDateLabel(dayViewKey) : monthLabel(currentMonth)}</h1>
-            <div className="month-controls">
-              <button type="button" onClick={() => moveMonth(-1)} aria-label="切换到上个月">
-                <CaretUp size={19} weight="bold" />
-              </button>
-              <button type="button" onClick={() => moveMonth(1)} aria-label="切换到下个月">
-                <CaretDown size={19} weight="bold" />
-              </button>
-            </div>
-          </header>
+        <div className="month-stack">
+          <MonthPeek month={previousMonth} direction="previous" />
 
-          <div className="weekday-row" role="row" aria-hidden={dayViewKey ? "true" : undefined}>
+          <section
+            className={`calendar-panel ${calendarLoading ? "is-loading" : ""}`}
+            aria-label={`${monthLabel(currentMonth)}日历`}
+            aria-busy={calendarLoading}
+          >
+            <header className="calendar-header">
+              <span className="title-accent" aria-hidden="true" />
+              <h1>{monthLabel(currentMonth)}</h1>
+              <div className="month-controls">
+                <button type="button" onClick={() => moveMonth(-1)} aria-label="切换到上个月">
+                  <CaretUp size={19} weight="bold" />
+                </button>
+                <button type="button" onClick={() => moveMonth(1)} aria-label="切换到下个月">
+                  <CaretDown size={19} weight="bold" />
+                </button>
+              </div>
+            </header>
+
+            <div className="weekday-row" role="row">
             {WEEKDAYS.map((weekday) => (
               <div role="columnheader" key={weekday}>
                 {weekday}
@@ -957,13 +1134,11 @@ function App() {
             ))}
           </div>
 
-          <div
-            className="month-grid"
-            role="grid"
-            aria-hidden={dayViewKey ? "true" : undefined}
-            inert={dayViewKey ? true : undefined}
-            onPointerLeave={() => setHoveredStartDate(null)}
-          >
+            <div
+              className="month-grid"
+              role="grid"
+              onPointerLeave={() => setHoveredStartDate(null)}
+            >
             {selectionOutlinePath && (
               <svg className="selection-outline" viewBox="0 0 7 6" preserveAspectRatio="none" aria-hidden="true">
                 <path d={selectionOutlinePath} vectorEffect="non-scaling-stroke" />
@@ -979,6 +1154,7 @@ function App() {
                 ? dayEvents.some((item) => item.todoId === focusedTodoId)
                 : false;
               const selectedCustomDate = customDateSet.has(day.key);
+              const pastDateDisabled = calendarPicking && isPastDateKey(day.key);
               const hoveredStartPattern = isHoveredStartPattern(day);
               const selectedStartPattern = isSelectedStartPattern(day);
               const selectedStartDate = form.repeat === "仅一次" && selectedStartPattern;
@@ -990,20 +1166,27 @@ function App() {
                     "day-cell",
                     day.isCurrentMonth ? "" : "is-adjacent",
                     day.key === TODAY_KEY ? "is-today" : "",
+                    dayViewKey === day.key ? "is-agenda-selected" : "",
                     hasFocusedTodo ? "has-focused-todo" : "",
                     focusedTodoId && day.isCurrentMonth && !hasFocusedTodo ? "is-focus-muted" : "",
                     selectedCustomDate ? "is-custom-selected" : "",
                     hoveredStartPattern ? "is-start-highlighted" : "",
                     selectedStartDate ? "is-start-selected" : "",
                     selectedRepeatPattern ? "is-pattern-selected" : "",
-                    calendarPicking ? "is-pickable" : "",
+                    calendarPicking && !pastDateDisabled ? "is-pickable" : "",
+                    pastDateDisabled ? "is-past-disabled" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                   role="gridcell"
+                  aria-selected={dayViewKey === day.key}
                   key={day.key}
                   onPointerDown={(event) => beginDateSelection(day.key, event)}
                   onPointerEnter={() => {
+                    if (pastDateDisabled) {
+                      setHoveredStartDate(null);
+                      return;
+                    }
                     if (startDatePicking) setHoveredStartDate(day.key);
                     continueDateSelection(day.key);
                   }}
@@ -1012,13 +1195,15 @@ function App() {
                   <button
                     className="date-button"
                     type="button"
-                    disabled={calendarLocked}
+                    disabled={calendarLocked || pastDateDisabled}
                     aria-label={
-                      customPicking
-                        ? `${selectedCustomDate ? "取消" : "选择"}${day.key}`
-                        : startDatePicking
-                          ? `选择开始日期${day.key}`
-                          : `查看${day.key}日程`
+                      pastDateDisabled
+                        ? `${day.key}已过期，不可选择`
+                        : customPicking
+                          ? `${selectedCustomDate ? "取消" : "选择"}${day.key}`
+                          : startDatePicking
+                            ? `选择开始日期${day.key}`
+                            : `查看${day.key}日程`
                     }
                     aria-pressed={calendarPicking ? (customPicking ? selectedCustomDate : selectedStartPattern) : undefined}
                     onKeyDown={(event) => toggleCustomDateFromKeyboard(day.key, event)}
@@ -1080,31 +1265,10 @@ function App() {
             })}
           </div>
 
-          {dayViewKey && (
-            <section className="day-agenda" aria-label={`${preciseDateLabel(dayViewKey)}的全部日程`}>
-              <header className="day-agenda-header">
-                <span>当天日程</span>
-                <small>{dayViewEvents.length} 条</small>
-              </header>
-              <div className="day-agenda-list">
-                {dayViewEvents.length > 0 ? (
-                  dayViewEvents.map((item) => (
-                    <DayAgendaItem
-                      item={item}
-                      onSave={saveAgendaItem}
-                      onOpenDetails={openEventDetails}
-                      key={item.id}
-                    />
-                  ))
-                ) : (
-                  <p className="day-agenda-empty">当天没有日程</p>
-                )}
-              </div>
-            </section>
-          )}
-        </section>
+          </section>
 
-        <MonthPeek month={nextMonth} direction="next" />
+          <MonthPeek month={nextMonth} direction="next" />
+        </div>
       </div>
 
       <button className="add-fab" type="button" onClick={openEditor} aria-label="添加日程">
@@ -1127,16 +1291,53 @@ function App() {
           >
             <header className="side-header">
               <h2 id="detail-title">详情</h2>
-              <button type="button" onClick={() => setSelectedEventId(null)} aria-label="关闭详情">
+              <button type="button" onClick={closeEventDetails} aria-label="关闭详情">
                 <X size={21} />
               </button>
             </header>
 
             <form className="side-form" onSubmit={saveEventDetails}>
-              <label className="completion-toggle">
-                <input name="done" type="checkbox" checked={detailForm.done} onChange={updateDetailField} />
-                <span>{detailForm.done ? "已完成" : "待完成"}</span>
-              </label>
+              <div className="completion-controls" aria-label="完成状态">
+                <label
+                  className={`completion-toggle ${selectedEvent.allDone ? "is-overridden" : ""} ${completionSaving === "occurrence" ? "is-saving" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedEvent.occurrenceDone}
+                    disabled={Boolean(completionSaving) || selectedEvent.allDone}
+                    aria-label={`${selectedEvent.date} ${selectedEvent.content}的本次完成状态`}
+                    onChange={(event) => void updateOccurrenceDone(event.target.checked)}
+                  />
+                  <span>
+                    {completionSaving === "occurrence"
+                      ? "更新中"
+                      : selectedEvent.allDone
+                        ? "本次状态已保留"
+                        : selectedEvent.occurrenceDone
+                          ? "本次已完成"
+                          : "本次未完成"}
+                  </span>
+                </label>
+
+                <label
+                  className={`completion-toggle completion-toggle-all ${selectedEvent.allDone ? "is-active" : ""} ${completionSaving === "all" ? "is-saving" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedEvent.allDone}
+                    disabled={Boolean(completionSaving)}
+                    aria-label={`${selectedEvent.content}的全部完成状态`}
+                    onChange={(event) => void updateAllDone(event.target.checked)}
+                  />
+                  <span>
+                    {completionSaving === "all"
+                      ? "更新中"
+                      : selectedEvent.allDone
+                        ? "已全部完成"
+                        : "全部完成"}
+                  </span>
+                </label>
+              </div>
 
               <label>
                 <span>内容</span>
@@ -1206,9 +1407,20 @@ function App() {
               </div>
 
               {detailError && <p className="form-error" role="alert">{detailError}</p>}
+              <button
+                className={`delete-button ${deleteConfirming ? "is-confirming" : ""}`}
+                type="button"
+                onClick={deleteSelectedTodo}
+                disabled={detailSaving || completionSaving || detailDeleting}
+              >
+                <Trash size={16} aria-hidden="true" />
+                <span aria-live="polite">
+                  {detailDeleting ? "删除中" : deleteConfirming ? "再次点击确认删除" : "删除日程"}
+                </span>
+              </button>
               <footer className="side-footer">
-                <button className="cancel-button" type="button" onClick={() => setSelectedEventId(null)}>关闭</button>
-                <button className="save-button" type="submit" disabled={detailSaving}>{detailSaving ? "保存中" : "保存"}</button>
+                <button className="cancel-button" type="button" onClick={closeEventDetails}>关闭</button>
+                <button className="save-button" type="submit" disabled={detailSaving || completionSaving || detailDeleting}>{detailSaving ? "保存中" : "保存"}</button>
               </footer>
             </form>
           </aside>

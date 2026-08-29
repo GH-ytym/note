@@ -22,8 +22,11 @@ func New(h *handler.Handler) *gin.Engine {
 		todos.GET("", h.ListTodos)
 		todos.GET("/:id", h.GetTodo)
 		todos.PATCH("/:id", h.PatchTodo)
+		todos.PATCH(
+			"/:id/occurrences/:date",
+			h.PatchOccurrenceDone,
+		)
 		todos.DELETE("/:id", h.DeleteTodo)
-
 	}
 
 	return r

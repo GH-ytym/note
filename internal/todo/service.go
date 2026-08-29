@@ -30,6 +30,12 @@ type TodoService interface {
 		from time.Time,
 		to time.Time,
 	) ([]CalendarOccurrence, error)
+	SetOccurrenceDone(
+		ctx context.Context,
+		todoID uint,
+		occursOn time.Time,
+		done bool,
+	) error
 }
 
 // service 负责执行业务规则，并通过 Repository 完成数据持久化。
@@ -61,15 +67,18 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 	if !validRepeatMode(command.RepeatMode) {
 		return model.Todo{}, ErrInvalidRepeatMode
 	}
-	//不能既要重复又没有开始时间
-	if command.RepeatMode != model.RepeatOnce &&
-		command.StartsAt == nil {
+	// 每个 Todo 都必须从一个明确的日期和时间开始。
+	if command.StartsAt == nil {
 		return model.Todo{}, ErrStartsAtRequired
 	}
-	// 要提醒就要有开始时间
-	if command.Reminder != nil &&
-		command.StartsAt == nil {
-		return model.Todo{}, ErrStartsAtRequired
+
+	//解析提醒模式
+	notifyMode := command.NotifyMode
+	if notifyMode == "" {
+		notifyMode = model.NotifyNone
+	}
+	if !validNotifyMode(notifyMode) {
+		return model.Todo{}, ErrInvalidNotifyMode
 	}
 
 	//必须是custom才能组装customDates
@@ -100,19 +109,8 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 		Color:       color,
 		StartsAt:    command.StartsAt,
 		RepeatMode:  command.RepeatMode,
+		NotifyMode:  notifyMode,
 		CustomDates: dates,
-	}
-
-	//校验reminder字段
-	if command.Reminder != nil {
-		if !validNotifyMode(command.Reminder.NotifyMode) {
-			return model.Todo{}, ErrInvalidNotifyMode
-		}
-
-		item.Reminder = &model.Reminder{
-			NotifyMode: command.Reminder.NotifyMode,
-			Enabled:    true,
-		}
 	}
 
 	//进入Repository的Create
@@ -164,10 +162,10 @@ func (s *service) Patch(
 	//啥都没改则不进入repo防止version自增
 	if command.Content == nil &&
 		command.Color == nil &&
-		command.Done == nil &&
+		command.NotifyMode == nil &&
 		command.StartsAt == nil &&
 		command.RepeatMode == nil &&
-		command.Reminder == nil &&
+		command.AllDone == nil &&
 		command.CustomDates == nil {
 		return model.Todo{}, ErrNothingToUpdate
 	}
@@ -195,8 +193,7 @@ func (s *service) Patch(
 		return model.Todo{}, ErrInvalidRepeatMode
 	}
 
-	if command.Reminder != nil &&
-		!validNotifyMode(command.Reminder.NotifyMode) {
+	if command.NotifyMode != nil && !validNotifyMode(*command.NotifyMode) {
 		return model.Todo{}, ErrInvalidNotifyMode
 	}
 
@@ -208,31 +205,19 @@ func (s *service) Patch(
 
 	// 没传 repeat_mode，就继续使用数据库里的旧模式。
 	finalRepeatMode := current.RepeatMode
+	//传了就改模式
 	if command.RepeatMode != nil {
 		finalRepeatMode = *command.RepeatMode
 	}
 
-	// 没传 starts_at，就继续使用旧时间。
-	finalStartsAt := current.StartsAt
-	if command.StartsAt != nil {
-		finalStartsAt = command.StartsAt
-	}
-
-	// 先去重，后面的业务校验只处理规范化后的日期。
+	// 去重自定义日期
 	if command.CustomDates != nil {
 		dates := uniqueDates(*command.CustomDates)
 		command.CustomDates = &dates
 	}
 
-	// 周期 Todo 以及带提醒的 Todo 都必须有执行时间。
-	needsStartsAt := finalRepeatMode != model.RepeatOnce ||
-		command.Reminder != nil ||
-		current.Reminder != nil
-	if needsStartsAt && finalStartsAt == nil {
-		return model.Todo{}, ErrStartsAtRequired
-	}
-
 	//处理自定义模式
+	//finalRepeatMode可能是沿用之前的custom，也可能是改到了custom
 	if finalRepeatMode == model.RepeatCustom {
 		switch {
 		// 本次请求传了 custom_dates，就校验新的日期集合。
@@ -246,6 +231,7 @@ func (s *service) Patch(
 			return model.Todo{}, ErrCustomDatesRequired
 		}
 	} else {
+		//处理非自定义模式
 		// 非 custom 模式不能携带自定义日期。
 		if command.CustomDates != nil && len(*command.CustomDates) > 0 {
 			return model.Todo{}, ErrCustomDatesNotAllowed
@@ -263,6 +249,25 @@ func (s *service) Patch(
 
 func (s *service) Delete(ctx context.Context, id uint) error {
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *service) SetOccurrenceDone(
+	ctx context.Context,
+	todoID uint,
+	occursOn time.Time,
+	done bool,
+) error {
+	//先保证todo存在
+	if _, err := s.repo.ByID(ctx, todoID); err != nil {
+		return err
+	}
+	// 只插入或删除一条 todo_completions。
+	return s.repo.SetOccurrenceDone(
+		ctx,
+		todoID,
+		occursOn,
+		done,
+	)
 }
 
 // 两个辅助校验函数
@@ -283,7 +288,9 @@ func validRepeatMode(mode model.RepeatMode) bool {
 
 func validNotifyMode(mode model.NotifyMode) bool {
 	switch mode {
-	case model.NotifySilent, model.NotifyPopup:
+	case model.NotifyNone,
+		model.NotifySilent,
+		model.NotifyPopup:
 		return true
 	default:
 		return false

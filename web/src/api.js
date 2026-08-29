@@ -56,6 +56,13 @@ export function patchTodo(id, changes) {
   });
 }
 
+export function patchOccurrence(todoId, date, done) {
+  return request(`/todos/${todoId}/occurrences/${encodeURIComponent(date)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ done }),
+  });
+}
+
 export function deleteTodo(id) {
   return request(`/todos/${id}`, { method: "DELETE" });
 }

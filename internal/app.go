@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -17,18 +19,23 @@ import (
 	"note/internal/router"
 	"note/internal/todo"
 
-	"gorm.io/driver/postgres"
+	"github.com/ncruces/go-sqlite3/gormlite"
 	"gorm.io/gorm"
 )
 
-func Run() error {
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		databaseURL = "postgres://note:note@localhost:5433/note?sslmode=disable"
+func Run() (runErr error) {
+	databasePath := os.Getenv("NOTE_DB_PATH")
+	if databasePath == "" {
+		databasePath = filepath.Join("data", "note.db")
+	}
+
+	databasePath, err := prepareDatabasePath(databasePath)
+	if err != nil {
+		return err
 	}
 
 	db, err := gorm.Open(
-		postgres.Open(databaseURL),
+		gormlite.Open(sqliteDSN(databasePath)),
 		&gorm.Config{
 			TranslateError: true,
 		})
@@ -40,7 +47,17 @@ func Run() error {
 	if err != nil {
 		return fmt.Errorf("get sql database: %w", err)
 	}
-	defer sqlDB.Close()
+	defer func() {
+		log.Print("closing SQLite database")
+		if err := sqlDB.Close(); runErr == nil && err != nil {
+			runErr = fmt.Errorf("close database: %w", err)
+		}
+	}()
+
+	// SQLite 同一时刻只有一个写入者。桌面应用的数据量很小，
+	// 使用一个连接可以让多个窗口的写操作在进程内自然排队。
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	err = retry.Do(ctx, func() error {
@@ -59,6 +76,7 @@ func Run() error {
 	); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
 	}
+	log.Printf("SQLite database: %s", databasePath)
 
 	// 静态类型是 todo.Repository；实际值是隐藏的 *todo.gormRepository。
 	todoRepository := todo.NewGORMRepository(db)
@@ -71,8 +89,13 @@ func Run() error {
 	hdlr := handler.NewHandler(todoService)
 
 	//启动服务+优雅关闭
+	serverAddress := os.Getenv("HTTP_ADDR")
+	if serverAddress == "" {
+		serverAddress = "127.0.0.1:8080"
+	}
+
 	server := &http.Server{
-		Addr:              ":8080",
+		Addr:              serverAddress,
 		Handler:           router.New(hdlr),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -114,4 +137,28 @@ func Run() error {
 
 	log.Print("HTTP server stopped")
 	return nil
+}
+
+func prepareDatabasePath(databasePath string) (string, error) {
+	absolutePath, err := filepath.Abs(databasePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve database path: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
+		return "", fmt.Errorf("create database directory: %w", err)
+	}
+
+	return absolutePath, nil
+}
+
+func sqliteDSN(databasePath string) string {
+	query := url.Values{}
+	query.Add("_pragma", "busy_timeout(5000)")
+	query.Add("_pragma", "foreign_keys(on)")
+	query.Add("_pragma", "journal_mode(WAL)")
+	query.Add("_pragma", "synchronous(NORMAL)")
+	query.Set("_txlock", "immediate")
+
+	return "file:" + filepath.ToSlash(databasePath) + "?" + query.Encode()
 }

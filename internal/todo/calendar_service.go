@@ -10,6 +10,11 @@ import (
 	"github.com/teambition/rrule-go"
 )
 
+type occurrenceKey struct {
+	TodoID uint
+	Date   string
+}
+
 func (s *service) CalendarOccurrences(
 	ctx context.Context,
 	from time.Time,
@@ -24,6 +29,12 @@ func (s *service) CalendarOccurrences(
 	if err != nil {
 		return nil, err
 	}
+	todoIDs := make([]uint, 0, len(items))
+
+	//收集todoID交给CompletionsInRange
+	for _, item := range items {
+		todoIDs = append(todoIDs, item.ID)
+	}
 
 	occurrences := make([]CalendarOccurrence, 0)
 
@@ -36,8 +47,8 @@ func (s *service) CalendarOccurrences(
 			continue
 		}
 
-		// PostgreSQL 的 timestamptz 可能以 UTC 返回。
-		// 周期计算必须使用日历查询所在的本地时区。
+		// 数据库存储的时间可能带有不同的时区偏移。
+		// 周期计算统一使用日历查询所在的本地时区。
 		startsAt := item.StartsAt.In(from.Location())
 
 		// 仅一次的 Todo 不需要周期计算器。
@@ -46,12 +57,12 @@ func (s *service) CalendarOccurrences(
 				TodoID:     item.ID,
 				Content:    item.Content,
 				Color:      item.Color,
-				Done:       item.Done,
 				StartsAt:   startsAt,
 				OccursAt:   startsAt,
 				RepeatMode: item.RepeatMode,
-				NotifyMode: notifyModeOf(item),
+				NotifyMode: item.NotifyMode,
 				Version:    item.Version,
+				AllDone:    item.AllDone,
 			})
 			continue
 		}
@@ -77,12 +88,12 @@ func (s *service) CalendarOccurrences(
 					TodoID:     item.ID,
 					Content:    item.Content,
 					Color:      item.Color,
-					Done:       item.Done,
 					StartsAt:   startsAt,
 					OccursAt:   occursAt,
 					RepeatMode: item.RepeatMode,
-					NotifyMode: notifyModeOf(item),
+					NotifyMode: item.NotifyMode,
 					Version:    item.Version,
+					AllDone:    item.AllDone,
 				})
 			}
 			continue
@@ -127,14 +138,44 @@ func (s *service) CalendarOccurrences(
 				TodoID:     item.ID,
 				Content:    item.Content,
 				Color:      item.Color,
-				Done:       item.Done,
 				StartsAt:   startsAt,
 				OccursAt:   occursAt,
 				RepeatMode: item.RepeatMode,
-				NotifyMode: notifyModeOf(item),
+				NotifyMode: item.NotifyMode,
 				Version:    item.Version,
+				AllDone:    item.AllDone,
 			})
 		}
+	}
+
+	// 一次性读取当前范围内的完成记录，再与计算出的发生日期合并。
+	completions, err := s.repo.CompletionsInRange(ctx, todoIDs, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	completionSet := make(map[occurrenceKey]struct{}, len(completions))
+	//先把所有已完成的todo+date放进map里面
+	for _, completion := range completions {
+		key := occurrenceKey{
+			TodoID: completion.TodoID,
+			Date:   completion.OccursOn.Format(time.DateOnly),
+		}
+		//value设为空即可
+		completionSet[key] = struct{}{}
+	}
+
+	//对于每个occurrence检查是否完成（key在map里面就是完成了，不在就没完成）
+	for i := range occurrences {
+		key := occurrenceKey{
+			TodoID: occurrences[i].TodoID,
+			Date: occurrences[i].OccursAt.
+				In(from.Location()).
+				Format(time.DateOnly),
+		}
+		//occurrenceDone为bool，代表是否存在这个key
+		_, occurrenceDone := completionSet[key]
+		occurrences[i].OccurrenceDone = occurrenceDone
 	}
 
 	//按时间排序
@@ -145,15 +186,6 @@ func (s *service) CalendarOccurrences(
 	})
 
 	return occurrences, nil
-}
-
-func notifyModeOf(item model.Todo) *model.NotifyMode {
-	if item.Reminder == nil || !item.Reminder.Enabled {
-		return nil
-	}
-
-	notifyMode := item.Reminder.NotifyMode
-	return &notifyMode
 }
 
 func recurrenceOption(

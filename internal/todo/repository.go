@@ -9,6 +9,7 @@ import (
 	"note/internal/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Repository 声明 Service 所需的数据库操作。
@@ -24,6 +25,20 @@ type Repository interface {
 	ByID(ctx context.Context, id uint) (model.Todo, error)
 	Patch(ctx context.Context, id uint, command PatchCommand) (model.Todo, error)
 	Delete(ctx context.Context, id uint) error
+	//给单个todo的某一天设置完成状态
+	SetOccurrenceDone(
+		ctx context.Context,
+		todoID uint,
+		occursOn time.Time,
+		done bool,
+	) error
+	//查询某段时间范围内的todo完成情况
+	CompletionsInRange(
+		ctx context.Context,
+		todoIDs []uint,
+		from time.Time,
+		to time.Time,
+	) ([]model.TodoCompletion, error)
 }
 
 // gormRepository 是 Repository 的 GORM 实现，对 todo 包外隐藏。
@@ -42,8 +57,8 @@ func (r *gormRepository) CalendarCandidates(
 
 	err := r.db.
 		WithContext(ctx).
-		Preload("Reminder").
 		Preload(
+			//custom模式
 			"CustomDates",
 			"date >= ? AND date < ?",
 			fromDate,
@@ -140,7 +155,7 @@ func (r *gormRepository) ByID(ctx context.Context, id uint) (model.Todo, error) 
 
 	err := r.db.
 		WithContext(ctx).
-		Preload("Reminder").
+		//service需要自定义日期所以要preload
 		Preload("CustomDates").
 		First(&item, id).Error
 
@@ -161,22 +176,27 @@ func (r *gormRepository) Patch(
 	command PatchCommand,
 ) (model.Todo, error) {
 	updates := map[string]any{
-		"version": gorm.Expr("version+1"),
+		//乐观锁
+		"version": gorm.Expr("version + 1"),
 	}
+
 	if command.Content != nil {
 		updates["content"] = *command.Content
 	}
 	if command.Color != nil {
 		updates["color"] = *command.Color
 	}
-	if command.Done != nil {
-		updates["done"] = *command.Done
-	}
 	if command.StartsAt != nil {
 		updates["starts_at"] = *command.StartsAt
 	}
 	if command.RepeatMode != nil {
 		updates["repeat_mode"] = *command.RepeatMode
+	}
+	if command.NotifyMode != nil {
+		updates["notify_mode"] = *command.NotifyMode
+	}
+	if command.AllDone != nil {
+		updates["all_done"] = *command.AllDone
 	}
 
 	db := r.db.WithContext(ctx)
@@ -220,38 +240,6 @@ func (r *gormRepository) Patch(
 			return ErrConcurrentUpdate
 		}
 
-		//进入reminder
-		if command.Reminder != nil {
-			res1 := tx.Model(&model.Reminder{}).
-				Where("todo_id=?", id).
-				Updates(map[string]any{
-					"notify_mode": command.Reminder.NotifyMode,
-					"enabled":     true,
-				})
-			if res1.Error != nil {
-				return fmt.Errorf(
-					"patch reminder for todo %d: %w",
-					id,
-					res1.Error,
-				)
-			}
-			//如果没有就创建一条reminder
-			if res1.RowsAffected == 0 {
-				reminder := model.Reminder{
-					TodoID:     id,
-					NotifyMode: command.Reminder.NotifyMode,
-					Enabled:    true,
-				}
-				if err := tx.Create(&reminder).Error; err != nil {
-					return fmt.Errorf(
-						"create reminder for todo %d: %w",
-						id,
-						err,
-					)
-				}
-			}
-		}
-
 		// 用自定义日期替换旧集合
 		if command.CustomDates != nil {
 			if err := tx.
@@ -287,7 +275,6 @@ func (r *gormRepository) Patch(
 
 		// 返回更新后的完整 Todo，包括一对一提醒和一对多自定义日期。
 		if err := tx.
-			Preload("Reminder").
 			Preload("CustomDates").
 			First(&item, id).
 			Error; err != nil {
@@ -316,4 +303,59 @@ func (r *gormRepository) Delete(ctx context.Context, id uint) error {
 	}
 
 	return nil
+}
+
+func (r *gormRepository) SetOccurrenceDone(
+	ctx context.Context,
+	todoID uint,
+	occursOn time.Time,
+	done bool,
+) error {
+	db := r.db.WithContext(ctx)
+	//未完成-完成：写入todocompletion
+	if done {
+		completion := model.TodoCompletion{
+			TodoID:      todoID,
+			OccursOn:    occursOn,
+			CompletedAt: time.Now(),
+		}
+		return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&completion).Error
+	}
+	//完成-未完成：删除todocompletion对应记录
+	return db.Where(
+		"todo_id = ? AND occurs_on = ?",
+		todoID,
+		occursOn,
+	).Delete(&model.TodoCompletion{}).Error
+}
+
+// 一次性查询当前范围的完成记录
+func (r *gormRepository) CompletionsInRange(
+	ctx context.Context,
+	todoIDs []uint,
+	from time.Time,
+	to time.Time,
+) ([]model.TodoCompletion, error) {
+	if len(todoIDs) == 0 {
+		return []model.TodoCompletion{}, nil
+	}
+
+	var completions []model.TodoCompletion
+	fromDate := from.Format(time.DateOnly)
+	toDate := to.Format(time.DateOnly)
+
+	err := r.db.WithContext(ctx).
+		Where(
+			"todo_id IN ? AND occurs_on >= ? AND occurs_on < ?",
+			todoIDs,
+			fromDate,
+			toDate,
+		).
+		Find(&completions).
+		Error
+	if err != nil {
+		return nil, fmt.Errorf("list todo completions in range: %w", err)
+	}
+
+	return completions, nil
 }

@@ -12,7 +12,7 @@ import (
 type CreateTodoRequest struct {
 	Content    string           `json:"content" binding:"required,max=500"`
 	Color      string           `json:"color" binding:"omitempty,len=7"`
-	StartsAt   *time.Time       `json:"starts_at"`
+	StartsAt   *time.Time       `json:"starts_at" binding:"required"`
 	RepeatMode model.RepeatMode `json:"repeat_mode" binding:"required,oneof=once daily weekdays weekends weekly monthly custom"`
 	NotifyMode model.NotifyMode `json:"notify_mode" binding:"omitempty,oneof=none silent popup"`
 
@@ -33,6 +33,7 @@ type PatchTodoRequest struct {
 	StartsAt   *time.Time        `json:"starts_at"`
 	RepeatMode *model.RepeatMode `json:"repeat_mode" binding:"omitempty,oneof=once daily weekdays weekends weekly monthly custom"`
 	NotifyMode *model.NotifyMode `json:"notify_mode" binding:"omitempty,oneof=none silent popup"`
+	AllDone    *bool             `json:"all_done"`
 	Version    uint              `json:"version" binding:"required,min=1"`
 	// nil 表示请求没传；指向空切片表示用户明确清空日期。
 	CustomDates *[]string `json:"custom_dates"`
@@ -42,4 +43,9 @@ type PatchTodoRequest struct {
 type CalendarQuery struct {
 	From string `form:"from" binding:"required"`
 	To   string `form:"to" binding:"required"`
+}
+
+// DTO of single occurence
+type PatchOccurrenceRequest struct {
+	Done *bool `json:"done" binding:"required"`
 }

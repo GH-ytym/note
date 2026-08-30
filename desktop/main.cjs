@@ -3,6 +3,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { ReminderScheduler, dateKeyAt } = require("./reminder-scheduler.cjs");
 const {
+  DEFAULT_EDGE_MARGIN,
+  DEFAULT_GAP,
+  aboveAnchorBounds,
+  bottomRightBounds,
+  centeredBounds,
+  leftOfBounds,
+} = require("./window-layout.cjs");
+const {
   app,
   BrowserWindow,
   dialog,
@@ -702,6 +710,7 @@ function createDayWindow(date) {
     existing.setTitle(`${date} · Note`);
     sendToWindow(existing, "note:day-date-changed", { date });
     if (existing.isMinimized()) existing.restore();
+    placeWindowAtDefault(existing, "day");
     existing.show();
     existing.focus();
     return existing;
@@ -732,6 +741,7 @@ function createWindow({
   const existing = windows.get(key);
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
+    if (role === "day" || role === "reminder") placeWindowAtDefault(existing, role, parent);
     existing.show();
     existing.focus();
     return existing;
@@ -780,6 +790,11 @@ function createWindow({
 
   target.loadURL(url.toString());
   target.once("ready-to-show", () => {
+    if (role === "reminder" && hiddenToTray) {
+      for (const other of windows.values()) {
+        if (other !== target && !other.isDestroyed()) other.hide();
+      }
+    }
     target.show();
     if (modal || role === "reminder") target.focus();
     if (role === "reminder") target.flashFrame(true);
@@ -834,36 +849,50 @@ function initialWindowBounds(role, sizing, parent = null) {
     ? screen.getDisplayMatching(anchorBounds)
     : screen.getPrimaryDisplay();
   const area = display.workArea;
-  const gap = 14;
 
-  let x = area.x + Math.round((area.width - sizing.width) / 2);
-  let y = area.y + Math.round((area.height - sizing.height) / 2);
-
-  if (parentBounds && role === "content-editor") {
-    x = parentBounds.x + Math.round((parentBounds.width - sizing.width) / 2);
-    y = parentBounds.y + Math.round((parentBounds.height - sizing.height) / 2);
-  } else if (primaryBounds && role !== "day") {
-    if (role === "calendar") {
-      x = primaryBounds.x + Math.round((primaryBounds.width - sizing.width) / 2);
-      y = primaryBounds.y - sizing.height - gap;
-    } else if (role === "create" || role === "settings") {
-      x = primaryBounds.x + primaryBounds.width + gap;
-      y = primaryBounds.y;
-    } else if (role === "detail") {
-      const openDetails = [...windows.values()].filter((target) => (
-        !target.isDestroyed() && target.noteWindowRole === "detail"
-      )).length;
-      x = primaryBounds.x - sizing.width - gap + openDetails * 18;
-      y = primaryBounds.y + openDetails * 18;
-    }
+  if (role === "day" || role === "reminder") {
+    return bottomRightBounds(area, sizing, DEFAULT_EDGE_MARGIN);
   }
 
-  return {
-    x: clamp(x, area.x, area.x + area.width - sizing.width),
-    y: clamp(y, area.y, area.y + area.height - sizing.height),
-    width: sizing.width,
-    height: sizing.height,
-  };
+  if (parentBounds && role === "content-editor") {
+    return centeredBounds(area, sizing, parentBounds);
+  }
+
+  const dayBounds = primaryBounds || bottomRightBounds(area, windowSizing("day"), DEFAULT_EDGE_MARGIN);
+  if (role === "create" || role === "settings" || role === "detail") {
+    const openDetails = role === "detail"
+      ? [...windows.values()].filter((target) => (
+        !target.isDestroyed() && target.noteWindowRole === "detail"
+      )).length
+      : 0;
+    return aboveAnchorBounds(area, sizing, dayBounds, {
+      edgeMargin: DEFAULT_EDGE_MARGIN,
+      gap: DEFAULT_GAP,
+      offset: openDetails * 18,
+    });
+  }
+
+  if (role === "calendar") {
+    const formBounds = aboveAnchorBounds(area, windowSizing("create"), dayBounds, {
+      edgeMargin: DEFAULT_EDGE_MARGIN,
+      gap: DEFAULT_GAP,
+    });
+    return leftOfBounds(area, sizing, formBounds, {
+      gap: DEFAULT_GAP,
+      verticalOffset: 18,
+    });
+  }
+
+  return centeredBounds(area, sizing);
+}
+
+function placeWindowAtDefault(target, role, parent = null) {
+  if (!target || target.isDestroyed() || target.isMaximized()) return;
+  const current = target.getBounds();
+  target.setBounds(initialWindowBounds(role, {
+    width: current.width,
+    height: current.height,
+  }, parent), false);
 }
 
 function clamp(value, minimum, maximum) {
@@ -899,15 +928,10 @@ function fitDayWindow(target, counts) {
   );
   if (height === bounds.height) return;
 
-  target.setBounds({
-    ...bounds,
-    y: clamp(
-      bounds.y,
-      display.workArea.y,
-      display.workArea.y + display.workArea.height - height,
-    ),
+  target.setBounds(bottomRightBounds(display.workArea, {
+    width: bounds.width,
     height,
-  }, false);
+  }, DEFAULT_EDGE_MARGIN), false);
 }
 
 function installTray() {

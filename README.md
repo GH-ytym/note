@@ -16,8 +16,8 @@
 
 | 版本 | 适合场景 | 下载 |
 | --- | --- | --- |
-| 安装版 | 安装到电脑，并创建桌面与开始菜单快捷方式 | [Note Setup 0.2.0.exe](https://github.com/GH-ytym/note/releases/download/v0.2.0/Note%20Setup%200.2.0.exe) |
-| 便携版 | 不安装，下载后直接运行 | [Note 0.2.0.exe](https://github.com/GH-ytym/note/releases/download/v0.2.0/Note%200.2.0.exe) |
+| 安装版 | 安装到电脑，并创建桌面与开始菜单快捷方式 | [Note-Setup-0.2.0.exe](https://github.com/GH-ytym/note/releases/download/v0.2.0/Note-Setup-0.2.0.exe) |
+| 便携版 | 不安装，下载后直接运行 | [Note-0.2.0.exe](https://github.com/GH-ytym/note/releases/download/v0.2.0/Note-0.2.0.exe) |
 
 安装包已经包含界面、Go 后端和 SQLite 支持，使用者不需要另行安装 Go、Node.js、数据库或其他运行环境。
 

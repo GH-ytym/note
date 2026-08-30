@@ -9,7 +9,8 @@ import (
 // Command为交给业务层的任务单
 
 type CreateCommand struct {
-	Content    string
+	Title      string
+	Content    *string
 	Color      string
 	StartsAt   *time.Time
 	RepeatMode model.RepeatMode
@@ -31,6 +32,7 @@ type Page struct {
 }
 
 type PatchCommand struct {
+	Title      *string
 	Content    *string
 	Color      *string
 	StartsAt   *time.Time
@@ -44,6 +46,7 @@ type PatchCommand struct {
 
 type CalendarOccurrence struct {
 	TodoID     uint             `json:"todo_id"`
+	Title      string           `json:"title"`
 	Content    string           `json:"content"`
 	Color      string           `json:"color"`
 	StartsAt   time.Time        `json:"starts_at"`

@@ -10,7 +10,8 @@ import (
 
 // DTO of Creating a Todo
 type CreateTodoRequest struct {
-	Content    string           `json:"content" binding:"required,max=500"`
+	Title      string           `json:"title" binding:"required,max=50"`
+	Content    *string          `json:"content" binding:"omitempty,max=500"`
 	Color      string           `json:"color" binding:"omitempty,len=7"`
 	StartsAt   *time.Time       `json:"starts_at" binding:"required"`
 	RepeatMode model.RepeatMode `json:"repeat_mode" binding:"required,oneof=once daily weekdays weekends weekly monthly custom"`
@@ -28,6 +29,7 @@ type ListTodosQuery struct {
 
 // DTO of patch
 type PatchTodoRequest struct {
+	Title      *string           `json:"title" binding:"omitempty,max=50"`
 	Content    *string           `json:"content" binding:"omitempty,max=500"`
 	Color      *string           `json:"color" binding:"omitempty,len=7"`
 	StartsAt   *time.Time        `json:"starts_at"`

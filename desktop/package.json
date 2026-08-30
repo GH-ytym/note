@@ -26,6 +26,7 @@
       "main.cjs",
       "preload.cjs",
       "reminder-scheduler.cjs",
+      "build/window-icon.png",
       "package.json"
     ],
     "extraResources": [
@@ -39,6 +40,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.svg",
       "target": [
         {
           "target": "nsis",

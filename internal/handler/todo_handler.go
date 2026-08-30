@@ -27,6 +27,7 @@ func (h *Handler) CreateTodo(c *gin.Context) {
 
 	// 组装command
 	command := todoapp.CreateCommand{
+		Title:       req.Title,
 		Content:     req.Content,
 		Color:       req.Color,
 		StartsAt:    req.StartsAt,
@@ -39,7 +40,8 @@ func (h *Handler) CreateTodo(c *gin.Context) {
 		c.Request.Context(),
 		command,
 	)
-	if errors.Is(err, todoapp.ErrInvalidContent) ||
+	if errors.Is(err, todoapp.ErrTitleRequired) ||
+		errors.Is(err, todoapp.ErrInvalidContent) ||
 		errors.Is(err, todoapp.ErrInvalidColor) ||
 		errors.Is(err, todoapp.ErrInvalidRepeatMode) ||
 		errors.Is(err, todoapp.ErrInvalidNotifyMode) ||
@@ -49,8 +51,8 @@ func (h *Handler) CreateTodo(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if errors.Is(err, todoapp.ErrContentConflict) {
-		c.JSON(http.StatusConflict, gin.H{"error": "content already exists"})
+	if errors.Is(err, todoapp.ErrTitleConflict) {
+		c.JSON(http.StatusConflict, gin.H{"error": "title already exists"})
 		return
 	}
 	if err != nil {
@@ -130,6 +132,7 @@ func (h *Handler) PatchTodo(c *gin.Context) {
 		return
 	}
 	command := todoapp.PatchCommand{
+		Title:      req.Title,
 		Content:    req.Content,
 		Color:      req.Color,
 		StartsAt:   req.StartsAt,
@@ -149,7 +152,8 @@ func (h *Handler) PatchTodo(c *gin.Context) {
 	}
 	item, err := h.todoService.Patch(c.Request.Context(), id, command)
 
-	if errors.Is(err, todoapp.ErrInvalidContent) ||
+	if errors.Is(err, todoapp.ErrTitleRequired) ||
+		errors.Is(err, todoapp.ErrInvalidContent) ||
 		errors.Is(err, todoapp.ErrInvalidColor) ||
 		errors.Is(err, todoapp.ErrNothingToUpdate) ||
 		errors.Is(err, todoapp.ErrInvalidVersion) ||
@@ -163,8 +167,8 @@ func (h *Handler) PatchTodo(c *gin.Context) {
 		})
 		return
 	}
-	if errors.Is(err, todoapp.ErrContentConflict) {
-		c.JSON(http.StatusConflict, gin.H{"error": "content already exists"})
+	if errors.Is(err, todoapp.ErrTitleConflict) {
+		c.JSON(http.StatusConflict, gin.H{"error": "title already exists"})
 		return
 	}
 	if errors.Is(err, todoapp.ErrNotFound) {

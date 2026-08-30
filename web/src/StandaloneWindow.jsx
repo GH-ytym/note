@@ -202,6 +202,7 @@ function LinkedDateField({ repeat, date, customDates, color, active, onOpen, onN
 function CreateWindow() {
   const initialDate = validDate(params.get("date"));
   const [form, setForm] = useState({
+    title: "",
     content: "",
     repeat: "仅一次",
     date: initialDate,
@@ -237,9 +238,10 @@ function CreateWindow() {
 
   async function submit(event) {
     event.preventDefault();
+    const title = form.title.trim();
     const content = form.content.trim();
-    if (!content) {
-      setError("请输入内容");
+    if (!title) {
+      setError("请输入标题");
       return;
     }
     if (!form.date || !form.time) {
@@ -254,6 +256,7 @@ function CreateWindow() {
     const dates = [...customDates].sort();
     const startsOn = form.repeat === "自定义" ? dates[0] : form.date;
     const payload = {
+      title,
       content,
       starts_at: dateTimeAt(startsOn, form.time),
       repeat_mode: REPEAT_VALUES[form.repeat],
@@ -279,12 +282,22 @@ function CreateWindow() {
     <WindowFrame title="新日程" className="is-form-window">
       <form className="side-form utility-form" onSubmit={submit}>
         <label>
+          <span>标题</span>
+          <input
+            value={form.title}
+            maxLength={50}
+            required
+            autoFocus
+            onChange={(event) => setField("title", event.target.value)}
+          />
+        </label>
+
+        <label>
           <span>内容</span>
           <textarea
             value={form.content}
             rows={5}
             maxLength={500}
-            autoFocus
             onChange={(event) => setField("content", event.target.value)}
           />
         </label>
@@ -364,7 +377,8 @@ function DetailWindow() {
     };
     setRecord(nextRecord);
     setForm({
-      content: todo.content,
+      title: todo.title,
+      content: todo.content ?? todo.title,
       repeat: REPEAT_LABELS[todo.repeat_mode] || todo.repeat_mode,
       date: startsAt.date,
       time: startsAt.time,
@@ -500,9 +514,10 @@ function DetailWindow() {
 
   async function submit(event) {
     event.preventDefault();
+    const title = form.title.trim();
     const content = form.content.trim();
-    if (!content) {
-      setError("请输入内容");
+    if (!title) {
+      setError("请输入标题");
       return;
     }
     if (form.repeat === "自定义" && customDates.length === 0) {
@@ -512,6 +527,7 @@ function DetailWindow() {
 
     const startsOn = form.repeat === "自定义" ? [...customDates].sort()[0] : form.date;
     const payload = {
+      title,
       content,
       color: form.color,
       starts_at: dateTimeAt(startsOn, form.time),
@@ -587,10 +603,15 @@ function DetailWindow() {
           </label>
         </div>
 
+        <label>
+          <span>标题</span>
+          <input value={form.title} maxLength={50} required autoFocus onChange={(event) => setField("title", event.target.value)} />
+        </label>
+
         <div className="content-editor-field">
           <label htmlFor="detail-content">内容</label>
           <div className="content-editor-field-shell">
-            <textarea id="detail-content" value={form.content} rows={5} maxLength={500} autoFocus onChange={(event) => setField("content", event.target.value)} />
+            <textarea id="detail-content" value={form.content} rows={5} maxLength={500} onChange={(event) => setField("content", event.target.value)} />
             <button
               className="content-editor-expand-button"
               type="button"
@@ -637,7 +658,7 @@ function DetailWindow() {
 
 function SettingsWindow() {
   return (
-    <WindowFrame title="外观设置" subtitle="按自己的工作环境调整 Note" className="is-settings-window">
+    <WindowFrame title="外观设置" className="is-settings-window">
       <AppearanceSettingsForm onDone={closeCurrentWindow} />
     </WindowFrame>
   );
@@ -679,10 +700,6 @@ function ContentEditorWindow() {
   async function saveAndReturn(event) {
     event.preventDefault();
     const nextContent = content.trim();
-    if (!nextContent) {
-      setError("内容不能为空");
-      return;
-    }
     if (!editorState) return;
 
     setSaving(true);
@@ -714,7 +731,7 @@ function ContentEditorWindow() {
   if (!editorState) return <LoadingWindow title="专注编辑" message={error || "编辑会话已经结束"} />;
 
   return (
-    <WindowFrame title="专注编辑" subtitle="Ctrl + Enter 保存并返回" className="is-content-editor-window">
+    <WindowFrame title="专注编辑" className="is-content-editor-window">
       <form className="focused-editor-form" onSubmit={saveAndReturn}>
         <label htmlFor="focused-content">日程内容</label>
         <textarea
@@ -762,6 +779,7 @@ function ReminderWindow() {
       && !Number.isNaN(Date.parse(fallbackOccursAt))
       ? {
           todoId: fallbackTodoID,
+          title: params.get("title") || params.get("content") || "日程到点了",
           content: params.get("content") || "日程到点了",
           color: params.get("color") || "#F3B51B",
           occursAt: fallbackOccursAt,
@@ -829,7 +847,7 @@ function ReminderWindow() {
           </span>
           <div>
             <time className="reminder-time" dateTime={reminder.occursAt}>{occursAt.time}</time>
-            <p>{reminder.content}</p>
+            <p>{reminder.title || reminder.content}</p>
           </div>
         </div>
 
@@ -898,7 +916,7 @@ function DayWindow() {
   async function saveItem(item, changes) {
     const latest = events.find((eventItem) => eventItem.todoId === item.todoId) || item;
     const payload = { version: latest.version };
-    if (changes.content !== undefined) payload.content = changes.content;
+    if (changes.title !== undefined) payload.title = changes.title;
     if (changes.time !== undefined) payload.starts_at = dateTimeAt(latest.startDate, changes.time);
     await patchTodo(item.todoId, payload);
     await load();

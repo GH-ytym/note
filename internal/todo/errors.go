@@ -4,7 +4,7 @@ import "errors"
 
 var (
 	ErrNotFound              = errors.New("todo not found")
-	ErrContentConflict       = errors.New("todo content already exists")
+	ErrTitleConflict         = errors.New("todo title already exists")
 	ErrConcurrentUpdate      = errors.New("todo was modified concurrently")
 	ErrInvalidContent        = errors.New("invalid todo content")
 	ErrInvalidColor          = errors.New("invalid todo color")
@@ -17,4 +17,5 @@ var (
 	ErrInvalidCalendarRange  = errors.New("invalid calendar range")
 	ErrCustomDatesRequired   = errors.New("custom dates required")
 	ErrCustomDatesNotAllowed = errors.New("custom dates not allowed")
+	ErrTitleRequired         = errors.New("title is required")
 )

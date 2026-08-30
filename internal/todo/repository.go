@@ -120,7 +120,7 @@ func NewGORMRepository(db *gorm.DB) Repository {
 func (r *gormRepository) Create(ctx context.Context, item *model.Todo) error {
 	err := r.db.WithContext(ctx).Create(item).Error
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
-		return ErrContentConflict
+		return ErrTitleConflict
 	}
 	if err != nil {
 		return fmt.Errorf("create todo: %w", err)
@@ -179,7 +179,9 @@ func (r *gormRepository) Patch(
 		//乐观锁
 		"version": gorm.Expr("version + 1"),
 	}
-
+	if command.Title != nil {
+		updates["title"] = *command.Title
+	}
 	if command.Content != nil {
 		updates["content"] = *command.Content
 	}
@@ -207,7 +209,7 @@ func (r *gormRepository) Patch(
 	err := db.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&model.Todo{}).Where("id=? AND version=?", id, command.Version).Updates(updates)
 		if errors.Is(res.Error, gorm.ErrDuplicatedKey) {
-			return ErrContentConflict
+			return ErrTitleConflict
 		}
 		if res.Error != nil {
 			return fmt.Errorf(

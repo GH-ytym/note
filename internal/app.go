@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"note/internal/handler"
-	"note/internal/model"
 	"note/internal/retry"
 	"note/internal/router"
 	"note/internal/todo"
@@ -70,12 +69,8 @@ func Run() (runErr error) {
 		return fmt.Errorf("ping database: %w", err)
 	}
 
-	//同步表结构
-	if err := db.AutoMigrate(
-		&model.Todo{},
-		&model.TodoDate{},
-		&model.TodoCompletion{},
-	); err != nil {
+	// 先回填旧数据和索引，再同步最终表结构。
+	if err := migrateDatabase(db); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
 	}
 	log.Printf("SQLite database: %s", databasePath)

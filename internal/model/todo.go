@@ -16,7 +16,8 @@ const (
 
 type Todo struct {
 	ID         uint       `gorm:"primaryKey" json:"id"`
-	Content    string     `gorm:"size:500;not null;uniqueIndex" json:"content"`
+	Title      string     `gorm:"size:50;not null;default:'';uniqueIndex" json:"title"`
+	Content    *string    `gorm:"size:500;not null" json:"content"`
 	Color      string     `gorm:"size:7;not null;default:#F3B51B" json:"color"`
 	StartsAt   *time.Time `gorm:"not null" json:"starts_at"`
 	RepeatMode RepeatMode `gorm:"size:20;not null;default:once" json:"repeat_mode"`

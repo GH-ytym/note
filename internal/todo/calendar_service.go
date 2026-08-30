@@ -46,7 +46,10 @@ func (s *service) CalendarOccurrences(
 		if item.StartsAt == nil {
 			continue
 		}
-
+		content := item.Title
+		if item.Content != nil {
+			content = *item.Content
+		}
 		// 数据库存储的时间可能带有不同的时区偏移。
 		// 周期计算统一使用日历查询所在的本地时区。
 		startsAt := item.StartsAt.In(from.Location())
@@ -55,7 +58,8 @@ func (s *service) CalendarOccurrences(
 		if item.RepeatMode == model.RepeatOnce {
 			occurrences = append(occurrences, CalendarOccurrence{
 				TodoID:     item.ID,
-				Content:    item.Content,
+				Title:      item.Title,
+				Content:    content,
 				Color:      item.Color,
 				StartsAt:   startsAt,
 				OccursAt:   startsAt,
@@ -86,7 +90,8 @@ func (s *service) CalendarOccurrences(
 				}
 				occurrences = append(occurrences, CalendarOccurrence{
 					TodoID:     item.ID,
-					Content:    item.Content,
+					Title:      item.Title,
+					Content:    content,
 					Color:      item.Color,
 					StartsAt:   startsAt,
 					OccursAt:   occursAt,
@@ -136,7 +141,8 @@ func (s *service) CalendarOccurrences(
 
 			occurrences = append(occurrences, CalendarOccurrence{
 				TodoID:     item.ID,
-				Content:    item.Content,
+				Title:      item.Title,
+				Content:    content,
 				Color:      item.Color,
 				StartsAt:   startsAt,
 				OccursAt:   occursAt,

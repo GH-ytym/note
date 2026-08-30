@@ -159,53 +159,92 @@ export function useAppearance() {
 
 export function AppearanceSettingsForm({ onDone }) {
   const { settings, updateAppearance } = useAppearance();
+  const backgroundInputRef = useRef(null);
+  const themeInputRef = useRef(null);
+  const [backgroundDraft, setBackgroundDraft] = useState(settings.backgroundColor);
+  const [themeDraft, setThemeDraft] = useState(settings.themeColor);
   const isDefault = settings.backgroundColor === DEFAULT_APPEARANCE.backgroundColor
     && settings.themeColor === DEFAULT_APPEARANCE.themeColor
     && settings.opacity === DEFAULT_APPEARANCE.opacity;
 
+  useEffect(() => {
+    setBackgroundDraft(settings.backgroundColor);
+  }, [settings.backgroundColor]);
+
+  useEffect(() => {
+    setThemeDraft(settings.themeColor);
+  }, [settings.themeColor]);
+
+  useEffect(() => {
+    const backgroundInput = backgroundInputRef.current;
+    const themeInput = themeInputRef.current;
+
+    const commitBackground = (event) => {
+      updateAppearance({ backgroundColor: event.currentTarget.value });
+    };
+    const commitTheme = (event) => {
+      updateAppearance({ themeColor: event.currentTarget.value });
+    };
+
+    backgroundInput?.addEventListener("change", commitBackground);
+    themeInput?.addEventListener("change", commitTheme);
+    return () => {
+      backgroundInput?.removeEventListener("change", commitBackground);
+      themeInput?.removeEventListener("change", commitTheme);
+    };
+  }, [updateAppearance]);
+
+  const finish = () => {
+    updateAppearance({ backgroundColor: backgroundDraft, themeColor: themeDraft });
+    onDone?.();
+  };
+
+  const reset = () => {
+    setBackgroundDraft(DEFAULT_APPEARANCE.backgroundColor);
+    setThemeDraft(DEFAULT_APPEARANCE.themeColor);
+    updateAppearance(DEFAULT_APPEARANCE);
+  };
+
   return (
     <div className="appearance-settings-form">
-      <p className="appearance-settings-intro">
-        调整会立即应用到所有 Note 窗口，并自动保存在本机。
-      </p>
-
       <div className="appearance-setting-list">
         <label className="appearance-color-setting" htmlFor="appearance-background-color">
           <span>
             <strong>背景颜色</strong>
-            <small>窗口与内容区域的底色</small>
           </span>
           <span className="appearance-color-control">
             <input
+              ref={backgroundInputRef}
               id="appearance-background-color"
               type="color"
-              value={settings.backgroundColor}
-              onChange={(event) => updateAppearance({ backgroundColor: event.target.value })}
+              value={backgroundDraft}
+              onInput={(event) => setBackgroundDraft(event.currentTarget.value)}
+              onChange={() => {}}
             />
-            <output htmlFor="appearance-background-color">{settings.backgroundColor}</output>
+            <output htmlFor="appearance-background-color">{backgroundDraft}</output>
           </span>
         </label>
 
         <label className="appearance-color-setting" htmlFor="appearance-theme-color">
           <span>
             <strong>主题颜色</strong>
-            <small>按钮、焦点与强调元素</small>
           </span>
           <span className="appearance-color-control">
             <input
+              ref={themeInputRef}
               id="appearance-theme-color"
               type="color"
-              value={settings.themeColor}
-              onChange={(event) => updateAppearance({ themeColor: event.target.value })}
+              value={themeDraft}
+              onInput={(event) => setThemeDraft(event.currentTarget.value)}
+              onChange={() => {}}
             />
-            <output htmlFor="appearance-theme-color">{settings.themeColor}</output>
+            <output htmlFor="appearance-theme-color">{themeDraft}</output>
           </span>
         </label>
 
         <label className="appearance-opacity-setting" htmlFor="appearance-opacity">
           <span>
             <strong>不透明度</strong>
-            <small>降低后可透出桌面背景，最低 20%</small>
           </span>
           <output htmlFor="appearance-opacity">{settings.opacity}%</output>
           <input
@@ -226,12 +265,12 @@ export function AppearanceSettingsForm({ onDone }) {
           className="appearance-reset-button"
           type="button"
           disabled={isDefault}
-          onClick={() => updateAppearance(DEFAULT_APPEARANCE)}
+          onClick={reset}
         >
           <ArrowCounterClockwise size={17} aria-hidden="true" />
           恢复默认
         </button>
-        <button className="appearance-done-button" type="button" onClick={onDone}>
+        <button className="appearance-done-button" type="button" onClick={finish}>
           <CheckCircle size={18} weight="fill" aria-hidden="true" />
           完成
         </button>

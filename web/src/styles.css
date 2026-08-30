@@ -1,6 +1,6 @@
 :root {
   color: #f2f4ef;
-  background: #000000;
+  background: var(--page);
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -157,7 +157,7 @@ textarea:focus-visible {
   align-items: center;
   gap: 6px;
   padding: 0 18px;
-  color: #7d837d;
+  color: var(--muted);
   opacity: 0.46;
   overflow: hidden;
   font-size: 10px;
@@ -188,7 +188,7 @@ textarea:focus-visible {
 }
 
 .peek-days i {
-  color: #5f655f;
+  color: var(--dim);
   font-size: 10px;
   font-style: normal;
   text-align: center;
@@ -201,7 +201,7 @@ textarea:focus-visible {
   min-height: 0;
   grid-template-rows: 54px 30px minmax(0, 1fr) 0;
   overflow: visible;
-  border: 1px solid rgb(255 255 255 / 7%);
+  border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
   box-shadow: 0 18px 64px rgb(0 0 0 / 34%);
@@ -250,7 +250,7 @@ textarea:focus-visible {
 }
 
 .month-controls button:hover {
-  color: color-mix(in srgb, var(--yellow) 82%, white);
+  color: color-mix(in srgb, var(--yellow) 82%, var(--text));
   background: rgb(var(--theme-rgb) / 10%);
 }
 
@@ -274,7 +274,7 @@ textarea:focus-visible {
   padding: 0 5px 0 10px;
   border: 1px solid color-mix(in srgb, var(--selection-color) 34%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--selection-soft) 72%, #0d100f);
+  background: color-mix(in srgb, var(--selection-soft) 72%, var(--panel));
 }
 
 .desktop-picker-dot {
@@ -299,13 +299,13 @@ textarea:focus-visible {
 }
 
 .desktop-picker-status strong {
-  color: #e7eae5;
+  color: var(--text);
   font-size: 10px;
   font-weight: 670;
 }
 
 .desktop-picker-status small {
-  color: color-mix(in srgb, var(--selection-color) 74%, #8b918b);
+  color: color-mix(in srgb, var(--selection-color) 74%, var(--muted));
   font-size: 8px;
   font-variant-numeric: tabular-nums;
 }
@@ -351,7 +351,7 @@ textarea:focus-visible {
   height: 44px;
   place-items: center;
   border-radius: 7px;
-  color: #929992;
+  color: var(--muted);
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease;
 }
@@ -359,8 +359,8 @@ textarea:focus-visible {
 .window-controls > button:hover,
 .window-controls > button:focus-visible {
   outline: 0;
-  color: #f0f3ee;
-  background: rgb(255 255 255 / 7%);
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .window-controls > button.is-close:hover,
@@ -392,13 +392,13 @@ textarea:focus-visible {
   display: grid;
   place-items: center;
   border-right: 1px solid var(--line);
-  color: #9ca29c;
+  color: var(--muted);
   font-size: 10px;
   font-weight: 620;
 }
 
 .weekday-row > div:nth-last-child(-n + 2) {
-  color: #737a73;
+  color: var(--dim);
 }
 
 .weekday-row > div:last-child {
@@ -464,7 +464,7 @@ textarea:focus-visible {
 }
 
 .day-cell.is-adjacent {
-  background: #0a0d0c;
+  background: var(--cell-disabled);
 }
 
 .date-button {
@@ -472,6 +472,7 @@ textarea:focus-visible {
   width: 43px;
   min-width: 43px;
   min-height: 48px;
+  overflow: hidden;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
@@ -491,7 +492,7 @@ textarea:focus-visible {
 }
 
 .date-mark strong {
-  color: #dce0da;
+  color: var(--text);
   font-size: clamp(14px, 1.18vw, 18px);
   font-weight: 570;
   font-variant-numeric: tabular-nums;
@@ -507,9 +508,13 @@ textarea:focus-visible {
 
 .date-note {
   display: block;
-  width: 43px;
+  width: 100%;
+  max-width: 43px;
+  min-width: 0;
+  padding-inline: 1px;
   overflow: hidden;
-  color: #70766f;
+  box-sizing: border-box;
+  color: var(--muted);
   font-size: 8px;
   line-height: 1.2;
   text-align: center;
@@ -518,11 +523,11 @@ textarea:focus-visible {
 }
 
 .is-adjacent .date-note {
-  color: #444a45;
+  color: var(--dim);
 }
 
 .is-today .date-note {
-  color: #a98631;
+  color: color-mix(in srgb, var(--yellow) 74%, var(--muted));
 }
 
 .day-events {
@@ -594,13 +599,13 @@ textarea:focus-visible {
 }
 
 .event-more {
-  color: #7f867f;
+  color: var(--muted);
 }
 
 .event-more:hover,
 .event-more[aria-expanded="true"] {
   color: var(--text);
-  background: #171b18;
+  background: var(--cell-hover);
 }
 
 .event-preview {
@@ -616,8 +621,8 @@ textarea:focus-visible {
   border: 1px solid var(--event-color);
   border-radius: 6px;
   opacity: 0;
-  color: #edf0eb;
-  background: #111512;
+  color: var(--text);
+  background: var(--panel);
   box-shadow: 0 12px 26px rgb(0 0 0 / 48%);
   font-size: 10px;
   line-height: 1.35;
@@ -685,9 +690,9 @@ textarea:focus-visible {
   gap: 2px;
   padding: 7px;
   overflow-y: auto;
-  border: 1px solid rgb(255 255 255 / 13%);
+  border: 1px solid var(--line);
   border-radius: 7px;
-  background: #111512;
+  background: var(--panel);
   box-shadow: 0 16px 34px rgb(0 0 0 / 52%);
 }
 
@@ -787,7 +792,7 @@ textarea:focus-visible {
   min-height: 0;
   grid-template-rows: 46px minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 8%);
+  border: 1px solid var(--line);
   border-radius: 12px;
   background:
     linear-gradient(110deg, rgb(var(--theme-rgb) / 4%), transparent 34%),
@@ -828,7 +833,7 @@ textarea:focus-visible {
 
 .day-agenda-panel-title strong {
   overflow: hidden;
-  color: #e8ebe6;
+  color: var(--text);
   font-size: 13px;
   font-weight: 660;
   text-overflow: ellipsis;
@@ -838,7 +843,7 @@ textarea:focus-visible {
 .day-agenda-panel-title small {
   flex: none;
   margin-left: 3px;
-  color: #747b74;
+  color: var(--muted);
   font-size: 10px;
 }
 
@@ -858,7 +863,7 @@ textarea:focus-visible {
 .day-agenda-inline-add:hover,
 .day-agenda-inline-add:focus-visible {
   outline: 0;
-  color: color-mix(in srgb, var(--yellow) 82%, white);
+  color: color-mix(in srgb, var(--yellow) 82%, var(--text));
   background: rgb(var(--theme-rgb) / 8%);
 }
 
@@ -869,7 +874,7 @@ textarea:focus-visible {
   flex: none;
   place-items: center;
   border-radius: 7px;
-  color: #8d938d;
+  color: var(--muted);
   cursor: pointer;
   transition: color 150ms ease, background-color 150ms ease;
 }
@@ -897,18 +902,18 @@ textarea:focus-visible {
   flex: none;
   place-items: center;
   border-radius: 50%;
-  color: #8d938d;
+  color: var(--muted);
   cursor: pointer;
   transition: color 150ms ease, background-color 150ms ease;
 }
 
 .day-agenda-header-actions > button:hover {
-  color: #e8ebe6;
-  background: rgb(255 255 255 / 6%);
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .day-agenda-header-actions > .day-agenda-settings {
-  color: #7f867f;
+  color: var(--muted);
 }
 
 .day-agenda-header-actions > .day-agenda-settings:hover,
@@ -944,20 +949,20 @@ textarea:focus-visible {
   align-items: center;
   gap: 6px;
   padding: 0 5px;
-  color: #a8aea8;
+  color: var(--muted);
   font-size: 10px;
   font-weight: 640;
   letter-spacing: 0.04em;
 }
 
 .agenda-section-heading small {
-  color: #626962;
+  color: var(--dim);
   font-size: 9px;
   font-variant-numeric: tabular-nums;
 }
 
 .agenda-section.is-complete .agenda-section-heading {
-  color: #777e77;
+  color: var(--dim);
 }
 
 .agenda-section-items {
@@ -976,7 +981,7 @@ textarea:focus-visible {
   width: min(180px, 28%);
   height: 1px;
   border-radius: 999px;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 8%), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 8%, transparent), transparent);
 }
 
 .agenda-item {
@@ -1068,26 +1073,26 @@ textarea:focus-visible {
   animation: agenda-check-pop 220ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both;
 }
 
-.agenda-content {
+.agenda-title {
   min-width: 0;
   height: 32px;
   padding: 0 7px;
   border: 1px solid transparent;
   border-radius: 6px;
   outline: 0;
-  color: #e7eae5;
+  color: var(--text);
   background: transparent;
   font-size: 12px;
 }
 
-.agenda-content:hover,
-.agenda-content:focus {
-  border-color: color-mix(in srgb, var(--agenda-color) 58%, rgb(255 255 255 / 10%));
-  background: color-mix(in srgb, var(--agenda-soft) 34%, #171a18);
+.agenda-title:hover,
+.agenda-title:focus {
+  border-color: color-mix(in srgb, var(--agenda-color) 58%, var(--line));
+  background: color-mix(in srgb, var(--agenda-soft) 34%, var(--cell-hover));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--agenda-color) 10%, transparent);
 }
 
-.agenda-content:focus-visible {
+.agenda-title:focus-visible {
   outline: 0;
 }
 
@@ -1101,8 +1106,8 @@ textarea:focus-visible {
 .agenda-item .time-trigger:hover,
 .agenda-item .time-trigger:focus-visible,
 .agenda-item .time-trigger[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--agenda-color) 58%, rgb(255 255 255 / 10%));
-  background: color-mix(in srgb, var(--agenda-soft) 34%, #171a18);
+  border-color: color-mix(in srgb, var(--agenda-color) 58%, var(--line));
+  background: color-mix(in srgb, var(--agenda-soft) 34%, var(--cell-hover));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--agenda-color) 10%, transparent);
 }
 
@@ -1198,8 +1203,8 @@ textarea:focus-visible {
   padding: 8px 11px;
   border: 1px solid rgb(var(--theme-rgb) / 30%);
   border-radius: 6px;
-  color: #f5d574;
-  background: #151814;
+  color: var(--yellow);
+  background: var(--cell-hover);
   box-shadow: 0 10px 24px rgb(0 0 0 / 40%);
   font-size: 11px;
 }
@@ -1246,7 +1251,7 @@ textarea:focus-visible {
 }
 
 .editor-panel {
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid var(--line);
   box-shadow: 0 16px 44px rgb(0 0 0 / 38%);
   animation: editor-panel-in 190ms ease-out;
   transition: opacity 180ms ease, filter 180ms ease;
@@ -1302,7 +1307,7 @@ textarea:focus-visible {
   display: block;
   margin-top: 3px;
   overflow: hidden;
-  color: #737a73;
+  color: var(--muted);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1314,13 +1319,13 @@ textarea:focus-visible {
   height: 44px;
   place-items: center;
   border-radius: 50%;
-  color: #aeb3ad;
+  color: var(--muted);
   cursor: pointer;
 }
 
 .side-header > button:hover {
   color: var(--text);
-  background: #191d1a;
+  background: var(--cell-hover);
 }
 
 .side-form {
@@ -1342,7 +1347,7 @@ textarea:focus-visible {
 .side-form label > span,
 .field-label,
 .content-editor-field > label {
-  color: #9da29c;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 620;
 }
@@ -1365,7 +1370,7 @@ textarea:focus-visible {
   height: 44px;
   place-items: center;
   border-radius: 7px;
-  color: #8d948d;
+  color: var(--muted);
   background: transparent;
   cursor: pointer;
   transition: color 160ms ease, transform 160ms ease;
@@ -1384,10 +1389,10 @@ textarea:focus-visible {
 .color-trigger,
 .select-trigger {
   width: 100%;
-  border: 1px solid rgb(255 255 255 / 12%);
+  border: 1px solid var(--line);
   border-radius: 7px;
-  color: #edf0eb;
-  background: #171a18;
+  color: var(--text);
+  background: var(--cell-hover);
   font-size: 13px;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
@@ -1398,21 +1403,20 @@ textarea:focus-visible {
 .select-trigger {
   height: 44px;
   padding: 0 11px;
-  color-scheme: dark;
 }
 
 .side-form select {
   appearance: none;
   padding-right: 36px;
-  background-color: #171a18;
+  background-color: var(--cell-hover);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23F3B51B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 11px center;
 }
 
 .side-form select option {
-  color: #edf0eb;
-  background: #171a18;
+  color: var(--text);
+  background: var(--cell-hover);
 }
 
 .side-form select option:checked {
@@ -1476,7 +1480,7 @@ textarea:focus-visible {
   padding: 5px;
   border: 1px solid rgb(var(--theme-rgb) / 34%);
   border-radius: 8px;
-  background: #111512;
+  background: var(--panel);
   box-shadow: 0 16px 34px rgb(0 0 0 / 48%);
 }
 
@@ -1487,7 +1491,7 @@ textarea:focus-visible {
   justify-content: space-between;
   padding: 0 10px;
   border-radius: 6px;
-  color: #d9ddd7;
+  color: var(--text);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
@@ -1496,7 +1500,7 @@ textarea:focus-visible {
 .select-menu button:hover,
 .select-menu button:focus-visible {
   outline: 0;
-  color: color-mix(in srgb, var(--yellow) 78%, white);
+  color: color-mix(in srgb, var(--yellow) 78%, var(--text));
   background: rgb(var(--theme-rgb) / 10%);
 }
 
@@ -1524,11 +1528,11 @@ textarea:focus-visible {
   align-items: center;
   gap: 8px;
   padding: 0 11px;
-  border: 1px solid rgb(255 255 255 / 12%);
+  border: 1px solid var(--line);
   border-radius: 7px;
   outline: 0;
-  color: #edf0eb;
-  background: #171a18;
+  color: var(--text);
+  background: var(--cell-hover);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   text-align: left;
@@ -1537,7 +1541,7 @@ textarea:focus-visible {
 }
 
 .time-trigger > svg {
-  color: #858c85;
+  color: var(--muted);
 }
 
 .time-trigger > svg:last-child {
@@ -1561,10 +1565,11 @@ textarea:focus-visible {
   right: 0;
   z-index: 220;
   width: 210px;
+  overscroll-behavior: contain;
   padding: 10px;
   border: 1px solid rgb(var(--theme-rgb) / 34%);
   border-radius: 9px;
-  background: #111512;
+  background: var(--panel);
   box-shadow: 0 16px 34px rgb(0 0 0 / 48%);
 }
 
@@ -1579,7 +1584,7 @@ textarea:focus-visible {
   grid-template-rows: 28px 38px 14px 28px;
   place-items: center;
   border-radius: 7px;
-  background: rgb(255 255 255 / 2.5%);
+  background: color-mix(in srgb, var(--text) 2.5%, transparent);
 }
 
 .time-unit > button {
@@ -1588,7 +1593,7 @@ textarea:focus-visible {
   height: 28px;
   place-items: center;
   border-radius: 6px;
-  color: #929992;
+  color: var(--muted);
   cursor: pointer;
 }
 
@@ -1600,14 +1605,14 @@ textarea:focus-visible {
 }
 
 .time-unit output {
-  color: #f1f3ef;
+  color: var(--text);
   font-size: 23px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 
 .time-unit small {
-  color: #6f766f;
+  color: var(--muted);
   font-size: 9px;
 }
 
@@ -1671,7 +1676,7 @@ textarea:focus-visible {
 }
 
 .completion-toggle span {
-  color: #dfe3dd;
+  color: var(--text);
   font-size: 12px;
 }
 
@@ -1682,7 +1687,7 @@ textarea:focus-visible {
 
 .completion-toggle.is-active {
   border-color: color-mix(in srgb, var(--detail-color) 68%, transparent);
-  background: color-mix(in srgb, var(--detail-color) 20%, #111512);
+  background: color-mix(in srgb, var(--detail-color) 20%, var(--cell));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--detail-color) 8%, transparent);
 }
 
@@ -1709,7 +1714,7 @@ textarea:focus-visible {
 }
 
 .start-date-value > span {
-  color: #9da29c;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 620;
 }
@@ -1721,7 +1726,7 @@ textarea:focus-visible {
   padding: 0 11px;
   border: 1px solid rgb(var(--theme-rgb) / 28%);
   border-radius: 7px;
-  color: #f4cd64;
+  color: var(--yellow);
   background: rgb(var(--theme-rgb) / 6%);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -1735,7 +1740,7 @@ textarea:focus-visible {
 }
 
 .linked-date-field > span {
-  color: #9da29c;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 620;
 }
@@ -1751,8 +1756,8 @@ textarea:focus-visible {
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--linked-date-color) 32%, transparent);
   border-radius: 7px;
-  color: #daddd8;
-  background: color-mix(in srgb, var(--linked-date-color) 6%, #151916);
+  color: var(--text);
+  background: color-mix(in srgb, var(--linked-date-color) 6%, var(--cell));
   text-align: left;
   cursor: pointer;
 }
@@ -1761,7 +1766,7 @@ textarea:focus-visible {
 .linked-date-field > button:focus-visible {
   outline: 0;
   border-color: color-mix(in srgb, var(--linked-date-color) 65%, transparent);
-  background: color-mix(in srgb, var(--linked-date-color) 10%, #151916);
+  background: color-mix(in srgb, var(--linked-date-color) 10%, var(--cell-hover));
 }
 
 .linked-date-field > button > svg:first-child {
@@ -1769,13 +1774,13 @@ textarea:focus-visible {
 }
 
 .linked-date-field > button > svg:last-child {
-  color: #6f766f;
+  color: var(--muted);
 }
 
 .linked-date-field strong {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--linked-date-color) 78%, white);
+  color: color-mix(in srgb, var(--linked-date-color) 78%, var(--text));
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -1783,7 +1788,7 @@ textarea:focus-visible {
 }
 
 .linked-date-field small {
-  color: #737a73;
+  color: var(--muted);
   font-size: 8px;
   white-space: nowrap;
 }
@@ -1797,7 +1802,7 @@ textarea:focus-visible {
   min-height: 44px;
   padding: 11px 12px;
   border-left: 2px solid var(--yellow);
-  color: #b7bcb6;
+  color: var(--text);
   background: rgb(var(--theme-rgb) / 6%);
   font-size: 11px;
 }
@@ -1814,7 +1819,7 @@ textarea:focus-visible {
 }
 
 .custom-pick-status small {
-  color: #8d938d;
+  color: var(--muted);
   font-size: 10px;
 }
 
@@ -1830,11 +1835,11 @@ textarea:focus-visible {
 .color-trigger:hover,
 .color-trigger[aria-expanded="true"] {
   border-color: rgb(var(--theme-rgb) / 44%);
-  background: #1a1e1b;
+  background: var(--cell-hover);
 }
 
 .color-trigger > svg {
-  color: #8e958e;
+  color: var(--muted);
 }
 
 .color-trigger-swatch {
@@ -1851,9 +1856,9 @@ textarea:focus-visible {
 
 .color-palette {
   padding: 11px;
-  border: 1px solid rgb(255 255 255 / 12%);
+  border: 1px solid var(--line);
   border-radius: 7px;
-  background: #141815;
+  background: var(--panel);
   box-shadow: 0 14px 30px rgb(0 0 0 / 30%);
 }
 
@@ -1892,7 +1897,7 @@ textarea:focus-visible {
 
 .custom-color-swatch {
   position: relative;
-  color: #f5d574;
+  color: var(--yellow);
   background: conic-gradient(from 45deg, #f3b51b, #e95b78, #a879f2, #5b8def, #35b7a0, #f3b51b);
   overflow: hidden;
 }
@@ -1901,7 +1906,7 @@ textarea:focus-visible {
   position: absolute;
   inset: 4px;
   border-radius: 50%;
-  background: #171a18;
+  background: var(--cell-hover);
   content: "";
 }
 
@@ -1984,14 +1989,14 @@ textarea:focus-visible {
 }
 
 .cancel-button {
-  border: 1px solid rgb(255 255 255 / 12%);
-  color: #aeb3ad;
-  background: #141714;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--cell);
 }
 
 .cancel-button:hover {
   color: var(--text);
-  background: #1a1e1b;
+  background: var(--cell-hover);
 }
 
 .save-button {
@@ -2000,7 +2005,7 @@ textarea:focus-visible {
 }
 
 .save-button:hover {
-  background: color-mix(in srgb, var(--yellow) 88%, white);
+  background: color-mix(in srgb, var(--yellow) 88%, var(--text));
 }
 
 .save-button:disabled {
@@ -2214,7 +2219,7 @@ textarea:focus-visible {
 
 .appearance-done-button:hover,
 .appearance-done-button:focus-visible {
-  background: color-mix(in srgb, var(--yellow) 88%, white);
+  background: color-mix(in srgb, var(--yellow) 88%, var(--text));
 }
 
 .focused-editor-form {
@@ -2288,7 +2293,7 @@ textarea:focus-visible {
 
 .focused-editor-save:hover,
 .focused-editor-save:focus-visible {
-  color: color-mix(in srgb, var(--yellow) 84%, white);
+  color: color-mix(in srgb, var(--yellow) 84%, var(--text));
   background: transparent;
   transform: translateX(-1px);
 }
@@ -2324,7 +2329,7 @@ textarea:focus-visible {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--reminder-color) 34%, transparent);
   border-radius: 10px;
-  background: linear-gradient(140deg, var(--reminder-soft), rgb(255 255 255 / 1.5%) 44%);
+  background: linear-gradient(140deg, var(--reminder-soft), color-mix(in srgb, var(--text) 1.5%, transparent) 44%);
 }
 
 .reminder-bell {
@@ -2335,7 +2340,7 @@ textarea:focus-visible {
   border: 1px solid color-mix(in srgb, var(--reminder-color) 44%, transparent);
   border-radius: 50%;
   color: var(--reminder-color);
-  background: color-mix(in srgb, var(--reminder-color) 12%, #0a0a0a);
+  background: color-mix(in srgb, var(--reminder-color) 12%, var(--panel));
   box-shadow: 0 0 24px color-mix(in srgb, var(--reminder-color) 12%, transparent);
   animation: reminder-bell-in 220ms ease-out;
 }
@@ -2392,15 +2397,15 @@ textarea:focus-visible {
 }
 
 .reminder-dismiss {
-  border: 1px solid rgb(255 255 255 / 12%);
-  color: #aeb3ad;
-  background: #141714;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--cell);
 }
 
 .reminder-dismiss:hover,
 .reminder-dismiss:focus-visible {
   color: var(--text);
-  background: #1a1e1b;
+  background: var(--cell-hover);
 }
 
 .reminder-open {
@@ -2410,7 +2415,7 @@ textarea:focus-visible {
 
 .reminder-open:hover,
 .reminder-open:focus-visible {
-  background: color-mix(in srgb, var(--yellow) 88%, white);
+  background: color-mix(in srgb, var(--yellow) 88%, var(--text));
   transform: translateY(-1px);
 }
 
@@ -2434,7 +2439,7 @@ textarea:focus-visible {
   min-height: 44px;
   border: 1px solid rgb(var(--theme-rgb) / 34%);
   border-radius: 7px;
-  color: #f3cc63;
+  color: var(--yellow);
   background: rgb(var(--theme-rgb) / 7%);
   font-size: 12px;
   font-weight: 670;
@@ -2455,14 +2460,14 @@ textarea:focus-visible {
   align-content: flex-start;
   gap: 6px;
   padding: 7px;
-  border: 1px solid rgb(255 255 255 / 9%);
+  border: 1px solid var(--line);
   border-radius: 7px;
-  background: #141715;
+  background: var(--cell);
 }
 
 .custom-date-list > small {
   align-self: center;
-  color: #6f766f;
+  color: var(--dim);
   font-size: 10px;
 }
 
@@ -2474,7 +2479,7 @@ textarea:focus-visible {
   padding: 0 5px 0 9px;
   border: 1px solid rgb(var(--theme-rgb) / 26%);
   border-radius: 14px;
-  color: #e9cb77;
+  color: var(--yellow);
   background: rgb(var(--theme-rgb) / 7%);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -2486,13 +2491,13 @@ textarea:focus-visible {
   height: 22px;
   place-items: center;
   border-radius: 50%;
-  color: #a99b75;
+  color: var(--muted);
   cursor: pointer;
 }
 
 .custom-date-list > span > button:hover {
-  color: #fff1c6;
-  background: rgb(255 255 255 / 7%);
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 .utility-state {
@@ -2501,14 +2506,14 @@ textarea:focus-visible {
   place-content: center;
   justify-items: center;
   gap: 12px;
-  color: #858c85;
+  color: var(--muted);
   font-size: 12px;
 }
 
 .utility-state > span {
   width: 22px;
   height: 22px;
-  border: 2px solid rgb(255 255 255 / 12%);
+  border: 2px solid var(--line);
   border-top-color: var(--yellow);
   border-radius: 50%;
   animation: utility-spin 700ms linear infinite;
@@ -2540,8 +2545,8 @@ textarea:focus-visible {
   padding: 9px 12px;
   border: 1px solid rgb(var(--theme-rgb) / 28%);
   border-radius: 7px;
-  color: #f4cd64;
-  background: #171a18;
+  color: var(--yellow);
+  background: var(--cell-hover);
   box-shadow: 0 12px 30px rgb(0 0 0 / 36%);
   font-size: 11px;
 }

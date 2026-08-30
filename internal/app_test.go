@@ -39,11 +39,7 @@ func TestSQLiteDatabase(t *testing.T) {
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	if err := db.AutoMigrate(
-		&model.Todo{},
-		&model.TodoDate{},
-		&model.TodoCompletion{},
-	); err != nil {
+	if err := migrateDatabase(db); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 
@@ -56,8 +52,10 @@ func TestSQLiteDatabase(t *testing.T) {
 	}
 
 	startsAt := time.Date(2026, time.August, 30, 9, 30, 0, 0, time.FixedZone("CST", 8*60*60))
+	content := "SQLite integration test content"
 	item := model.Todo{
-		Content:    "SQLite integration test",
+		Title:      "SQLite integration test",
+		Content:    &content,
 		Color:      "#5B8DEF",
 		StartsAt:   &startsAt,
 		RepeatMode: model.RepeatCustom,
@@ -81,15 +79,29 @@ func TestSQLiteDatabase(t *testing.T) {
 		t.Fatalf("custom dates did not round-trip: got %d", len(loaded.CustomDates))
 	}
 
-	duplicate := model.Todo{
+	sameContent := model.Todo{
+		Title:      "Same content, different title",
 		Content:    item.Content,
 		Color:      "#F3B51B",
 		StartsAt:   &startsAt,
 		RepeatMode: model.RepeatOnce,
 		NotifyMode: model.NotifyNone,
 	}
+	if err := db.Create(&sameContent).Error; err != nil {
+		t.Fatalf("same content with different title should be allowed: %v", err)
+	}
+
+	differentContent := "Different content"
+	duplicate := model.Todo{
+		Title:      item.Title,
+		Content:    &differentContent,
+		Color:      "#F3B51B",
+		StartsAt:   &startsAt,
+		RepeatMode: model.RepeatOnce,
+		NotifyMode: model.NotifyNone,
+	}
 	if err := db.Create(&duplicate).Error; !errors.Is(err, gorm.ErrDuplicatedKey) {
-		t.Fatalf("duplicate content error = %v, want %v", err, gorm.ErrDuplicatedKey)
+		t.Fatalf("duplicate title error = %v, want %v", err, gorm.ErrDuplicatedKey)
 	}
 
 	completion := model.TodoCompletion{
@@ -118,5 +130,112 @@ func TestSQLiteDatabase(t *testing.T) {
 
 	if _, err := os.Stat(databasePath); err != nil {
 		t.Fatalf("database file was not created: %v", err)
+	}
+}
+
+func TestMigrateLegacyTodoSchema(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "legacy-note.db")
+	db, err := gorm.Open(
+		gormlite.Open(sqliteDSN(databasePath)),
+		&gorm.Config{TranslateError: true},
+	)
+	if err != nil {
+		t.Fatalf("open legacy SQLite database: %v", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get legacy sql database: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	if err := db.Exec(`
+		CREATE TABLE todos (
+			id integer PRIMARY KEY AUTOINCREMENT,
+			content text NOT NULL,
+			color text NOT NULL DEFAULT '#F3B51B',
+			starts_at datetime NOT NULL,
+			repeat_mode text NOT NULL DEFAULT 'once',
+			notify_mode text NOT NULL DEFAULT 'none',
+			all_done numeric NOT NULL DEFAULT false,
+			created_at datetime,
+			updated_at datetime,
+			version integer NOT NULL DEFAULT 1
+		)
+	`).Error; err != nil {
+		t.Fatalf("create legacy todos table: %v", err)
+	}
+	if err := db.Exec("CREATE UNIQUE INDEX idx_todos_content ON todos(content)").Error; err != nil {
+		t.Fatalf("create legacy content index: %v", err)
+	}
+	if err := db.Exec(`
+		INSERT INTO todos (content, color, starts_at, repeat_mode, notify_mode, all_done, version)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, "legacy content", "#F3B51B", time.Now(), model.RepeatOnce, model.NotifyNone, false, 1).Error; err != nil {
+		t.Fatalf("insert legacy todo: %v", err)
+	}
+
+	if err := migrateDatabase(db); err != nil {
+		t.Fatalf("migrate legacy database: %v", err)
+	}
+	if err := migrateDatabase(db); err != nil {
+		t.Fatalf("repeat legacy migration: %v", err)
+	}
+
+	var loaded model.Todo
+	if err := db.First(&loaded).Error; err != nil {
+		t.Fatalf("load migrated todo: %v", err)
+	}
+	if loaded.Title != "legacy content" {
+		t.Fatalf("migrated title = %q, want legacy content", loaded.Title)
+	}
+	if loaded.Content == nil || *loaded.Content != "legacy content" {
+		t.Fatalf("migrated content = %v, want legacy content", loaded.Content)
+	}
+
+	type indexInfo struct {
+		Name   string `gorm:"column:name"`
+		Unique int    `gorm:"column:unique"`
+	}
+	var indexes []indexInfo
+	if err := db.Raw("PRAGMA index_list('todos')").Scan(&indexes).Error; err != nil {
+		t.Fatalf("list migrated indexes: %v", err)
+	}
+	foundTitleIndex := false
+	for _, index := range indexes {
+		if index.Name == "idx_todos_content" {
+			t.Fatal("legacy content index still exists")
+		}
+		if index.Name == "idx_todos_title" && index.Unique == 1 {
+			foundTitleIndex = true
+		}
+	}
+	if !foundTitleIndex {
+		t.Fatal("unique title index was not created")
+	}
+
+	sameContent := model.Todo{
+		Title:      "different title",
+		Content:    loaded.Content,
+		Color:      "#F3B51B",
+		StartsAt:   loaded.StartsAt,
+		RepeatMode: model.RepeatOnce,
+		NotifyMode: model.NotifyNone,
+	}
+	if err := db.Create(&sameContent).Error; err != nil {
+		t.Fatalf("same content should be allowed after migration: %v", err)
+	}
+
+	differentContent := "different content"
+	duplicateTitle := model.Todo{
+		Title:      loaded.Title,
+		Content:    &differentContent,
+		Color:      "#F3B51B",
+		StartsAt:   loaded.StartsAt,
+		RepeatMode: model.RepeatOnce,
+		NotifyMode: model.NotifyNone,
+	}
+	if err := db.Create(&duplicateTitle).Error; !errors.Is(err, gorm.ErrDuplicatedKey) {
+		t.Fatalf("duplicate title error = %v, want %v", err, gorm.ErrDuplicatedKey)
 	}
 }

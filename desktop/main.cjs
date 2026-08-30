@@ -18,9 +18,9 @@ const {
 const PRIMARY_WINDOW_KEY = "day";
 const WINDOW_PROFILES = {
   day: { width: 360, height: 150, minWidth: 280, minHeight: 130 },
-  calendar: { width: 660, height: 300, minWidth: 320, minHeight: 200 },
-  create: { width: 340, height: 540, minWidth: 260, minHeight: 240 },
-  detail: { width: 360, height: 540, minWidth: 280, minHeight: 240 },
+  calendar: { width: 620, height: 380, minWidth: 320, minHeight: 240 },
+  create: { width: 340, height: 650, minWidth: 260, minHeight: 240 },
+  detail: { width: 360, height: 650, minWidth: 280, minHeight: 240 },
   reminder: { width: 390, height: 250, minWidth: 320, minHeight: 230 },
   settings: { width: 430, height: 500, minWidth: 360, minHeight: 420 },
   "content-editor": { width: 760, height: 560, minWidth: 500, minHeight: 360 },
@@ -163,7 +163,12 @@ function startBackend() {
 function registerIPC() {
   ipcMain.handle("note:open-calendar", (event) => {
     assertTrustedSender(event);
-    return windowResult(createCalendarWindow());
+    const existing = windows.get("calendar");
+    if (existing && !existing.isDestroyed() && existing.isVisible() && !datePickerSession) {
+      existing.close();
+      return { key: "calendar", open: false };
+    }
+    return { ...windowResult(createCalendarWindow()), open: true };
   });
 
   ipcMain.handle("note:open-compose", (event, payload = {}) => {
@@ -414,6 +419,12 @@ function normalizeTodoContent(value, allowEmpty) {
   return content;
 }
 
+function normalizeTodoTitle(value) {
+  const title = String(value ?? "").trim();
+  if (!title || title.length > 50) throw new Error("invalid todo title");
+  return title;
+}
+
 function normalizeHexColor(value, fallback) {
   const color = String(value || "").trim().toUpperCase();
   return /^#[0-9A-F]{6}$/.test(color) ? color : fallback;
@@ -439,6 +450,7 @@ function normalizeReminderOccurrence(value = {}) {
 
   return {
     todoId: normalizeTodoID(value.todo_id),
+    title: normalizeTodoTitle(value.title || value.content),
     content: normalizeTodoContent(value.content, false),
     color: normalizeHexColor(value.color, appearanceSettings.themeColor),
     occursAt: occursAt.toISOString(),
@@ -490,7 +502,7 @@ function showNativeReminder(reminder) {
 
   const notification = new Notification({
     title: "Note · 日程到点了",
-    body: reminder.content,
+    body: reminder.title,
     silent: true,
   });
   const cleanup = () => activeNotifications.delete(key);
@@ -743,6 +755,7 @@ function createWindow({
     autoHideMenuBar: true,
     backgroundColor: appearanceSettings.backgroundColor,
     opacity: appearanceSettings.opacity / 100,
+    icon: path.join(__dirname, "build", "window-icon.png"),
     title,
     ...(parent ? { parent, modal } : {}),
     webPreferences: {

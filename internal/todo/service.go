@@ -2,9 +2,11 @@ package todo
 
 import (
 	"context"
-	"math/rand/v2"
+	cryptorand "crypto/rand"
+	"math/big"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"note/internal/model"
@@ -16,6 +18,8 @@ var (
 		"#F3B51B", "#F47C48", "#E95B78", "#A879F2",
 		"#5B8DEF", "#35B7A0", "#82B94B", "#D4A373",
 	}
+	randomColorMu        sync.Mutex
+	lastRandomColorIndex = -1
 )
 
 // TodoService 声明 Todo 对外提供的业务操作。
@@ -50,14 +54,26 @@ func NewService(repo Repository) TodoService {
 
 func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo, error) {
 	//处理在handler组装的command
-	content := strings.TrimSpace(command.Content)
-	if content == "" {
-		return model.Todo{}, ErrInvalidContent
+	title := strings.TrimSpace(command.Title)
+	if title == "" {
+		return model.Todo{}, ErrTitleRequired
+	}
+
+	//没传 content       → content = title
+	//传了 null          → content = title
+	//传了空字符串        → content = title
+	//传了正常文字        → 使用这段文字
+	content := title
+	if command.Content != nil {
+		content1 := strings.TrimSpace(*command.Content)
+		if content1 != "" {
+			content = content1
+		}
 	}
 
 	color := command.Color
 	if color == "" {
-		color = eventColors[rand.IntN(len(eventColors))]
+		color = randomEventColor()
 	}
 	if !hexColorPattern.MatchString(color) {
 		return model.Todo{}, ErrInvalidColor
@@ -105,7 +121,8 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 	}
 
 	item := model.Todo{
-		Content:     content,
+		Title:       title,
+		Content:     &content,
 		Color:       color,
 		StartsAt:    command.StartsAt,
 		RepeatMode:  command.RepeatMode,
@@ -119,6 +136,34 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 	}
 
 	return item, nil
+}
+
+// randomEventColor 使用系统随机源，并排除上一次随机到的颜色。
+// “随机”仍允许以后再次出现同一种颜色，但不会连续两次都一样。
+func randomEventColor() string {
+	randomColorMu.Lock()
+	defer randomColorMu.Unlock()
+
+	if len(eventColors) == 1 {
+		return eventColors[0]
+	}
+
+	choiceCount := len(eventColors)
+	if lastRandomColorIndex >= 0 {
+		choiceCount--
+	}
+	randomValue, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(choiceCount)))
+	if err != nil {
+		lastRandomColorIndex = (lastRandomColorIndex + 1) % len(eventColors)
+		return eventColors[lastRandomColorIndex]
+	}
+
+	nextIndex := int(randomValue.Int64())
+	if lastRandomColorIndex >= 0 && nextIndex >= lastRandomColorIndex {
+		nextIndex++
+	}
+	lastRandomColorIndex = nextIndex
+	return eventColors[nextIndex]
 }
 
 func (s *service) List(ctx context.Context, query ListQuery) (Page, error) {
@@ -160,7 +205,8 @@ func (s *service) Patch(
 	}
 
 	//啥都没改则不进入repo防止version自增
-	if command.Content == nil &&
+	if command.Title == nil &&
+		command.Content == nil &&
 		command.Color == nil &&
 		command.NotifyMode == nil &&
 		command.StartsAt == nil &&
@@ -171,13 +217,20 @@ func (s *service) Patch(
 	}
 
 	//处理command字段
+	if command.Title != nil {
+		title := strings.TrimSpace(*command.Title)
+		if title == "" {
+			return model.Todo{}, ErrTitleRequired
+		}
+		command.Title = &title
+	}
+
+	//先留content，把旧title一起查出来再校验
 	if command.Content != nil {
 		content := strings.TrimSpace(*command.Content)
-		if content == "" {
-			return model.Todo{}, ErrInvalidContent
-		}
 		command.Content = &content
 	}
+
 	if command.Color != nil {
 		color := strings.ToUpper(*command.Color)
 
@@ -201,6 +254,16 @@ func (s *service) Patch(
 	current, err := s.repo.ByID(ctx, id)
 	if err != nil {
 		return model.Todo{}, err
+	}
+
+	if command.Content != nil && *command.Content == "" {
+		finalTitle := current.Title
+
+		if command.Title != nil {
+			finalTitle = *command.Title
+		}
+		//如果不传新title但把content传成空了，就沿用旧title
+		command.Content = &finalTitle
 	}
 
 	// 没传 repeat_mode，就继续使用数据库里的旧模式。

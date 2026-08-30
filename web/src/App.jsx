@@ -56,6 +56,7 @@ const EVENT_COLORS = [
 const START_DATE_REPEATS = new Set(["仅一次", "每周", "每月"]);
 
 const EMPTY_FORM = {
+  title: "",
   content: "",
   reminder: "弹窗提醒",
   repeat: "仅一次",
@@ -274,7 +275,8 @@ function calendarEventFromOccurrence(item) {
   return {
     id: `${item.todo_id}-${item.occurs_at}`,
     todoId: item.todo_id,
-    content: item.content,
+    title: item.title || item.content || "",
+    content: item.content ?? item.title ?? "",
     color: item.color,
     date: occurrence.date,
     time: occurrence.time,
@@ -320,7 +322,7 @@ function EventDot({ item, selected, onSelect }) {
         "--event-color": item.color,
         "--event-soft": colorWithAlpha(item.color, 0.17),
       }}
-      aria-label={`${item.content}，${item.time}，${done ? "已完成" : "待完成"}`}
+      aria-label={`${item.title}，${item.time}，${done ? "已完成" : "待完成"}`}
       aria-pressed={selected}
       onClick={(event) => {
         event.stopPropagation();
@@ -330,7 +332,7 @@ function EventDot({ item, selected, onSelect }) {
       <span className="event-dot" aria-hidden="true" />
       <span className="event-preview" role="tooltip">
         <b>{item.time}</b>
-        <span>{item.content}</span>
+        <span>{item.title}</span>
       </span>
     </button>
   );
@@ -422,10 +424,38 @@ function SelectField({ label, value, options, onChange }) {
 function TimeField({ label = "时间", value, onChange, compact = false }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value || "00:00");
+  const popoverRef = useRef(null);
 
   useEffect(() => {
     if (!open) setDraft(value || "00:00");
   }, [open, value]);
+
+  useEffect(() => {
+    if (!open || !popoverRef.current) return undefined;
+
+    const popover = popoverRef.current;
+    function handleNativeWheel(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const unitElement = event.target instanceof Element
+        ? event.target.closest("[data-time-unit]")
+        : null;
+      if (!unitElement || !popover.contains(unitElement)) return;
+
+      const unit = unitElement.dataset.timeUnit;
+      const amount = event.deltaY > 0 ? 1 : -1;
+      setDraft((current) => {
+        const { hour, minute } = splitTime(current);
+        return unit === "hour"
+          ? joinTime(hour + amount, minute)
+          : joinTime(hour, minute + amount);
+      });
+    }
+
+    popover.addEventListener("wheel", handleNativeWheel, { passive: false });
+    return () => popover.removeEventListener("wheel", handleNativeWheel);
+  }, [open]);
 
   function adjust(unit, amount) {
     setDraft((current) => {
@@ -434,11 +464,6 @@ function TimeField({ label = "时间", value, onChange, compact = false }) {
         ? joinTime(hour + amount, minute)
         : joinTime(hour, minute + amount);
     });
-  }
-
-  function handleWheel(unit, event) {
-    event.preventDefault();
-    adjust(unit, event.deltaY > 0 ? 1 : -1);
   }
 
   const draftParts = splitTime(draft);
@@ -473,9 +498,14 @@ function TimeField({ label = "时间", value, onChange, compact = false }) {
       </button>
 
       {open && (
-        <div className="time-popover" role="dialog" aria-label={`${label}选择器`}>
+        <div
+          ref={popoverRef}
+          className="time-popover"
+          role="dialog"
+          aria-label={`${label}选择器`}
+        >
           <div className="time-dials">
-            <div className="time-unit" onWheel={(event) => handleWheel("hour", event)}>
+            <div className="time-unit" data-time-unit="hour">
               <button type="button" onClick={() => adjust("hour", 1)} aria-label="小时加一">
                 <CaretUp size={16} weight="bold" />
               </button>
@@ -488,7 +518,7 @@ function TimeField({ label = "时间", value, onChange, compact = false }) {
 
             <span className="time-colon" aria-hidden="true">:</span>
 
-            <div className="time-unit" onWheel={(event) => handleWheel("minute", event)}>
+            <div className="time-unit" data-time-unit="minute">
               <button type="button" onClick={() => adjust("minute", 1)} aria-label="分钟加一">
                 <CaretUp size={16} weight="bold" />
               </button>
@@ -516,7 +546,7 @@ function TimeField({ label = "时间", value, onChange, compact = false }) {
 }
 
 function DayAgendaItem({ item, onSave, onOpenDetails, onComplete, onDelete }) {
-  const [content, setContent] = useState(item.content);
+  const [title, setTitle] = useState(item.title);
   const [time, setTime] = useState(item.time);
   const [saving, setSaving] = useState(false);
   const [action, setAction] = useState(null);
@@ -525,9 +555,9 @@ function DayAgendaItem({ item, onSave, onOpenDetails, onComplete, onDelete }) {
   const busy = saving || action !== null;
 
   useEffect(() => {
-    setContent(item.content);
+    setTitle(item.title);
     setTime(item.time);
-  }, [item.content, item.time]);
+  }, [item.title, item.time]);
 
   async function commit(changes) {
     setSaving(true);
@@ -536,21 +566,21 @@ function DayAgendaItem({ item, onSave, onOpenDetails, onComplete, onDelete }) {
       await onSave(item, changes);
     } catch (saveError) {
       setError(saveError.message);
-      setContent(item.content);
+      setTitle(item.title);
       setTime(item.time);
     } finally {
       setSaving(false);
     }
   }
 
-  function commitContent() {
-    const nextContent = content.trim();
-    if (!nextContent) {
-      setError("内容不能为空");
-      setContent(item.content);
+  function commitTitle() {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      setError("标题不能为空");
+      setTitle(item.title);
       return;
     }
-    if (nextContent !== item.content) void commit({ content: nextContent });
+    if (nextTitle !== item.title) void commit({ title: nextTitle });
   }
 
   function commitTime(nextTime) {
@@ -599,24 +629,24 @@ function DayAgendaItem({ item, onSave, onOpenDetails, onComplete, onDelete }) {
         type="button"
         disabled={done || !onComplete || busy}
         onClick={completeForDay}
-        aria-label={done ? `${item.content}当天已完成` : `标记${item.content}为当天完成`}
+        aria-label={done ? `${item.title}当天已完成` : `标记${item.title}为当天完成`}
       >
         {action === "complete"
           ? <Check className="agenda-complete-check" size={13} weight="bold" aria-hidden="true" />
           : <span className="agenda-dot" aria-hidden="true" />}
       </button>
       <input
-        className="agenda-content"
-        value={content}
-        maxLength={500}
+        className="agenda-title"
+        value={title}
+        maxLength={50}
         disabled={busy}
-        aria-label={`${item.content}的内容`}
-        onChange={(event) => setContent(event.target.value)}
-        onBlur={commitContent}
+        aria-label={`${item.title}的标题`}
+        onChange={(event) => setTitle(event.target.value)}
+        onBlur={commitTitle}
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();
           if (event.key === "Escape") {
-            setContent(item.content);
+            setTitle(item.title);
             event.currentTarget.blur();
           }
         }}
@@ -626,18 +656,18 @@ function DayAgendaItem({ item, onSave, onOpenDetails, onComplete, onDelete }) {
         type="button"
         disabled={busy}
         onClick={() => onOpenDetails(item)}
-        aria-label={`进入${item.content}的详情`}
+        aria-label={`进入${item.title}的详情`}
       >
         <span aria-hidden="true">&gt;</span>
       </button>
-      <TimeField compact label={`${item.content}的时间`} value={time} onChange={commitTime} />
+      <TimeField compact label={`${item.title}的时间`} value={time} onChange={commitTime} />
       {onDelete && (
         <button
           className="agenda-delete-button"
           type="button"
           disabled={busy}
           onClick={removeItem}
-          aria-label={`删除${item.content}`}
+          aria-label={`删除${item.title}`}
           title="删除日程"
         >
           <Trash size={16} weight="regular" aria-hidden="true" />
@@ -669,7 +699,7 @@ function DayAgendaPanel({ dateKey, items, onAdd, onClear, onSave, onOpenCalendar
                 className="day-agenda-calendar-button"
                 type="button"
                 onClick={onOpenCalendar}
-                aria-label="打开日历"
+                aria-label="打开或收起日历"
               >
                 <CalendarBlank size={17} weight="regular" aria-hidden="true" />
               </button>
@@ -1087,6 +1117,7 @@ function App() {
     setDetailPaletteOpen(false);
     setDetailError("");
     setDetailForm({
+      title: item.title,
       content: item.content,
       date: item.startDate,
       time: item.startTime,
@@ -1113,7 +1144,7 @@ function App() {
     const latest = events.find((eventItem) => eventItem.todoId === item.todoId) || item;
     const payload = { version: latest.version };
 
-    if (changes.content !== undefined) payload.content = changes.content;
+    if (changes.title !== undefined) payload.title = changes.title;
     if (changes.time !== undefined) payload.starts_at = dateTimeAt(latest.startDate, changes.time);
 
     await patchTodo(item.todoId, payload);
@@ -1217,13 +1248,15 @@ function App() {
 
   async function saveEventDetails(event) {
     event.preventDefault();
+    const title = detailForm.title.trim();
     const content = detailForm.content.trim();
-    if (!content || !selectedEvent) {
-      setDetailError("请输入内容");
+    if (!title || !selectedEvent) {
+      setDetailError("请输入标题");
       return;
     }
 
     const payload = {
+      title,
       content,
       color: detailForm.color,
       notify_mode: REMINDER_VALUES[detailForm.reminder],
@@ -1277,12 +1310,13 @@ function App() {
 
   async function createEvent(event) {
     event.preventDefault();
+    const title = form.title.trim();
     const content = form.content.trim();
     const isCustom = form.repeat === "自定义";
     const needsStartDate = START_DATE_REPEATS.has(form.repeat);
 
-    if (!content) {
-      setFormError("请输入内容");
+    if (!title) {
+      setFormError("请输入标题");
       return;
     }
     if (isCustom && customDates.length === 0) {
@@ -1302,6 +1336,7 @@ function App() {
     const startTime = form.time;
     const pickedRandomColor = !form.color;
     const payload = {
+      title,
       content,
       starts_at: dateTimeAt(startDate, startTime),
       repeat_mode: REPEAT_VALUES[form.repeat],
@@ -1584,7 +1619,7 @@ function App() {
                     type="checkbox"
                     checked={selectedEvent.occurrenceDone}
                     disabled={Boolean(completionSaving) || selectedEvent.allDone}
-                    aria-label={`${selectedEvent.date} ${selectedEvent.content}的本次完成状态`}
+                    aria-label={`${selectedEvent.date} ${selectedEvent.title}的本次完成状态`}
                     onChange={(event) => void updateOccurrenceDone(event.target.checked)}
                   />
                   <span>
@@ -1605,7 +1640,7 @@ function App() {
                     type="checkbox"
                     checked={selectedEvent.allDone}
                     disabled={Boolean(completionSaving)}
-                    aria-label={`${selectedEvent.content}的全部完成状态`}
+                    aria-label={`${selectedEvent.title}的全部完成状态`}
                     onChange={(event) => void updateAllDone(event.target.checked)}
                   />
                   <span>
@@ -1619,8 +1654,13 @@ function App() {
               </div>
 
               <label>
+                <span>标题</span>
+                <input name="title" value={detailForm.title} onChange={updateDetailField} maxLength={50} required autoFocus />
+              </label>
+
+              <label>
                 <span>内容</span>
-                <textarea name="content" value={detailForm.content} onChange={updateDetailField} rows={5} maxLength={500} autoFocus />
+                <textarea name="content" value={detailForm.content} onChange={updateDetailField} rows={5} maxLength={500} />
               </label>
 
               {selectedEvent.repeat !== "自定义" ? (
@@ -1716,8 +1756,13 @@ function App() {
 
             <form className="side-form" onSubmit={createEvent}>
               <label>
+                <span>标题</span>
+                <input name="title" value={form.title} onChange={updateField} maxLength={50} required autoFocus />
+              </label>
+
+              <label>
                 <span>内容</span>
-                <textarea name="content" value={form.content} onChange={updateField} rows={5} maxLength={500} autoFocus />
+                <textarea name="content" value={form.content} onChange={updateField} rows={5} maxLength={500} />
               </label>
 
               <SelectField

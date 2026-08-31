@@ -4,7 +4,7 @@ import { ArrowCounterClockwise, CheckCircle } from "@phosphor-icons/react";
 export const DEFAULT_APPEARANCE = Object.freeze({
   backgroundColor: "#000000",
   themeColor: "#F3B51B",
-  opacity: 100,
+  opacity: 95,
 });
 
 const APPEARANCE_STORAGE_KEY = "note.appearance.v1";

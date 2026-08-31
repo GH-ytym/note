@@ -1,12 +1,12 @@
 {
   "name": "note-desktop",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Note 独立窗口桌面日历",
   "main": "main.cjs",
   "scripts": {
     "prepare:app": "node scripts/prepare.cjs",
-    "test": "node --test reminder-scheduler.test.cjs window-layout.test.cjs",
+    "test": "node --test reminder-scheduler.test.cjs window-layout.test.cjs workspace-layout.test.cjs",
     "start": "npm run prepare:app && electron .",
     "pack": "npm run prepare:app && electron-builder --dir --win --x64",
     "dist": "npm run prepare:app && electron-builder --win --x64"
@@ -27,6 +27,7 @@
       "preload.cjs",
       "reminder-scheduler.cjs",
       "window-layout.cjs",
+      "workspace-layout.cjs",
       "build/window-icon.png",
       "package.json"
     ],
@@ -58,10 +59,14 @@
       ]
     },
     "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}.${ext}"
     }
   }
 }

@@ -8,8 +8,15 @@ const {
   aboveAnchorBounds,
   bottomRightBounds,
   centeredBounds,
-  leftOfBounds,
+  fitBounds,
 } = require("./window-layout.cjs");
+const {
+  calendarPairFromDayBounds,
+  dayViewPairBounds,
+  resizePeerBounds,
+  translatePeerBounds,
+  workspacePairBounds,
+} = require("./workspace-layout.cjs");
 const {
   app,
   BrowserWindow,
@@ -22,8 +29,9 @@ const {
   Tray,
 } = require("electron");
 
-// 单日 Todo 是应用唯一稳定存在的主窗口；其余窗口可独立移动和缩放。
+// 当天 Todo 与日历共同组成桌面工作区；二者没有父子关系，但保持固定相对位置。
 const PRIMARY_WINDOW_KEY = "day";
+const WORKSPACE_WINDOW_KEYS = new Set(["day", "calendar"]);
 const WINDOW_PROFILES = {
   day: { width: 360, height: 150, minWidth: 280, minHeight: 130 },
   calendar: { width: 620, height: 380, minWidth: 320, minHeight: 240 },
@@ -36,7 +44,7 @@ const WINDOW_PROFILES = {
 const DEFAULT_APPEARANCE = Object.freeze({
   backgroundColor: "#000000",
   themeColor: "#F3B51B",
-  opacity: 100,
+  opacity: 95,
 });
 const TRAY_ICON_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACtSURBVFhH7c7RDQIhFETRbcJEY/8lWJkFaPjkCCw8XLOJ3OR+wZuZbVssBng+7q9evZ3Ggh7NCGFoRDO7MWhGs3cxQK+3S6bvJe1o4rEeOsDDkpEBSbs+8KBmdEDSzgw/1/yfARaNat65B/jx5wMSfjZwVPOGB9TsKappZ4afa64Bhw1IeFAyOsCuKh5qZIAdTTz+hnbsYsCMZndjUEQzQxjaoxnTWNDS28VpeQN+CwQ4E8tohAAAAABJRU5ErkJggg==";
 
@@ -50,8 +58,15 @@ let datePickerSession = null;
 let datePickerSequence = 0;
 let tray = null;
 let hiddenToTray = false;
+let calendarExpanded = true;
 let appearanceSettings = { ...DEFAULT_APPEARANCE };
 let reminderScheduler = null;
+let syncingWorkspaceBounds = false;
+let syncingWorkspaceState = false;
+let workspaceInteraction = null;
+let workspaceInteractionTimer = null;
+const expectedWorkspaceBounds = new WeakMap();
+const ignoredWorkspaceEvents = new WeakMap();
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -91,12 +106,12 @@ async function startApplication() {
   registerIPC();
   installApplicationMenu();
   installTray();
-  createDayWindow(todayKey());
+  createWorkspace(todayKey());
   startReminderScheduler();
 
   if (focusPrimaryAfterReady) {
     focusPrimaryAfterReady = false;
-    createDayWindow(todayKey());
+    createWorkspace(todayKey());
   }
 }
 
@@ -169,55 +184,55 @@ function startBackend() {
 }
 
 function registerIPC() {
-  ipcMain.handle("note:open-calendar", (event) => {
+  ipcMain.handle("note:toggle-calendar", (event) => {
     assertTrustedSender(event);
-    const existing = windows.get("calendar");
-    if (existing && !existing.isDestroyed() && existing.isVisible() && !datePickerSession) {
-      existing.close();
-      return { key: "calendar", open: false };
-    }
-    return { ...windowResult(createCalendarWindow()), open: true };
+    return toggleCalendarWindow();
+  });
+
+  ipcMain.handle("note:calendar-visibility", (event) => {
+    assertTrustedSender(event);
+    return calendarVisibilityState();
   });
 
   ipcMain.handle("note:open-compose", (event, payload = {}) => {
     assertTrustedSender(event);
     const date = normalizeDate(payload.date);
-    const calendarWindow = createCalendarWindow();
-    const editorWindow = createCreateWindow(date);
+    const workspace = createWorkspace(date);
+    const editorWindow = showWorkspaceView("create", { date });
     return {
-      calendar: windowResult(calendarWindow),
+      calendar: workspace.calendar ? windowResult(workspace.calendar) : null,
       create: windowResult(editorWindow),
     };
   });
 
   ipcMain.handle("note:open-create", (event, payload = {}) => {
     assertTrustedSender(event);
-    return windowResult(createCreateWindow(normalizeDate(payload.date)));
+    return windowResult(showWorkspaceView("create", { date: normalizeDate(payload.date) }));
   });
 
   ipcMain.handle("note:open-detail", (event, payload = {}) => {
     assertTrustedSender(event);
-    return windowResult(createDetailWindow(
-      normalizeTodoID(payload.todoId),
-      normalizeDate(payload.date),
-    ));
+    return windowResult(showWorkspaceView("detail", {
+      todoId: normalizeTodoID(payload.todoId),
+      date: normalizeDate(payload.date),
+    }));
   });
 
   ipcMain.handle("note:open-day", (event, payload = {}) => {
     assertTrustedSender(event);
-    return windowResult(createDayWindow(normalizeDate(payload.date)));
+    return windowResult(showWorkspaceView("day", { date: normalizeDate(payload.date) }));
   });
 
   ipcMain.handle("note:open-settings", (event) => {
     assertTrustedSender(event);
-    return windowResult(createSettingsWindow());
+    return windowResult(showWorkspaceView("settings", { date: currentWorkspaceDate() }));
   });
 
   ipcMain.handle("note:open-content-editor", (event, payload = {}) => {
     assertTrustedSender(event);
     const sourceWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!sourceWindow || sourceWindow.noteWindowRole !== "detail") {
-      throw new Error("content editor must be opened from a detail window");
+    if (!sourceWindow || !["detail", "day"].includes(sourceWindow.noteWindowRole)) {
+      throw new Error("content editor must be opened from the todo workspace");
     }
 
     const state = {
@@ -286,18 +301,33 @@ function registerIPC() {
 
   ipcMain.handle("note:close-window", (event) => {
     assertTrustedSender(event);
-    BrowserWindow.fromWebContents(event.sender)?.close();
+    const target = BrowserWindow.fromWebContents(event.sender);
+    if (target?.noteWindowKey === "calendar") {
+      hideCalendarWindow({ focusDay: true });
+      return;
+    }
+    if (target?.noteWindowKey === PRIMARY_WINDOW_KEY) {
+      hideApplicationWindows();
+      return;
+    }
+    target?.close();
   });
 
   ipcMain.handle("note:minimize-window", (event) => {
     assertTrustedSender(event);
-    BrowserWindow.fromWebContents(event.sender)?.minimize();
+    const target = BrowserWindow.fromWebContents(event.sender);
+    if (isWorkspaceWindow(target)) {
+      minimizeWorkspaceWindows();
+      return;
+    }
+    target?.minimize();
   });
 
   ipcMain.handle("note:toggle-maximize-window", (event) => {
     assertTrustedSender(event);
     const target = BrowserWindow.fromWebContents(event.sender);
     if (!target) return false;
+    if (isWorkspaceWindow(target)) return false;
     if (target.isMaximized()) target.unmaximize();
     else target.maximize();
     return target.isMaximized();
@@ -348,7 +378,7 @@ function registerIPC() {
       state,
     };
 
-    const calendarWindow = createCalendarWindow();
+    const calendarWindow = showCalendarWindow({ focus: true });
     sendDatePickerState(calendarWindow);
     return publicDatePickerState();
   });
@@ -561,8 +591,8 @@ function broadcastAppearanceChanged() {
 function requireDatePickerSource(event) {
   const sourceWindow = BrowserWindow.fromWebContents(event.sender);
   const key = sourceWindow?.noteWindowKey || "";
-  if (key !== "create" && !key.startsWith("detail:")) {
-    throw new Error("date picker must be opened by an editor window");
+  if (key !== PRIMARY_WINDOW_KEY && key !== "create" && !key.startsWith("detail:")) {
+    throw new Error("date picker must be opened by the todo workspace");
   }
   return sourceWindow;
 }
@@ -655,30 +685,79 @@ function createCalendarWindow() {
   });
 }
 
-function createCreateWindow(date) {
-  return createWindow({
-    key: "create",
-    role: "create",
-    title: "新日程 · Note",
-    query: { date },
+function calendarVisibilityState() {
+  const target = windows.get("calendar");
+  return { open: Boolean(target && !target.isDestroyed() && target.isVisible()) };
+}
+
+function broadcastCalendarVisibility() {
+  sendToWindow(windows.get(PRIMARY_WINDOW_KEY), "note:calendar-visibility-changed", calendarVisibilityState());
+}
+
+function positionCalendarBesideDay(calendar, day) {
+  if (!isWorkspaceWindow(calendar) || !isWorkspaceWindow(day)) return;
+  const dayBounds = day.getBounds();
+  const calendarBounds = calendar.getBounds();
+  const display = screen.getDisplayMatching(dayBounds);
+  const pair = calendarPairFromDayBounds(display.workArea, dayBounds, {
+    width: calendarBounds.width,
+    height: calendarBounds.height,
+  }, {
+    edgeMargin: DEFAULT_EDGE_MARGIN,
+    gap: DEFAULT_GAP,
   });
+
+  syncingWorkspaceBounds = true;
+  setLinkedBounds(calendar, pair.calendar);
+  setLinkedBounds(day, pair.day);
+  syncingWorkspaceBounds = false;
+}
+
+function showCalendarWindow({ focus = true } = {}) {
+  calendarExpanded = true;
+  const day = createDayWindow(currentWorkspaceDate());
+  const calendar = createCalendarWindow();
+  positionCalendarBesideDay(calendar, day);
+  if (calendar.isMinimized()) calendar.restore();
+  calendar.show();
+  broadcastCalendarVisibility();
+  if (focus) calendar.focus();
+  return calendar;
+}
+
+function hideCalendarWindow({ focusDay = false } = {}) {
+  calendarExpanded = false;
+  const calendar = windows.get("calendar");
+  if (calendar && !calendar.isDestroyed()) calendar.hide();
+  if (datePickerSession) finishDatePicker(focusDay);
+  broadcastCalendarVisibility();
+
+  if (!focusDay) return;
+  const day = windows.get(PRIMARY_WINDOW_KEY);
+  if (!day || day.isDestroyed()) return;
+  if (day.isMinimized()) day.restore();
+  day.show();
+  day.focus();
+}
+
+function toggleCalendarWindow() {
+  if (calendarVisibilityState().open) {
+    hideCalendarWindow({ focusDay: true });
+    return { open: false };
+  }
+  return { ...windowResult(showCalendarWindow({ focus: true })), open: true };
+}
+
+function createCreateWindow(date) {
+  return showWorkspaceView("create", { date });
 }
 
 function createDetailWindow(todoID, date) {
-  return createWindow({
-    key: `detail:${todoID}:${date}`,
-    role: "detail",
-    title: "日程详情 · Note",
-    query: { todo_id: todoID, date },
-  });
+  return showWorkspaceView("detail", { todoId: todoID, date });
 }
 
 function createSettingsWindow() {
-  return createWindow({
-    key: "settings",
-    role: "settings",
-    title: "外观设置 · Note",
-  });
+  return showWorkspaceView("settings", { date: currentWorkspaceDate() });
 }
 
 function createContentEditorWindow(sourceWindow, state) {
@@ -706,13 +785,13 @@ function createReminderWindow(state) {
 function createDayWindow(date) {
   const existing = windows.get(PRIMARY_WINDOW_KEY);
   if (existing && !existing.isDestroyed()) {
-    existing.noteDate = date;
-    existing.setTitle(`${date} · Note`);
-    sendToWindow(existing, "note:day-date-changed", { date });
+    if (existing.noteDate !== date) {
+      existing.noteDate = date;
+      existing.setTitle(`${date} · Note`);
+      sendToWindow(existing, "note:day-date-changed", { date });
+    }
     if (existing.isMinimized()) existing.restore();
-    placeWindowAtDefault(existing, "day");
     existing.show();
-    existing.focus();
     return existing;
   }
 
@@ -723,7 +802,42 @@ function createDayWindow(date) {
     query: { date },
   });
   target.noteDate = date;
+  target.noteWorkspaceView = "day";
   return target;
+}
+
+function currentWorkspaceDate() {
+  const target = windows.get(PRIMARY_WINDOW_KEY);
+  return target && !target.isDestroyed() ? target.noteDate || todayKey() : todayKey();
+}
+
+function createWorkspace(date = currentWorkspaceDate()) {
+  const day = createDayWindow(date);
+  if (day.isMinimized()) day.restore();
+  day.show();
+  let calendar = null;
+  if (calendarExpanded) {
+    calendar = createCalendarWindow();
+    if (calendar.isMinimized()) calendar.restore();
+    calendar.show();
+    broadcastCalendarVisibility();
+  }
+  return { day, calendar };
+}
+
+function showWorkspaceView(view, payload = {}) {
+  const date = normalizeDate(payload.date || currentWorkspaceDate());
+  const { day } = createWorkspace(date);
+  const next = { view, date };
+  if (view === "detail") next.todoId = normalizeTodoID(payload.todoId);
+
+  day.noteDate = date;
+  day.setTitle(view === "day" ? `${date} · Note` : `${view} · Note`);
+  resizeWorkspaceDay(view);
+  sendToWindow(day, "note:workspace-view-changed", next);
+  day.show();
+  day.focus();
+  return day;
 }
 
 function createWindow({
@@ -741,9 +855,9 @@ function createWindow({
   const existing = windows.get(key);
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
-    if (role === "day" || role === "reminder") placeWindowAtDefault(existing, role, parent);
+    if (role === "reminder") placeWindowAtDefault(existing, role, parent);
     existing.show();
-    existing.focus();
+    if (!WORKSPACE_WINDOW_KEYS.has(key)) existing.focus();
     return existing;
   }
 
@@ -760,7 +874,7 @@ function createWindow({
     titleBarStyle: "hidden",
     resizable: true,
     minimizable: true,
-    maximizable,
+    maximizable: WORKSPACE_WINDOW_KEYS.has(key) ? false : maximizable,
     alwaysOnTop,
     autoHideMenuBar: true,
     backgroundColor: appearanceSettings.backgroundColor,
@@ -783,6 +897,7 @@ function createWindow({
   target.noteContentEditorState = contentEditorState;
   target.noteReminderState = reminderState;
   windows.set(key, target);
+  if (WORKSPACE_WINDOW_KEYS.has(key)) attachWorkspaceWindow(target);
 
   const url = new URL(backendURL);
   url.searchParams.set("window", role);
@@ -796,6 +911,7 @@ function createWindow({
       }
     }
     target.show();
+    if (key === "calendar") broadcastCalendarVisibility();
     if (modal || role === "reminder") target.focus();
     if (role === "reminder") target.flashFrame(true);
   });
@@ -803,7 +919,13 @@ function createWindow({
   target.on("maximize", () => sendToWindow(target, "note:window-maximized-changed", true));
   target.on("unmaximize", () => sendToWindow(target, "note:window-maximized-changed", false));
   target.on("close", (event) => {
-    if (key !== PRIMARY_WINDOW_KEY || quitting) return;
+    if (quitting) return;
+    if (key === "calendar") {
+      event.preventDefault();
+      hideCalendarWindow({ focusDay: true });
+      return;
+    }
+    if (key !== PRIMARY_WINDOW_KEY) return;
     event.preventDefault();
     hideApplicationWindows();
   });
@@ -827,9 +949,11 @@ function windowSizing(role) {
     ? screen.getDisplayMatching(primary.getBounds())
     : screen.getPrimaryDisplay();
   const workArea = display.workArea;
-  const scale = Math.max(0.72, Math.min(1, Math.min(
-    workArea.width / 1920,
+  const workspaceScale = (workArea.width - DEFAULT_EDGE_MARGIN * 2 - DEFAULT_GAP)
+    / (WINDOW_PROFILES.day.width + WINDOW_PROFILES.calendar.width);
+  const scale = Math.max(0.58, Math.min(1, Math.min(
     workArea.height / 1080,
+    WORKSPACE_WINDOW_KEYS.has(role) ? workspaceScale : workArea.width / 1920,
   )));
 
   return {
@@ -850,7 +974,17 @@ function initialWindowBounds(role, sizing, parent = null) {
     : screen.getPrimaryDisplay();
   const area = display.workArea;
 
-  if (role === "day" || role === "reminder") {
+  if (role === "day" || role === "calendar") {
+    const pair = workspacePairBounds(
+      area,
+      role === "calendar" ? sizing : windowSizing("calendar"),
+      role === "day" ? sizing : windowSizing("day"),
+      { edgeMargin: DEFAULT_EDGE_MARGIN, gap: DEFAULT_GAP },
+    );
+    return role === "day" ? pair.day : pair.calendar;
+  }
+
+  if (role === "reminder") {
     return bottomRightBounds(area, sizing, DEFAULT_EDGE_MARGIN);
   }
 
@@ -872,18 +1006,198 @@ function initialWindowBounds(role, sizing, parent = null) {
     });
   }
 
-  if (role === "calendar") {
-    const formBounds = aboveAnchorBounds(area, windowSizing("create"), dayBounds, {
-      edgeMargin: DEFAULT_EDGE_MARGIN,
-      gap: DEFAULT_GAP,
+  return centeredBounds(area, sizing);
+}
+
+function isWorkspaceWindow(target) {
+  return Boolean(target && !target.isDestroyed() && WORKSPACE_WINDOW_KEYS.has(target.noteWindowKey));
+}
+
+function workspacePeer(target) {
+  if (!isWorkspaceWindow(target) || !target.isVisible()) return null;
+  const peerKey = target.noteWindowKey === PRIMARY_WINDOW_KEY ? "calendar" : PRIMARY_WINDOW_KEY;
+  const peer = windows.get(peerKey);
+  return peer && !peer.isDestroyed() && peer.isVisible() ? peer : null;
+}
+
+function boundsMatch(left, right) {
+  return Boolean(left && right
+    && left.x === right.x
+    && left.y === right.y
+    && left.width === right.width
+    && left.height === right.height);
+}
+
+function setLinkedBounds(target, bounds) {
+  if (!target || target.isDestroyed()) return;
+  expectedWorkspaceBounds.set(target, bounds);
+  ignoredWorkspaceEvents.set(target, Date.now() + 160);
+  target.setBounds(bounds, false);
+}
+
+function shouldIgnoreWorkspaceEvent(target) {
+  const ignoreUntil = ignoredWorkspaceEvents.get(target) || 0;
+  if (ignoreUntil > Date.now()) return true;
+  ignoredWorkspaceEvents.delete(target);
+  return false;
+}
+
+function beginWorkspaceInteraction(kind, source, peer) {
+  if (workspaceInteraction
+    && (workspaceInteraction.kind !== kind || workspaceInteraction.source !== source)) {
+    return null;
+  }
+  if (!workspaceInteraction) {
+    workspaceInteraction = {
+      kind,
+      source,
+      peer,
+      sourceStart: source.getBounds(),
+      peerStart: peer.getBounds(),
+    };
+  }
+  if (workspaceInteractionTimer) clearTimeout(workspaceInteractionTimer);
+  workspaceInteractionTimer = setTimeout(() => {
+    workspaceInteraction = null;
+    workspaceInteractionTimer = null;
+  }, 1800);
+  return workspaceInteraction;
+}
+
+function finishWorkspaceInteraction(kind, source) {
+  if (!workspaceInteraction
+    || workspaceInteraction.kind !== kind
+    || workspaceInteraction.source !== source) return;
+  if (kind === "move" || kind === "resize") {
+    const peer = workspaceInteraction.peer;
+    if (peer && !peer.isDestroyed()) {
+      const aligned = resizePeerBounds(
+        source.noteWindowKey,
+        source.getBounds(),
+        peer.getBounds(),
+        DEFAULT_GAP,
+      );
+      syncingWorkspaceBounds = true;
+      setLinkedBounds(peer, aligned);
+      syncingWorkspaceBounds = false;
+    }
+  }
+  if (workspaceInteractionTimer) clearTimeout(workspaceInteractionTimer);
+  workspaceInteractionTimer = setTimeout(() => {
+    workspaceInteraction = null;
+    workspaceInteractionTimer = null;
+  }, 80);
+}
+
+function attachWorkspaceWindow(target) {
+  target.on("will-move", (_event, nextBounds) => {
+    if (workspaceInteraction && workspaceInteraction.source !== target) return;
+    if (shouldIgnoreWorkspaceEvent(target)) return;
+    const expected = expectedWorkspaceBounds.get(target);
+    if (boundsMatch(expected, nextBounds)) {
+      expectedWorkspaceBounds.delete(target);
+      return;
+    }
+    if (syncingWorkspaceBounds) return;
+    const peer = workspacePeer(target);
+    if (!peer) return;
+    const interaction = beginWorkspaceInteraction("move", target, peer);
+    if (!interaction) return;
+    const peerBounds = translatePeerBounds(
+      interaction.sourceStart,
+      nextBounds,
+      interaction.peerStart,
+    );
+    syncingWorkspaceBounds = true;
+    setLinkedBounds(peer, peerBounds);
+    syncingWorkspaceBounds = false;
+  });
+  target.on("moved", () => finishWorkspaceInteraction("move", target));
+
+  target.on("will-resize", (_event, nextBounds) => {
+    if (workspaceInteraction && workspaceInteraction.source !== target) return;
+    if (shouldIgnoreWorkspaceEvent(target)) return;
+    const expected = expectedWorkspaceBounds.get(target);
+    if (boundsMatch(expected, nextBounds)) {
+      expectedWorkspaceBounds.delete(target);
+      return;
+    }
+    if (syncingWorkspaceBounds) return;
+    const peer = workspacePeer(target);
+    if (!peer) return;
+    const interaction = beginWorkspaceInteraction("resize", target, peer);
+    if (!interaction) return;
+    const peerBounds = resizePeerBounds(
+      target.noteWindowKey,
+      nextBounds,
+      interaction.peerStart,
+      DEFAULT_GAP,
+    );
+    syncingWorkspaceBounds = true;
+    setLinkedBounds(peer, peerBounds);
+    syncingWorkspaceBounds = false;
+  });
+  target.on("resized", () => finishWorkspaceInteraction("resize", target));
+
+  target.on("minimize", () => {
+    if (syncingWorkspaceState) return;
+    const peer = workspacePeer(target);
+    if (!peer || peer.isMinimized()) return;
+    syncingWorkspaceState = true;
+    peer.minimize();
+    syncingWorkspaceState = false;
+  });
+
+  target.on("restore", () => {
+    if (syncingWorkspaceState) return;
+    const peer = workspacePeer(target);
+    if (!peer || !peer.isMinimized()) return;
+    syncingWorkspaceState = true;
+    peer.restore();
+    syncingWorkspaceState = false;
+  });
+}
+
+function resizeWorkspaceDay(view) {
+  const day = windows.get(PRIMARY_WINDOW_KEY);
+  const calendar = windows.get("calendar");
+  if (!isWorkspaceWindow(day)) return;
+
+  const profileRole = ["create", "detail", "settings"].includes(view) ? view : "day";
+  const sizing = windowSizing(profileRole);
+  day.noteWorkspaceView = view;
+  if (!isWorkspaceWindow(calendar) || !calendar.isVisible()) {
+    const current = day.getBounds();
+    const display = screen.getDisplayMatching(current);
+    const next = fitBounds(display.workArea, {
+      x: current.x + current.width - sizing.width,
+      y: current.y,
+      width: sizing.width,
+      height: sizing.height,
     });
-    return leftOfBounds(area, sizing, formBounds, {
-      gap: DEFAULT_GAP,
-      verticalOffset: 18,
-    });
+    setLinkedBounds(day, next);
+    return;
   }
 
-  return centeredBounds(area, sizing);
+  const display = screen.getDisplayMatching(calendar.getBounds());
+  const pair = dayViewPairBounds(display.workArea, calendar.getBounds(), sizing, {
+    edgeMargin: DEFAULT_EDGE_MARGIN,
+    gap: DEFAULT_GAP,
+  });
+
+  syncingWorkspaceBounds = true;
+  setLinkedBounds(calendar, pair.calendar);
+  setLinkedBounds(day, pair.day);
+  syncingWorkspaceBounds = false;
+}
+
+function minimizeWorkspaceWindows() {
+  syncingWorkspaceState = true;
+  for (const key of WORKSPACE_WINDOW_KEYS) {
+    const target = windows.get(key);
+    if (target && !target.isDestroyed() && !target.isMinimized()) target.minimize();
+  }
+  syncingWorkspaceState = false;
 }
 
 function placeWindowAtDefault(target, role, parent = null) {
@@ -900,7 +1214,7 @@ function clamp(value, minimum, maximum) {
 }
 
 function fitDayWindow(target, counts) {
-  if (target.isDestroyed() || target.isMaximized() || target.isMinimized()) return;
+  if (target.isDestroyed() || target.isMaximized() || target.isMinimized() || target.noteWorkspaceView !== "day") return;
 
   const { itemCount, pendingCount, completedCount } = counts;
   const bounds = target.getBounds();
@@ -928,10 +1242,23 @@ function fitDayWindow(target, counts) {
   );
   if (height === bounds.height) return;
 
-  target.setBounds(bottomRightBounds(display.workArea, {
-    width: bounds.width,
-    height,
-  }, DEFAULT_EDGE_MARGIN), false);
+  const calendar = windows.get("calendar");
+  if (isWorkspaceWindow(calendar) && calendar.isVisible()) {
+    const pair = dayViewPairBounds(display.workArea, calendar.getBounds(), {
+      width: bounds.width,
+      height,
+    }, {
+      edgeMargin: DEFAULT_EDGE_MARGIN,
+      gap: DEFAULT_GAP,
+    });
+    syncingWorkspaceBounds = true;
+    setLinkedBounds(calendar, pair.calendar);
+    setLinkedBounds(target, pair.day);
+    syncingWorkspaceBounds = false;
+    return;
+  }
+
+  target.setBounds({ ...bounds, height }, false);
 }
 
 function installTray() {
@@ -956,16 +1283,22 @@ function hideApplicationWindows() {
 
 function restoreApplicationWindows() {
   const currentPrimary = windows.get(PRIMARY_WINDOW_KEY);
-  const primary = createDayWindow(currentPrimary?.noteDate || todayKey());
+  const workspace = createWorkspace(currentPrimary?.noteDate || todayKey());
   if (hiddenToTray) {
     for (const target of windows.values()) {
-      if (!target.isDestroyed()) target.show();
+      if (target.isDestroyed()) continue;
+      if (target.noteWindowKey === "calendar" && !calendarExpanded) continue;
+      target.show();
     }
   }
   hiddenToTray = false;
-  if (primary.isMinimized()) primary.restore();
-  primary.show();
-  primary.focus();
+  if (workspace.day.isMinimized()) workspace.day.restore();
+  workspace.day.show();
+  if (workspace.calendar) {
+    if (workspace.calendar.isMinimized()) workspace.calendar.restore();
+    workspace.calendar.show();
+  }
+  workspace.day.focus();
 }
 
 function installApplicationMenu() {
@@ -974,17 +1307,17 @@ function installApplicationMenu() {
       label: "日程",
       submenu: [
         {
-          label: "新建日程窗口",
+          label: "新建日程",
           accelerator: "CmdOrCtrl+N",
           click: () => createCreateWindow(todayKey()),
         },
         {
-          label: "显示日历",
+          label: "展开/收回日历",
           accelerator: "CmdOrCtrl+Shift+C",
-          click: () => createCalendarWindow(),
+          click: () => toggleCalendarWindow(),
         },
         {
-          label: "显示单日日程",
+          label: "显示当天日程",
           accelerator: "CmdOrCtrl+Shift+T",
           click: () => createDayWindow(todayKey()),
         },

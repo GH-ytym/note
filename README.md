@@ -16,8 +16,8 @@
 
 | 版本 | 适合场景 | 下载 |
 | --- | --- | --- |
-| 安装版 | 安装到电脑，并创建桌面与开始菜单快捷方式 | [Note-Setup-0.2.1.exe](https://github.com/GH-ytym/note/releases/download/v0.2.1/Note-Setup-0.2.1.exe) |
-| 便携版 | 不安装，下载后直接运行 | [Note-0.2.1.exe](https://github.com/GH-ytym/note/releases/download/v0.2.1/Note-0.2.1.exe) |
+| 安装版 | 安装到电脑，并创建桌面与开始菜单快捷方式 | [Note-Setup-0.3.0.exe](https://github.com/GH-ytym/note/releases/download/v0.3.0/Note-Setup-0.3.0.exe) |
+| 便携版 | 不安装，下载后直接运行 | [Note-0.3.0.exe](https://github.com/GH-ytym/note/releases/download/v0.3.0/Note-0.3.0.exe) |
 
 安装包已经包含界面、Go 后端和 SQLite 支持，使用者不需要另行安装 Go、Node.js、数据库或其他运行环境。
 
@@ -27,6 +27,7 @@
 
 - **每日清单**：按日期查看待办，并以“未完成 / 已完成”分区；标题和时间可以直接修改。
 - **月历视图**：查看每一天的日程与颜色标记，支持切换月份和打开指定日期。
+- **双面板工作区**：月历位于左侧、每日清单位于右侧；可以从每日清单展开或收回月历，移动任一面板时两者保持对齐。
 - **重复日程**：支持仅一次、每天、工作日、周末、每周、每月，以及选择多个自定义日期。
 - **完成状态**：可以只完成当天这一项，也可以把整个周期日程标记为全部完成。
 - **两种提醒**：静默提醒进入 Windows 通知中心；弹窗提醒会打开置顶的独立窗口。

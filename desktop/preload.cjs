@@ -2,7 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
   isDesktop: true,
-  openCalendar: () => ipcRenderer.invoke("note:open-calendar"),
+  toggleCalendar: () => ipcRenderer.invoke("note:toggle-calendar"),
+  getCalendarVisibility: () => ipcRenderer.invoke("note:calendar-visibility"),
   openCompose: (payload) => ipcRenderer.invoke("note:open-compose", payload),
   openCreate: (payload) => ipcRenderer.invoke("note:open-create", payload),
   openDetail: (payload) => ipcRenderer.invoke("note:open-detail", payload),
@@ -45,6 +46,16 @@ contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("note:day-date-changed", listener);
     return () => ipcRenderer.removeListener("note:day-date-changed", listener);
+  },
+  onWorkspaceViewChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("note:workspace-view-changed", listener);
+    return () => ipcRenderer.removeListener("note:workspace-view-changed", listener);
+  },
+  onCalendarVisibilityChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("note:calendar-visibility-changed", listener);
+    return () => ipcRenderer.removeListener("note:calendar-visibility-changed", listener);
   },
   onDatePickerStateChanged: (callback) => {
     const listener = (_event, payload) => callback(payload);

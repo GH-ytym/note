@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	apperrors "note/internal/errors"
 	todoapp "note/internal/todo"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 )
 
 // CreateTodo creates a Todo and sends the error via gin
-func (h *Handler) CreateTodo(c *gin.Context) {
+func (h *TodoHandler) CreateTodo(c *gin.Context) {
 	var req CreateTodoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -36,22 +37,22 @@ func (h *Handler) CreateTodo(c *gin.Context) {
 		CustomDates: customDates,
 	}
 	//进入service，传递command
-	item, err := h.todoService.Create(
+	item, err := h.service.Create(
 		c.Request.Context(),
 		command,
 	)
-	if errors.Is(err, todoapp.ErrTitleRequired) ||
-		errors.Is(err, todoapp.ErrInvalidContent) ||
-		errors.Is(err, todoapp.ErrInvalidColor) ||
-		errors.Is(err, todoapp.ErrInvalidRepeatMode) ||
-		errors.Is(err, todoapp.ErrInvalidNotifyMode) ||
-		errors.Is(err, todoapp.ErrStartsAtRequired) ||
-		errors.Is(err, todoapp.ErrCustomDatesRequired) ||
-		errors.Is(err, todoapp.ErrCustomDatesNotAllowed) {
+	if errors.Is(err, apperrors.ErrTitleRequired) ||
+		errors.Is(err, apperrors.ErrTodoInvalidContent) ||
+		errors.Is(err, apperrors.ErrTodoInvalidColor) ||
+		errors.Is(err, apperrors.ErrInvalidRepeatMode) ||
+		errors.Is(err, apperrors.ErrInvalidNotifyMode) ||
+		errors.Is(err, apperrors.ErrTodoStartsAtRequired) ||
+		errors.Is(err, apperrors.ErrCustomDatesRequired) ||
+		errors.Is(err, apperrors.ErrCustomDatesNotAllowed) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if errors.Is(err, todoapp.ErrTitleConflict) {
+	if errors.Is(err, apperrors.ErrTodoTitleConflict) {
 		c.JSON(http.StatusConflict, gin.H{"error": "title already exists"})
 		return
 	}
@@ -63,18 +64,18 @@ func (h *Handler) CreateTodo(c *gin.Context) {
 }
 
 // ListTodos returns a list of Todos
-func (h *Handler) ListTodos(c *gin.Context) {
+func (h *TodoHandler) ListTodos(c *gin.Context) {
 	var q ListTodosQuery
 	if err := c.ShouldBindQuery(&q); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query"})
 		return
 	}
 
-	page, err := h.todoService.List(c.Request.Context(), todoapp.ListQuery{
+	page, err := h.service.List(c.Request.Context(), todoapp.ListQuery{
 		Page:     q.Page,
 		PageSize: q.PageSize,
 	})
-	if errors.Is(err, todoapp.ErrInvalidPagination) {
+	if errors.Is(err, apperrors.ErrInvalidPagination) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query"})
 		return
 	}
@@ -93,15 +94,15 @@ func (h *Handler) ListTodos(c *gin.Context) {
 }
 
 // GetTodo returns a Todo by ID.
-func (h *Handler) GetTodo(c *gin.Context) {
+func (h *TodoHandler) GetTodo(c *gin.Context) {
 	id, ok := parseTodoID(c)
 	if !ok {
 		return
 	}
 
-	item, err := h.todoService.Get(c.Request.Context(), id)
+	item, err := h.service.Get(c.Request.Context(), id)
 
-	if errors.Is(err, todoapp.ErrNotFound) {
+	if errors.Is(err, apperrors.ErrTodoNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "todo not found",
 		})
@@ -119,7 +120,7 @@ func (h *Handler) GetTodo(c *gin.Context) {
 }
 
 // PatchTodo updates a Todo with optimistic locking
-func (h *Handler) PatchTodo(c *gin.Context) {
+func (h *TodoHandler) PatchTodo(c *gin.Context) {
 	//调整id
 	id, ok := parseTodoID(c)
 	if !ok {
@@ -150,32 +151,32 @@ func (h *Handler) PatchTodo(c *gin.Context) {
 		}
 		command.CustomDates = &customDates
 	}
-	item, err := h.todoService.Patch(c.Request.Context(), id, command)
+	item, err := h.service.Patch(c.Request.Context(), id, command)
 
-	if errors.Is(err, todoapp.ErrTitleRequired) ||
-		errors.Is(err, todoapp.ErrInvalidContent) ||
-		errors.Is(err, todoapp.ErrInvalidColor) ||
-		errors.Is(err, todoapp.ErrNothingToUpdate) ||
-		errors.Is(err, todoapp.ErrInvalidVersion) ||
-		errors.Is(err, todoapp.ErrInvalidRepeatMode) ||
-		errors.Is(err, todoapp.ErrInvalidNotifyMode) ||
-		errors.Is(err, todoapp.ErrStartsAtRequired) ||
-		errors.Is(err, todoapp.ErrCustomDatesRequired) ||
-		errors.Is(err, todoapp.ErrCustomDatesNotAllowed) {
+	if errors.Is(err, apperrors.ErrTitleRequired) ||
+		errors.Is(err, apperrors.ErrTodoInvalidContent) ||
+		errors.Is(err, apperrors.ErrTodoInvalidColor) ||
+		errors.Is(err, apperrors.ErrNothingToUpdate) ||
+		errors.Is(err, apperrors.ErrTodoInvalidVersion) ||
+		errors.Is(err, apperrors.ErrInvalidRepeatMode) ||
+		errors.Is(err, apperrors.ErrInvalidNotifyMode) ||
+		errors.Is(err, apperrors.ErrTodoStartsAtRequired) ||
+		errors.Is(err, apperrors.ErrCustomDatesRequired) ||
+		errors.Is(err, apperrors.ErrCustomDatesNotAllowed) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
 		return
 	}
-	if errors.Is(err, todoapp.ErrTitleConflict) {
+	if errors.Is(err, apperrors.ErrTodoTitleConflict) {
 		c.JSON(http.StatusConflict, gin.H{"error": "title already exists"})
 		return
 	}
-	if errors.Is(err, todoapp.ErrNotFound) {
+	if errors.Is(err, apperrors.ErrTodoNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "todo not found"})
 		return
 	}
-	if errors.Is(err, todoapp.ErrConcurrentUpdate) {
+	if errors.Is(err, apperrors.ErrTodoConcurrentUpdate) {
 		c.JSON(http.StatusConflict, gin.H{"error": "version conflict"})
 		return
 	}
@@ -190,14 +191,14 @@ func (h *Handler) PatchTodo(c *gin.Context) {
 }
 
 // DeleteTodo deletes a Todo by ID.
-func (h *Handler) DeleteTodo(c *gin.Context) {
+func (h *TodoHandler) DeleteTodo(c *gin.Context) {
 	id, ok := parseTodoID(c)
 	if !ok {
 		return
 	}
 
-	err := h.todoService.Delete(c.Request.Context(), id)
-	if errors.Is(err, todoapp.ErrNotFound) {
+	err := h.service.Delete(c.Request.Context(), id)
+	if errors.Is(err, apperrors.ErrTodoNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "todo not found",
 		})
@@ -213,7 +214,7 @@ func (h *Handler) DeleteTodo(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (h *Handler) PatchOccurrenceDone(c *gin.Context) {
+func (h *TodoHandler) PatchOccurrenceDone(c *gin.Context) {
 	id, ok := parseTodoID(c)
 	if !ok {
 		return
@@ -247,14 +248,14 @@ func (h *Handler) PatchOccurrenceDone(c *gin.Context) {
 		return
 	}
 
-	err = h.todoService.SetOccurrenceDone(
+	err = h.service.SetOccurrenceDone(
 		c.Request.Context(),
 		id,
 		occursOn,
 		*req.Done,
 	)
 
-	if errors.Is(err, todoapp.ErrNotFound) {
+	if errors.Is(err, apperrors.ErrTodoNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "todo not found",
 		})

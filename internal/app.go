@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"note/internal/event"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -75,15 +76,21 @@ func Run() (runErr error) {
 	}
 	log.Printf("SQLite database: %s", databasePath)
 
+	//组装todo链
 	// 静态类型是 todo.Repository；实际值是隐藏的 *todo.gormRepository。
 	todoRepository := todo.NewGORMRepository(db)
 
 	// 静态类型是 todo.TodoService；实际值是隐藏的 *todo.service。
 	todoService := todo.NewService(todoRepository)
 
-	// 静态类型是 *handler.Handler。
+	// 静态类型是 *handler.TodoHandler。
 	// Handler 只保存 todo.TodoService，不接触具体的 service 实现。
-	hdlr := handler.NewHandler(todoService)
+	todoHandler := handler.NewTodoHandler(todoService)
+
+	//event也是同理
+	eventRepository := event.NewGORMRepository(db)
+	eventService := event.NewService(eventRepository)
+	eventHandler := handler.NewEventHandler(eventService)
 
 	//启动服务+优雅关闭
 	serverAddress := os.Getenv("HTTP_ADDR")
@@ -93,7 +100,7 @@ func Run() (runErr error) {
 
 	server := &http.Server{
 		Addr:              serverAddress,
-		Handler:           router.NewWithWeb(hdlr, os.Getenv("NOTE_WEB_DIR")),
+		Handler:           router.NewWithWeb(todoHandler, eventHandler, os.Getenv("NOTE_WEB_DIR")),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	listener, err := net.Listen("tcp", server.Addr)

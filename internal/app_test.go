@@ -42,6 +42,9 @@ func TestSQLiteDatabase(t *testing.T) {
 	if err := migrateDatabase(db); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
+	if !db.Migrator().HasTable(&model.Event{}) {
+		t.Fatal("events table was not created")
+	}
 
 	var foreignKeys int
 	if err := db.Raw("PRAGMA foreign_keys").Scan(&foreignKeys).Error; err != nil {
@@ -77,6 +80,42 @@ func TestSQLiteDatabase(t *testing.T) {
 	}
 	if len(loaded.CustomDates) != 1 {
 		t.Fatalf("custom dates did not round-trip: got %d", len(loaded.CustomDates))
+	}
+
+	eventStartsAt := time.Date(2026, time.August, 30, 14, 5, 37, 0, time.FixedZone("CST", 8*60*60))
+	eventEndsAt := time.Date(2026, time.August, 30, 15, 45, 12, 0, time.FixedZone("CST", 8*60*60))
+	event := model.Event{
+		Title:    "Calendar event integration test",
+		Color:    "#5B8DEF",
+		StartsAt: eventStartsAt,
+		EndsAt:   eventEndsAt,
+	}
+	if err := db.Create(&event).Error; err != nil {
+		t.Fatalf("create calendar event: %v", err)
+	}
+
+	var loadedEvent model.Event
+	if err := db.First(&loadedEvent, event.ID).Error; err != nil {
+		t.Fatalf("load calendar event: %v", err)
+	}
+	if !loadedEvent.StartsAt.Equal(eventStartsAt) || !loadedEvent.EndsAt.Equal(eventEndsAt) {
+		t.Fatalf(
+			"calendar event time range did not round-trip: got %v-%v, want %v-%v",
+			loadedEvent.StartsAt,
+			loadedEvent.EndsAt,
+			eventStartsAt,
+			eventEndsAt,
+		)
+	}
+
+	invalidEvent := model.Event{
+		Title:    "Invalid calendar event",
+		Color:    "#F3B51B",
+		StartsAt: eventStartsAt,
+		EndsAt:   eventStartsAt,
+	}
+	if err := db.Create(&invalidEvent).Error; err == nil {
+		t.Fatal("calendar event with a non-positive duration was accepted")
 	}
 
 	sameContent := model.Todo{
@@ -180,6 +219,9 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 	}
 	if err := migrateDatabase(db); err != nil {
 		t.Fatalf("repeat legacy migration: %v", err)
+	}
+	if !db.Migrator().HasTable(&model.Event{}) {
+		t.Fatal("events table was not added to the legacy database")
 	}
 
 	var loaded model.Todo

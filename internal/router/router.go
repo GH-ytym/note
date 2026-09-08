@@ -10,16 +10,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func New(h *handler.Handler) *gin.Engine {
-	return NewWithWeb(h, "")
+func New(th *handler.TodoHandler, eh *handler.EventHandler) *gin.Engine {
+	return NewWithWeb(th, eh, "")
 }
 
 // NewWithWeb creates the API router and optionally serves a built React app.
 // webDir is empty during normal API development and points to web/dist in Electron.
-func NewWithWeb(h *handler.Handler, webDir string) *gin.Engine {
+func NewWithWeb(th *handler.TodoHandler, eh *handler.EventHandler, webDir string) *gin.Engine {
 	r := gin.Default()
-	registerAPI(r, h)
-	registerAPI(r.Group("/api"), h)
+	registerAPI(r, th, eh)
+	registerAPI(r.Group("/api"), th, eh)
 
 	if webDir != "" {
 		indexPath := filepath.Join(webDir, "index.html")
@@ -39,22 +39,27 @@ func NewWithWeb(h *handler.Handler, webDir string) *gin.Engine {
 	return r
 }
 
-func registerAPI(r gin.IRouter, h *handler.Handler) {
+func registerAPI(r gin.IRouter, th *handler.TodoHandler, eh *handler.EventHandler) {
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
-	r.GET("/calendar", h.GetCalendar)
+	r.GET("/calendar", th.GetCalendar)
 
 	todos := r.Group("/todos")
 	{
-		todos.POST("", h.CreateTodo)
-		todos.GET("", h.ListTodos)
-		todos.GET("/:id", h.GetTodo)
-		todos.PATCH("/:id", h.PatchTodo)
+		todos.POST("", th.CreateTodo)
+		todos.GET("", th.ListTodos)
+		todos.GET("/:id", th.GetTodo)
+		todos.PATCH("/:id", th.PatchTodo)
 		todos.PATCH(
 			"/:id/occurrences/:date",
-			h.PatchOccurrenceDone,
+			th.PatchOccurrenceDone,
 		)
-		todos.DELETE("/:id", h.DeleteTodo)
+		todos.DELETE("/:id", th.DeleteTodo)
+	}
+
+	events := r.Group("/events")
+	{
+		events.POST("", eh.CreateEvent)
 	}
 }

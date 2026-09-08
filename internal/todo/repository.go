@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	apperrors "note/internal/errors"
 	"note/internal/model"
 
 	"gorm.io/gorm"
@@ -120,7 +121,7 @@ func NewGORMRepository(db *gorm.DB) Repository {
 func (r *gormRepository) Create(ctx context.Context, item *model.Todo) error {
 	err := r.db.WithContext(ctx).Create(item).Error
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
-		return ErrTitleConflict
+		return apperrors.ErrTodoTitleConflict
 	}
 	if err != nil {
 		return fmt.Errorf("create todo: %w", err)
@@ -160,7 +161,7 @@ func (r *gormRepository) ByID(ctx context.Context, id uint) (model.Todo, error) 
 		First(&item, id).Error
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return model.Todo{}, ErrNotFound
+		return model.Todo{}, apperrors.ErrTodoNotFound
 	}
 
 	if err != nil {
@@ -209,7 +210,7 @@ func (r *gormRepository) Patch(
 	err := db.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&model.Todo{}).Where("id=? AND version=?", id, command.Version).Updates(updates)
 		if errors.Is(res.Error, gorm.ErrDuplicatedKey) {
-			return ErrTitleConflict
+			return apperrors.ErrTodoTitleConflict
 		}
 		if res.Error != nil {
 			return fmt.Errorf(
@@ -236,10 +237,10 @@ func (r *gormRepository) Patch(
 
 			//1.id不对
 			if cnt == 0 {
-				return ErrNotFound
+				return apperrors.ErrTodoNotFound
 			}
 			//id对还查不到只能是version不对，说明有并发更新
-			return ErrConcurrentUpdate
+			return apperrors.ErrTodoConcurrentUpdate
 		}
 
 		// 用自定义日期替换旧集合
@@ -301,7 +302,7 @@ func (r *gormRepository) Delete(ctx context.Context, id uint) error {
 		return fmt.Errorf("delete todo %d: %w", id, result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return ErrNotFound
+		return apperrors.ErrTodoNotFound
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package todo
 import (
 	"context"
 	"fmt"
+	apperrors "note/internal/errors"
 	"note/internal/model"
 	"sort"
 	"time"
@@ -21,7 +22,7 @@ func (s *service) CalendarOccurrences(
 	to time.Time,
 ) ([]CalendarOccurrence, error) {
 	if from.IsZero() || to.IsZero() || !from.Before(to) {
-		return nil, ErrInvalidCalendarRange
+		return nil, apperrors.ErrInvalidCalendarRange
 	}
 
 	//找到所有的todo候选
@@ -231,7 +232,7 @@ func recurrenceOption(
 		option.Freq = rrule.MONTHLY
 
 	default:
-		return rrule.ROption{}, ErrInvalidRepeatMode
+		return rrule.ROption{}, apperrors.ErrInvalidRepeatMode
 	}
 
 	return option, nil

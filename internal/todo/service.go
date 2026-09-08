@@ -2,24 +2,12 @@ package todo
 
 import (
 	"context"
-	cryptorand "crypto/rand"
-	"math/big"
-	"regexp"
 	"strings"
-	"sync"
 	"time"
 
+	apperrors "note/internal/errors"
 	"note/internal/model"
-)
-
-var (
-	hexColorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
-	eventColors     = []string{
-		"#F3B51B", "#F47C48", "#E95B78", "#A879F2",
-		"#5B8DEF", "#35B7A0", "#82B94B", "#D4A373",
-	}
-	randomColorMu        sync.Mutex
-	lastRandomColorIndex = -1
+	"note/internal/utils"
 )
 
 // TodoService 声明 Todo 对外提供的业务操作。
@@ -56,7 +44,7 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 	//处理在handler组装的command
 	title := strings.TrimSpace(command.Title)
 	if title == "" {
-		return model.Todo{}, ErrTitleRequired
+		return model.Todo{}, apperrors.ErrTitleRequired
 	}
 
 	//没传 content       → content = title
@@ -73,19 +61,19 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 
 	color := command.Color
 	if color == "" {
-		color = randomEventColor()
+		color = utils.RandomColor()
 	}
-	if !hexColorPattern.MatchString(color) {
-		return model.Todo{}, ErrInvalidColor
+	color, validColor := utils.NormalizeHexColor(color)
+	if !validColor {
+		return model.Todo{}, apperrors.ErrTodoInvalidColor
 	}
-	color = strings.ToUpper(color)
 
 	if !validRepeatMode(command.RepeatMode) {
-		return model.Todo{}, ErrInvalidRepeatMode
+		return model.Todo{}, apperrors.ErrInvalidRepeatMode
 	}
 	// 每个 Todo 都必须从一个明确的日期和时间开始。
 	if command.StartsAt == nil {
-		return model.Todo{}, ErrStartsAtRequired
+		return model.Todo{}, apperrors.ErrTodoStartsAtRequired
 	}
 
 	//解析提醒模式
@@ -94,16 +82,16 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 		notifyMode = model.NotifyNone
 	}
 	if !validNotifyMode(notifyMode) {
-		return model.Todo{}, ErrInvalidNotifyMode
+		return model.Todo{}, apperrors.ErrInvalidNotifyMode
 	}
 
 	//必须是custom才能组装customDates
 	if command.RepeatMode == model.RepeatCustom {
 		if len(command.CustomDates) == 0 {
-			return model.Todo{}, ErrCustomDatesRequired
+			return model.Todo{}, apperrors.ErrCustomDatesRequired
 		}
 	} else if len(command.CustomDates) > 0 {
-		return model.Todo{}, ErrCustomDatesNotAllowed
+		return model.Todo{}, apperrors.ErrCustomDatesNotAllowed
 	}
 
 	dates := make([]model.TodoDate, 0, len(command.CustomDates))
@@ -138,34 +126,6 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 	return item, nil
 }
 
-// randomEventColor 使用系统随机源，并排除上一次随机到的颜色。
-// “随机”仍允许以后再次出现同一种颜色，但不会连续两次都一样。
-func randomEventColor() string {
-	randomColorMu.Lock()
-	defer randomColorMu.Unlock()
-
-	if len(eventColors) == 1 {
-		return eventColors[0]
-	}
-
-	choiceCount := len(eventColors)
-	if lastRandomColorIndex >= 0 {
-		choiceCount--
-	}
-	randomValue, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(choiceCount)))
-	if err != nil {
-		lastRandomColorIndex = (lastRandomColorIndex + 1) % len(eventColors)
-		return eventColors[lastRandomColorIndex]
-	}
-
-	nextIndex := int(randomValue.Int64())
-	if lastRandomColorIndex >= 0 && nextIndex >= lastRandomColorIndex {
-		nextIndex++
-	}
-	lastRandomColorIndex = nextIndex
-	return eventColors[nextIndex]
-}
-
 func (s *service) List(ctx context.Context, query ListQuery) (Page, error) {
 	if query.Page == 0 {
 		query.Page = 1
@@ -174,7 +134,7 @@ func (s *service) List(ctx context.Context, query ListQuery) (Page, error) {
 		query.PageSize = 20
 	}
 	if query.Page < 1 || query.PageSize < 1 || query.PageSize > 100 {
-		return Page{}, ErrInvalidPagination
+		return Page{}, apperrors.ErrInvalidPagination
 	}
 
 	items, total, err := s.repo.List(ctx, query)
@@ -201,7 +161,7 @@ func (s *service) Patch(
 ) (model.Todo, error) {
 	// 乐观锁必须携带版本号。
 	if command.Version == 0 {
-		return model.Todo{}, ErrInvalidVersion
+		return model.Todo{}, apperrors.ErrTodoInvalidVersion
 	}
 
 	//啥都没改则不进入repo防止version自增
@@ -213,14 +173,14 @@ func (s *service) Patch(
 		command.RepeatMode == nil &&
 		command.AllDone == nil &&
 		command.CustomDates == nil {
-		return model.Todo{}, ErrNothingToUpdate
+		return model.Todo{}, apperrors.ErrNothingToUpdate
 	}
 
 	//处理command字段
 	if command.Title != nil {
 		title := strings.TrimSpace(*command.Title)
 		if title == "" {
-			return model.Todo{}, ErrTitleRequired
+			return model.Todo{}, apperrors.ErrTitleRequired
 		}
 		command.Title = &title
 	}
@@ -232,10 +192,9 @@ func (s *service) Patch(
 	}
 
 	if command.Color != nil {
-		color := strings.ToUpper(*command.Color)
-
-		if !hexColorPattern.MatchString(color) {
-			return model.Todo{}, ErrInvalidColor
+		color, validColor := utils.NormalizeHexColor(*command.Color)
+		if !validColor {
+			return model.Todo{}, apperrors.ErrTodoInvalidColor
 		}
 
 		command.Color = &color
@@ -243,11 +202,11 @@ func (s *service) Patch(
 
 	if command.RepeatMode != nil &&
 		!validRepeatMode(*command.RepeatMode) {
-		return model.Todo{}, ErrInvalidRepeatMode
+		return model.Todo{}, apperrors.ErrInvalidRepeatMode
 	}
 
 	if command.NotifyMode != nil && !validNotifyMode(*command.NotifyMode) {
-		return model.Todo{}, ErrInvalidNotifyMode
+		return model.Todo{}, apperrors.ErrInvalidNotifyMode
 	}
 
 	//先找到改之前的这条todo
@@ -275,7 +234,7 @@ func (s *service) Patch(
 
 	// 去重自定义日期
 	if command.CustomDates != nil {
-		dates := uniqueDates(*command.CustomDates)
+		dates := utils.UniqueDates(*command.CustomDates)
 		command.CustomDates = &dates
 	}
 
@@ -286,18 +245,18 @@ func (s *service) Patch(
 		// 本次请求传了 custom_dates，就校验新的日期集合。
 		case command.CustomDates != nil:
 			if len(*command.CustomDates) == 0 {
-				return model.Todo{}, ErrCustomDatesRequired
+				return model.Todo{}, apperrors.ErrCustomDatesRequired
 			}
 		// 原来不是custom就没有日期可用
 		//或者原来的日期为空，总之没有可以继承的旧日期
 		case current.RepeatMode != model.RepeatCustom || len(current.CustomDates) == 0:
-			return model.Todo{}, ErrCustomDatesRequired
+			return model.Todo{}, apperrors.ErrCustomDatesRequired
 		}
 	} else {
 		//处理非自定义模式
 		// 非 custom 模式不能携带自定义日期。
 		if command.CustomDates != nil && len(*command.CustomDates) > 0 {
-			return model.Todo{}, ErrCustomDatesNotAllowed
+			return model.Todo{}, apperrors.ErrCustomDatesNotAllowed
 		}
 
 		// 从 custom 切换到其他模式时，主动清空旧日期。
@@ -358,23 +317,4 @@ func validNotifyMode(mode model.NotifyMode) bool {
 	default:
 		return false
 	}
-}
-
-// 时间去重
-func uniqueDates(values []time.Time) []time.Time {
-	dates := make([]time.Time, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-
-	for _, date := range values {
-		key := date.Format(time.DateOnly)
-
-		if _, exists := seen[key]; exists {
-			continue
-		}
-
-		seen[key] = struct{}{}
-		dates = append(dates, date)
-	}
-
-	return dates
 }

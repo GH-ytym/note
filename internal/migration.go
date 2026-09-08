@@ -12,6 +12,20 @@ import (
 // final GORM schema. Each step is idempotent so an interrupted migration can be
 // continued on the next application start.
 func migrateDatabase(db *gorm.DB) error {
+	if err := migrateTodoSchema(db); err != nil {
+		return err
+	}
+
+	// Event has no relation to the legacy todos table, so it can use
+	// GORM's idempotent schema synchronization independently.
+	if err := db.AutoMigrate(&model.Event{}); err != nil {
+		return fmt.Errorf("auto migrate events: %w", err)
+	}
+
+	return nil
+}
+
+func migrateTodoSchema(db *gorm.DB) error {
 	if !db.Migrator().HasTable(&model.Todo{}) {
 		if err := db.AutoMigrate(
 			&model.Todo{},

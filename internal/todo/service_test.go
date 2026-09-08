@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	apperrors "note/internal/errors"
 	"note/internal/model"
 
 	"github.com/ncruces/go-sqlite3/gormlite"
@@ -72,17 +73,6 @@ func TestCreateUsesTitleWhenContentIsMissingOrBlank(t *testing.T) {
 	}
 }
 
-func TestRandomEventColorDoesNotRepeatImmediately(t *testing.T) {
-	previous := randomEventColor()
-	for range 64 {
-		next := randomEventColor()
-		if next == previous {
-			t.Fatalf("random color repeated immediately: %s", next)
-		}
-		previous = next
-	}
-}
-
 func TestTitleIsUniqueAndContentCanRepeat(t *testing.T) {
 	service := testService(t)
 	sharedContent := "相同内容"
@@ -96,8 +86,8 @@ func TestTitleIsUniqueAndContentCanRepeat(t *testing.T) {
 		StartsAt:   func() *time.Time { value := time.Now(); return &value }(),
 		RepeatMode: model.RepeatOnce,
 	})
-	if !errors.Is(err, ErrTitleConflict) {
-		t.Fatalf("duplicate title error = %v, want %v", err, ErrTitleConflict)
+	if !errors.Is(err, apperrors.ErrTodoTitleConflict) {
+		t.Fatalf("duplicate title error = %v, want %v", err, apperrors.ErrTodoTitleConflict)
 	}
 }
 

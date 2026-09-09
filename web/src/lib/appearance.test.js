@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appearanceTokens, contrast } from "./appearance.js";
+import {
+  appearanceTokens,
+  contrast,
+  normalizeSettings,
+} from "./appearance.js";
 
 test("text and accent ink remain readable across light, dark, and medium backgrounds", () => {
   for (const backgroundColor of ["#000000", "#FFFFFF", "#EEEADC", "#808080", "#777777", "#91A0A8", "#B065A0"]) {
@@ -14,4 +18,19 @@ test("text and accent ink remain readable across light, dark, and medium backgro
       assert.ok(contrast(tokens["--on-theme"], themeColor) >= 4.5);
     }
   }
+});
+
+test("settings migration fills preferences and clamps clock tracks", () => {
+  const migrated = normalizeSettings({
+    backgroundColor: "#112233",
+    themeColor: "#abcdef",
+    opacity: 95,
+  });
+  assert.equal(migrated.defaultView, "month");
+  assert.equal(migrated.dayViewMode, "clock");
+  assert.equal(migrated.clockTracks, 7);
+
+  assert.equal(normalizeSettings({ clockTracks: 99 }).clockTracks, 10);
+  assert.equal(normalizeSettings({ clockTracks: 1 }).clockTracks, 3);
+  assert.equal(normalizeSettings({ defaultView: "invalid" }).defaultView, "month");
 });

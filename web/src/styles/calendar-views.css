@@ -122,6 +122,20 @@
 .year-month:hover {
   background: var(--cell-hover);
 }
+.year-month.is-today-pulse {
+  animation: today-month-pulse 420ms ease-out;
+}
+@keyframes today-month-pulse {
+  0%,
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
+  35% {
+    background: rgb(var(--theme-rgb) / 20%);
+    box-shadow: inset 0 0 0 2px var(--yellow);
+  }
+}
 .year-month > strong {
   display: block;
   color: var(--accent-ink);
@@ -311,6 +325,135 @@
   pointer-events: none;
   z-index: 20;
 }
+.horizontal-timeline-inner {
+  width: 1512px;
+  min-height: 100%;
+}
+.horizontal-timeline-head {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: 36px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.horizontal-timeline-head > span {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  width: 72px;
+  height: 36px;
+  place-items: center;
+  color: var(--muted);
+  background: var(--panel);
+  font-size: 10px;
+}
+.horizontal-timeline-head time {
+  position: absolute;
+  top: 50%;
+  color: var(--muted);
+  font-size: 10px;
+  transform: translate(-50%, -50%);
+}
+.horizontal-timeline-day {
+  display: grid;
+  width: 1512px;
+  height: var(--horizontal-row-height);
+  grid-template-columns: 72px 1440px;
+  border-bottom: 1px solid var(--line);
+}
+.horizontal-timeline-day > button {
+  position: sticky;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--panel);
+  cursor: pointer;
+}
+.horizontal-timeline-day > button:hover,
+.horizontal-timeline-day > button.is-today {
+  color: var(--accent-ink);
+}
+.horizontal-timeline-track {
+  position: relative;
+  height: 100%;
+  background: repeating-linear-gradient(
+    to right,
+    var(--line) 0,
+    var(--line) 1px,
+    transparent 1px,
+    transparent 60px
+  );
+}
+.horizontal-event {
+  position: absolute;
+  min-width: 3px;
+  overflow: hidden;
+  padding: 0 4px;
+  border: 1px solid var(--event-color);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--event-soft);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.horizontal-event:hover,
+.horizontal-event:focus-visible,
+.horizontal-event.is-selected {
+  z-index: 25;
+  filter: brightness(1.2);
+}
+.horizontal-todo {
+  position: absolute;
+  width: 12px;
+  height: 22px;
+  border-left: 3px solid var(--event-color);
+  cursor: pointer;
+}
+.horizontal-todo::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--event-color);
+}
+.horizontal-todo span {
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  max-width: 90px;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--panel);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.horizontal-todo.is-done span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.horizontal-timeline-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 20;
+  border-left: 1px solid var(--yellow);
+  pointer-events: none;
+}
 @media (max-width: 440px) {
   .multi-view-calendar .calendar-header {
     gap: 4px;
@@ -330,5 +473,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     padding: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .year-month.is-today-pulse {
+    animation: none;
+    box-shadow: inset 0 0 0 2px var(--yellow);
   }
 }

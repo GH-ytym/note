@@ -1,13 +1,27 @@
+import { useEffect, useRef } from "react";
 import { buildMonthDays, WEEKDAYS, TODAY_KEY } from "../lib/calendar";
 
-export default function YearCalendar({ year, onMonth }) {
+export default function YearCalendar({ year, onMonth, focusMonth, focusPulse }) {
+  const focusTarget = useRef(null);
+  useEffect(() => {
+    if (!focusPulse) return;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    focusTarget.current?.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [focusPulse, year]);
+
   return (
     <div className="year-calendar" aria-label={`${year}年`}>
       {Array.from({ length: 12 }, (_, month) => (
         <button
           type="button"
-          className="year-month"
-          key={month}
+          ref={month === focusMonth ? focusTarget : undefined}
+          className={`year-month ${focusPulse && month === focusMonth ? "is-today-pulse" : ""}`}
+          key={`${month}-${month === focusMonth ? focusPulse : 0}`}
           aria-label={`${year}年${month + 1}月`}
           onClick={() => onMonth(new Date(Date.UTC(year, month, 1)))}
         >

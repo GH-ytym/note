@@ -13,7 +13,7 @@ const windowTitles = {
   detail: "日程详情 · Note",
   reminder: "日程到点了 · Note",
   day: `${searchParams.get("date") || "当天日程"} · Note`,
-  settings: "外观设置 · Note",
+  settings: "设置 · Note",
   "content-editor": "专注编辑 · Note",
 };
 document.title = windowTitles[windowRole] || "Note";

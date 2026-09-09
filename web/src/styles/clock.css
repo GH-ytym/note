@@ -44,18 +44,28 @@
 .clock-event {
   fill: none;
   stroke: var(--clock-item);
-  stroke-width: 6;
+  stroke-width: 4;
   stroke-linecap: round;
   cursor: pointer;
+  outline: none;
 }
 .clock-event:hover {
-  stroke-width: 8;
+  stroke-width: 6;
+}
+.clock-event:focus-visible {
+  stroke-width: 6;
+  filter: drop-shadow(0 0 3px var(--clock-item));
 }
 .clock-handle {
   fill: var(--panel);
   stroke: var(--clock-item);
   stroke-width: 2;
   cursor: grab;
+  outline: none;
+}
+.clock-handle:focus-visible {
+  stroke-width: 4;
+  filter: drop-shadow(0 0 3px var(--clock-item));
 }
 .clock-handle:active {
   cursor: grabbing;
@@ -63,6 +73,11 @@
 .clock-todo {
   fill: var(--clock-item);
   cursor: grab;
+  outline: none;
+}
+.clock-todo:focus-visible .clock-pin {
+  stroke-width: 5;
+  filter: drop-shadow(0 0 3px var(--clock-item));
 }
 .clock-pin {
   stroke: var(--clock-item);

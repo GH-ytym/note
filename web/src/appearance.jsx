@@ -12,12 +12,19 @@ import { ArrowCounterClockwise, CheckCircle } from "@phosphor-icons/react";
 
 import {
   DEFAULT_APPEARANCE,
-  normalizeAppearance,
+  DEFAULT_PREFERENCES,
+  DEFAULT_SETTINGS,
+  normalizeSettings,
   appearanceTokens,
   foreground,
   luminance,
 } from "./lib/appearance";
-export { DEFAULT_APPEARANCE, normalizeAppearance } from "./lib/appearance";
+export {
+  DEFAULT_APPEARANCE,
+  DEFAULT_PREFERENCES,
+  DEFAULT_SETTINGS,
+  normalizeSettings,
+} from "./lib/appearance";
 
 const APPEARANCE_STORAGE_KEY = "note.appearance.v1";
 const AppearanceContext = createContext(null);
@@ -34,10 +41,10 @@ function readStoredAppearance() {
   try {
     const stored = window.localStorage.getItem(APPEARANCE_STORAGE_KEY);
     return stored
-      ? normalizeAppearance(JSON.parse(stored))
-      : DEFAULT_APPEARANCE;
+      ? normalizeSettings(JSON.parse(stored))
+      : DEFAULT_SETTINGS;
   } catch {
-    return DEFAULT_APPEARANCE;
+    return DEFAULT_SETTINGS;
   }
 }
 
@@ -57,7 +64,7 @@ export function AppearanceProvider({ children }) {
   const settingsRef = useRef(settings);
 
   const acceptAppearance = useCallback((value) => {
-    const next = normalizeAppearance(value);
+    const next = normalizeSettings(value);
     settingsRef.current = next;
     setSettings(next);
     storeAppearance(next);
@@ -272,6 +279,165 @@ export function AppearanceSettingsForm({ onDone }) {
           完成
         </button>
       </footer>
+    </div>
+  );
+}
+
+const VIEW_OPTIONS = [
+  ["year", "年视图"],
+  ["month", "月视图"],
+  ["week", "周视图"],
+  ["day", "日视图"],
+];
+
+function SettingsFooter({ isDefault, onReset, onDone }) {
+  return (
+    <footer className="appearance-settings-footer">
+      <button
+        className="appearance-reset-button"
+        type="button"
+        disabled={isDefault}
+        onClick={onReset}
+      >
+        <ArrowCounterClockwise size={17} aria-hidden="true" />
+        恢复默认
+      </button>
+      <button className="appearance-done-button" type="button" onClick={onDone}>
+        <CheckCircle size={18} weight="fill" aria-hidden="true" />
+        完成
+      </button>
+    </footer>
+  );
+}
+
+function SettingSelect({ id, label, value, options, onChange }) {
+  return (
+    <label className="settings-choice" htmlFor={id}>
+      <strong>{label}</strong>
+      <select id={id} value={value} onChange={onChange}>
+        {options.map(([optionValue, optionLabel]) => (
+          <option value={optionValue} key={optionValue}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+export function PreferenceSettingsForm({ onDone }) {
+  const { settings, updateAppearance } = useAppearance();
+  const isDefault =
+    settings.defaultView === DEFAULT_PREFERENCES.defaultView &&
+    settings.dayViewMode === DEFAULT_PREFERENCES.dayViewMode &&
+    settings.handMode === DEFAULT_PREFERENCES.handMode;
+
+  return (
+    <div className="settings-section-form">
+      <div className="settings-choice-list">
+        <SettingSelect
+          id="preference-default-view"
+          label="默认视图"
+          value={settings.defaultView}
+          options={VIEW_OPTIONS}
+          onChange={(event) =>
+            updateAppearance({ defaultView: event.target.value })
+          }
+        />
+        <SettingSelect
+          id="preference-day-view"
+          label="日视图模式"
+          value={settings.dayViewMode}
+          options={[
+            ["clock", "时钟"],
+            ["timeline", "时间轴"],
+          ]}
+          onChange={(event) =>
+            updateAppearance({ dayViewMode: event.target.value })
+          }
+        />
+        <SettingSelect
+          id="preference-clock-hands"
+          label="时针模式"
+          value={settings.handMode}
+          options={[
+            ["full", "完整时针"],
+            ["compact", "精简时针"],
+          ]}
+          onChange={(event) =>
+            updateAppearance({ handMode: event.target.value })
+          }
+        />
+      </div>
+      <SettingsFooter
+        isDefault={isDefault}
+        onReset={() => updateAppearance(DEFAULT_PREFERENCES)}
+        onDone={onDone}
+      />
+    </div>
+  );
+}
+
+export function ConfigurationSettingsForm({ onDone }) {
+  const { settings, updateAppearance } = useAppearance();
+  const isDefault =
+    settings.weekOrientation === DEFAULT_PREFERENCES.weekOrientation &&
+    settings.dayOrientation === DEFAULT_PREFERENCES.dayOrientation &&
+    settings.clockTracks === DEFAULT_PREFERENCES.clockTracks;
+  const orientationOptions = [
+    ["vertical", "纵向"],
+    ["horizontal", "横向"],
+  ];
+
+  return (
+    <div className="settings-section-form">
+      <div className="settings-choice-list">
+        <SettingSelect
+          id="configuration-week-orientation"
+          label="周视图时间轴"
+          value={settings.weekOrientation}
+          options={orientationOptions}
+          onChange={(event) =>
+            updateAppearance({ weekOrientation: event.target.value })
+          }
+        />
+        <SettingSelect
+          id="configuration-day-orientation"
+          label="日视图时间轴"
+          value={settings.dayOrientation}
+          options={orientationOptions}
+          onChange={(event) =>
+            updateAppearance({ dayOrientation: event.target.value })
+          }
+        />
+        <label className="settings-choice settings-track-count" htmlFor="configuration-clock-tracks">
+          <strong>时钟轨道数</strong>
+          <output htmlFor="configuration-clock-tracks">{settings.clockTracks}</output>
+          <input
+            id="configuration-clock-tracks"
+            type="range"
+            min="3"
+            max="10"
+            step="1"
+            value={settings.clockTracks}
+            style={{ "--range-value": `${((settings.clockTracks - 3) / 7) * 100}%` }}
+            onChange={(event) =>
+              updateAppearance({ clockTracks: event.target.value })
+            }
+          />
+        </label>
+      </div>
+      <SettingsFooter
+        isDefault={isDefault}
+        onReset={() =>
+          updateAppearance({
+            weekOrientation: DEFAULT_PREFERENCES.weekOrientation,
+            dayOrientation: DEFAULT_PREFERENCES.dayOrientation,
+            clockTracks: DEFAULT_PREFERENCES.clockTracks,
+          })
+        }
+        onDone={onDone}
+      />
     </div>
   );
 }

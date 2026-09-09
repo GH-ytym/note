@@ -8,15 +8,38 @@ import {
 import { layoutDay } from "../lib/timeline";
 import useNow from "../hooks/useNow";
 
-export default function CalendarTimeline({ days, items, mode, onDay, onTodo }) {
+export default function CalendarTimeline({
+  days,
+  items,
+  mode,
+  orientation = "vertical",
+  onDay,
+  onTodo,
+}) {
   const scroll = useRef(null);
   const now = useNow();
   const [selected, setSelected] = useState(null);
   useEffect(() => {
-    scroll.current.scrollTop = 8 * 60;
+    if (orientation === "horizontal") scroll.current.scrollLeft = 8 * 60;
+    else scroll.current.scrollTop = 8 * 60;
     setSelected(null);
-  }, [mode, days[0]]);
+  }, [mode, orientation, days[0]]);
   const week = mode === "week";
+  if (orientation === "horizontal") {
+    return (
+      <HorizontalTimeline
+        days={days}
+        items={items}
+        week={week}
+        now={now}
+        selected={selected}
+        onSelect={setSelected}
+        onDay={onDay}
+        onTodo={onTodo}
+        scrollRef={scroll}
+      />
+    );
+  }
   return (
     <div
       className={`calendar-timeline ${week ? "is-week" : "is-single-day"}`}
@@ -134,6 +157,124 @@ export default function CalendarTimeline({ days, items, mode, onDay, onTodo }) {
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function HorizontalTimeline({
+  days,
+  items,
+  week,
+  now,
+  selected,
+  onSelect,
+  onDay,
+  onTodo,
+  scrollRef,
+}) {
+  return (
+    <div
+      className={`calendar-timeline is-horizontal ${week ? "is-week" : "is-single-day"}`}
+      ref={scrollRef}
+    >
+      <div className="horizontal-timeline-inner">
+        <div className="horizontal-timeline-head">
+          <span>24h</span>
+          {Array.from({ length: 25 }, (_, hour) => (
+            <time key={hour} style={{ left: 72 + hour * 60 }}>
+              {String(hour).padStart(2, "0")}:00
+            </time>
+          ))}
+        </div>
+        {days.map((key) => {
+          const { segments, tracks } = layoutDay(
+            items,
+            key,
+            week ? 4 : Infinity,
+          );
+          const todos = items.filter(
+            (item) => item.kind === "todo" && item.date === key,
+          );
+          const rowHeight = week ? 78 : Math.max(180, tracks * 24 + 44);
+          return (
+            <div
+              className="horizontal-timeline-day"
+              key={key}
+              style={{ "--horizontal-row-height": `${rowHeight}px` }}
+            >
+              <button
+                type="button"
+                className={key === now.date ? "is-today" : ""}
+                onClick={() => onDay(key)}
+                aria-label={`查看${key}`}
+              >
+                {WEEKDAYS[(dateFromKey(key).getUTCDay() + 6) % 7]}
+                <strong>{Number(key.slice(-2))}</strong>
+              </button>
+              <div className="horizontal-timeline-track">
+                {segments.map((segment) => {
+                  const { item, start, end, track, slot, slots } = segment;
+                  const label = `${item.title} · ${item.date} ${item.time} — ${item.endDate} ${item.endTime}`;
+                  const laneHeight = 18 / slots;
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={`horizontal-event ${selected === item.id ? "is-selected" : ""}`}
+                      title={label}
+                      aria-label={label}
+                      onClick={() =>
+                        onSelect(selected === item.id ? null : item.id)
+                      }
+                      style={{
+                        left: start,
+                        width: Math.max(3, end - start),
+                        top: 6 + track * 18 + slot * laneHeight,
+                        height: Math.max(3, laneHeight - 2),
+                        "--event-color": item.color,
+                        "--event-soft": colorWithAlpha(item.color, 0.18),
+                      }}
+                    >
+                      {item.title}
+                    </button>
+                  );
+                })}
+                {todos.map((item, index) => {
+                  const [hour, minute] = item.time.split(":").map(Number);
+                  return (
+                    <button
+                      type="button"
+                      className={`horizontal-todo ${item.occurrenceDone || item.allDone ? "is-done" : ""}`}
+                      key={item.id}
+                      title={`${item.time} ${item.title}`}
+                      aria-label={`${item.time} ${item.title}`}
+                      onClick={() => onTodo(item)}
+                      style={{
+                        left: hour * 60 + minute,
+                        top: rowHeight - 26 - (index % 2) * 13,
+                        "--event-color": item.color,
+                      }}
+                    >
+                      <span>{item.title}</span>
+                    </button>
+                  );
+                })}
+                {key === now.date && (
+                  <div
+                    className="horizontal-timeline-now"
+                    style={{
+                      left:
+                        Number(now.time.slice(0, 2)) * 60 +
+                        Number(now.time.slice(3)),
+                    }}
+                    aria-label={`现在 ${now.time}`}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

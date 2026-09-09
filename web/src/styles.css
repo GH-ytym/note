@@ -1680,6 +1680,149 @@ textarea:focus-visible {
   overflow-y: auto;
 }
 
+.settings-layout {
+  display: grid;
+  height: calc(100% - 72px);
+  min-height: 0;
+  grid-template-columns: 168px minmax(0, 1fr);
+  border-top: 1px solid var(--line);
+}
+
+.settings-sidebar {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 10px;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--page) 45%, var(--panel));
+}
+
+.settings-sidebar button {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.settings-sidebar button:hover,
+.settings-sidebar button:focus-visible {
+  color: var(--text);
+  background: var(--cell-hover);
+}
+
+.settings-sidebar button.is-active {
+  color: var(--on-theme);
+  background: var(--yellow);
+}
+
+.settings-content {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settings-content > h2 {
+  margin: 0;
+  padding: 18px 22px 4px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 680;
+}
+
+.settings-content > .appearance-settings-form,
+.settings-section-form {
+  height: 100%;
+  min-height: 0;
+  padding: 16px 22px 22px;
+}
+
+.settings-section-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.settings-choice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-choice {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--cell);
+}
+
+.settings-choice strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 640;
+}
+
+.settings-choice select {
+  width: 100%;
+  height: 38px;
+  padding: 0 34px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: none;
+  color: var(--text);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.settings-choice select:focus-visible {
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 2px rgb(var(--theme-rgb) / 24%);
+}
+
+.settings-track-count {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-track-count output {
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-track-count input[type="range"] {
+  width: 100%;
+  grid-column: 1 / -1;
+  accent-color: var(--yellow);
+  cursor: pointer;
+}
+
+@media (max-width: 620px) {
+  .settings-layout {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+
+  .settings-choice {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
 .appearance-settings-intro {
   margin: 0;
   color: var(--muted);

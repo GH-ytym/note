@@ -1,5 +1,12 @@
 import { useRef, useState } from "react";
-import { clockArc, clockMinute, clockPoint, minuteDelta } from "../lib/clock";
+import {
+  clockArc,
+  clockMinute,
+  clockPoint,
+  clockTrackRadius,
+  minuteDelta,
+  stableClockTrack,
+} from "../lib/clock";
 import { layoutDay } from "../lib/timeline";
 
 export default function DayClock({
@@ -7,6 +14,7 @@ export default function DayClock({
   items,
   now,
   handMode,
+  trackCount,
   onOpen,
   onRetime,
   saving,
@@ -134,11 +142,12 @@ export default function DayClock({
           );
         })}
         {segments.map(
-          ({ item, start, end, track, continuesBefore, continuesAfter }) => {
+          ({ item, start, end, continuesBefore, continuesAfter }) => {
             const delta = preview?.id === item.id ? preview.delta : 0;
             const a = start + (preview?.edge === "start" ? delta : 0),
               b = end + (preview?.edge === "end" ? delta : 0);
-            const radius = 108 - (track % 7) * 9 - Math.floor(track / 7) * 2;
+            const track = stableClockTrack(item, trackCount);
+            const radius = clockTrackRadius(track, trackCount);
             const head = clockPoint(a, radius),
               tail = clockPoint(b, radius);
             return (

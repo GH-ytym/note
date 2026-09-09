@@ -4,6 +4,20 @@ export const DEFAULT_APPEARANCE = Object.freeze({
   opacity: 95,
 });
 
+export const DEFAULT_PREFERENCES = Object.freeze({
+  defaultView: "month",
+  dayViewMode: "clock",
+  handMode: "full",
+  weekOrientation: "vertical",
+  dayOrientation: "vertical",
+  clockTracks: 7,
+});
+
+export const DEFAULT_SETTINGS = Object.freeze({
+  ...DEFAULT_APPEARANCE,
+  ...DEFAULT_PREFERENCES,
+});
+
 export function normalizeHex(value, fallback) {
   const hex = String(value || "")
     .trim()
@@ -22,6 +36,46 @@ export function normalizeAppearance(value = {}) {
     opacity: Number.isFinite(opacity)
       ? Math.max(20, Math.min(100, Math.round(opacity)))
       : DEFAULT_APPEARANCE.opacity,
+  };
+}
+
+function oneOf(value, choices, fallback) {
+  return choices.includes(value) ? value : fallback;
+}
+
+export function normalizeSettings(value = {}) {
+  const appearance = normalizeAppearance(value);
+  const clockTracks = Number(value.clockTracks);
+  return {
+    ...appearance,
+    defaultView: oneOf(
+      value.defaultView,
+      ["year", "month", "week", "day"],
+      DEFAULT_PREFERENCES.defaultView,
+    ),
+    dayViewMode: oneOf(
+      value.dayViewMode,
+      ["clock", "timeline"],
+      DEFAULT_PREFERENCES.dayViewMode,
+    ),
+    handMode: oneOf(
+      value.handMode,
+      ["full", "compact"],
+      DEFAULT_PREFERENCES.handMode,
+    ),
+    weekOrientation: oneOf(
+      value.weekOrientation,
+      ["vertical", "horizontal"],
+      DEFAULT_PREFERENCES.weekOrientation,
+    ),
+    dayOrientation: oneOf(
+      value.dayOrientation,
+      ["vertical", "horizontal"],
+      DEFAULT_PREFERENCES.dayOrientation,
+    ),
+    clockTracks: Number.isFinite(clockTracks)
+      ? Math.max(3, Math.min(10, Math.round(clockTracks)))
+      : DEFAULT_PREFERENCES.clockTracks,
   };
 }
 

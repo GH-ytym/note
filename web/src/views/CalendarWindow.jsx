@@ -3,6 +3,7 @@ import CalendarToolbar from "../components/CalendarToolbar";
 import DayClock from "../components/DayClock";
 import useNow from "../hooks/useNow";
 import useCalendarItems from "../hooks/useCalendarItems";
+import { useAppearance } from "../appearance";
 import { retimeItem } from "../lib/retime";
 import CalendarGrid from "../components/CalendarGrid";
 import YearCalendar from "../components/YearCalendar";
@@ -27,22 +28,24 @@ import {
 } from "../lib/calendar";
 
 export default function CalendarWindow({
-  initialView = "month",
+  initialView,
   initialDate = TODAY_KEY,
 }) {
+  const { settings } = useAppearance();
   const [currentMonth, setCurrentMonth] = useState(() =>
     monthFromKey(initialDate),
   );
-  const [view, setView] = useState(initialView);
+  const [view, setView] = useState(() => initialView || settings.defaultView);
   const [selectedDate, setSelectedDate] = useState(initialDate);
-  const [dayStyle, setDayStyle] = useState("clock");
-  const [handMode, setHandMode] = useState("full");
+  const [dayStyle, setDayStyle] = useState(settings.dayViewMode);
+  const [handMode, setHandMode] = useState(settings.handMode);
   const [saving, setSaving] = useState(false);
   const now = useNow();
   const [expandedDayKey, setExpandedDayKey] = useState(null);
   const [notice, setNotice] = useState("");
   const [desktopPicker, setDesktopPicker] = useState(null);
   const [hoveredStartDate, setHoveredStartDate] = useState(null);
+  const [todayPulse, setTodayPulse] = useState(0);
   const dragSelection = useRef({ active: false, select: true, lastKey: null });
   const desktopPickerRef = useRef(null);
   const desktopPickerSessionRef = useRef(null);
@@ -125,6 +128,11 @@ export default function CalendarWindow({
     if (calendarError) setNotice(calendarError);
   }, [calendarError]);
 
+  useEffect(() => {
+    setDayStyle(settings.dayViewMode);
+    setHandMode(settings.handMode);
+  }, [settings.dayViewMode, settings.handMode]);
+
   useEffect(
     () =>
       window.noteDesktop?.onWorkspaceViewChanged?.((payload) => {
@@ -140,6 +148,7 @@ export default function CalendarWindow({
     const date = getShanghaiTodayKey();
     setSelectedDate(date);
     setCurrentMonth(monthFromKey(date));
+    if (view === "year") setTodayPulse((value) => value + 1);
   }
 
   async function retime(item, edge, minutes) {
@@ -401,6 +410,8 @@ export default function CalendarWindow({
             {view === "year" && (
               <YearCalendar
                 year={currentMonth.getUTCFullYear()}
+                focusMonth={Number(getShanghaiTodayKey().slice(5, 7)) - 1}
+                focusPulse={todayPulse}
                 onMonth={(month) => {
                   setCurrentMonth(month);
                   setView("month");
@@ -413,6 +424,11 @@ export default function CalendarWindow({
                 days={timelineDays}
                 items={events}
                 mode={view}
+                orientation={
+                  view === "week"
+                    ? settings.weekOrientation
+                    : settings.dayOrientation
+                }
                 onDay={openDay}
                 onTodo={openEvent}
               />
@@ -423,6 +439,7 @@ export default function CalendarWindow({
                 items={events}
                 now={now}
                 handMode={handMode}
+                trackCount={settings.clockTracks}
                 onOpen={openEvent}
                 onRetime={retime}
                 saving={saving}

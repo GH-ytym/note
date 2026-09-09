@@ -30,13 +30,19 @@ const WINDOW_PROFILES = {
   create: { width: 340, height: 650, minWidth: 260, minHeight: 240 },
   detail: { width: 360, height: 650, minWidth: 280, minHeight: 240 },
   reminder: { width: 390, height: 250, minWidth: 320, minHeight: 230 },
-  settings: { width: 430, height: 500, minWidth: 360, minHeight: 420 },
+  settings: { width: 780, height: 600, minWidth: 560, minHeight: 460 },
   "content-editor": { width: 760, height: 560, minWidth: 500, minHeight: 360 },
 };
 const DEFAULT_APPEARANCE = Object.freeze({
   backgroundColor: "#000000",
   themeColor: "#F3B51B",
   opacity: 95,
+  defaultView: "month",
+  dayViewMode: "clock",
+  handMode: "full",
+  weekOrientation: "vertical",
+  dayOrientation: "vertical",
+  clockTracks: 7,
 });
 const TRAY_ICON_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACtSURBVFhH7c7RDQIhFETRbcJEY/8lWJkFaPjkCCw8XLOJ3OR+wZuZbVssBng+7q9evZ3Ggh7NCGFoRDO7MWhGs3cxQK+3S6bvJe1o4rEeOsDDkpEBSbs+8KBmdEDSzgw/1/yfARaNat65B/jx5wMSfjZwVPOGB9TsKappZ4afa64Bhw1IeFAyOsCuKh5qZIAdTTz+hnbsYsCMZndjUEQzQxjaoxnTWNDS28VpeQN+CwQ4E8tohAAAAABJRU5ErkJggg==";
 
@@ -443,12 +449,43 @@ function normalizeHexColor(value, fallback) {
 
 function normalizeAppearance(value = {}) {
   const rawOpacity = Number(value.opacity);
+  const rawClockTracks = Number(value.clockTracks);
+  const choice = (candidate, allowed, fallback) =>
+    allowed.includes(candidate) ? candidate : fallback;
   return {
     backgroundColor: normalizeHexColor(value.backgroundColor, DEFAULT_APPEARANCE.backgroundColor),
     themeColor: normalizeHexColor(value.themeColor, DEFAULT_APPEARANCE.themeColor),
     opacity: Number.isFinite(rawOpacity)
       ? clamp(Math.round(rawOpacity), 20, 100)
       : DEFAULT_APPEARANCE.opacity,
+    defaultView: choice(
+      value.defaultView,
+      ["year", "month", "week", "day"],
+      DEFAULT_APPEARANCE.defaultView,
+    ),
+    dayViewMode: choice(
+      value.dayViewMode,
+      ["clock", "timeline"],
+      DEFAULT_APPEARANCE.dayViewMode,
+    ),
+    handMode: choice(
+      value.handMode,
+      ["full", "compact"],
+      DEFAULT_APPEARANCE.handMode,
+    ),
+    weekOrientation: choice(
+      value.weekOrientation,
+      ["vertical", "horizontal"],
+      DEFAULT_APPEARANCE.weekOrientation,
+    ),
+    dayOrientation: choice(
+      value.dayOrientation,
+      ["vertical", "horizontal"],
+      DEFAULT_APPEARANCE.dayOrientation,
+    ),
+    clockTracks: Number.isFinite(rawClockTracks)
+      ? clamp(Math.round(rawClockTracks), 3, 10)
+      : DEFAULT_APPEARANCE.clockTracks,
   };
 }
 
@@ -702,7 +739,7 @@ function createDetailWindow(todoID, date) {
 }
 
 function createSettingsWindow() {
-  return createWindow({ key: "settings", role: "settings", title: "外观设置 · Note" });
+  return createWindow({ key: "settings", role: "settings", title: "设置 · Note" });
 }
 
 function createContentEditorWindow(sourceWindow, state) {

@@ -8,6 +8,7 @@ import {
   Sparkle,
 } from "@phosphor-icons/react";
 import { EVENT_COLORS, joinTime, pad, splitTime } from "../lib/calendar";
+import { foreground } from "../lib/appearance";
 
 export function CustomColorSwatch({ value, selected, onChange }) {
   return (
@@ -232,7 +233,7 @@ export function ColorField({ value, onChange, allowRandom = false }) {
               <button
                 className={`palette-swatch ${value === color.value ? "is-selected" : ""}`}
                 type="button"
-                style={{ "--swatch-color": color.value }}
+                style={{ "--swatch-color": color.value, "--swatch-ink": foreground(color.value) }}
                 onClick={() => onChange(color.value)}
                 aria-label={color.label}
                 key={color.value}

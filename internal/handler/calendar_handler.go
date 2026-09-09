@@ -3,14 +3,25 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"note/internal/calendar"
 	apperrors "note/internal/errors"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
+type CalendarHandler struct {
+	service calendar.CalendarService
+}
+
+func NewCalendarHandler(
+	service calendar.CalendarService,
+) *CalendarHandler {
+	return &CalendarHandler{service: service}
+}
+
 // GetCalendar returns
-func (h *TodoHandler) GetCalendar(c *gin.Context) {
+func (h *CalendarHandler) GetCalendar(c *gin.Context) {
 	var query CalendarQuery
 	if err := c.ShouldBindQuery(&query); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -53,8 +64,8 @@ func (h *TodoHandler) GetCalendar(c *gin.Context) {
 		return
 	}
 
-	//查所有todo和发生时间
-	occurrences, err := h.service.CalendarOccurrences(c.Request.Context(), from, to)
+	//查所有todo和event的出现情况
+	result, err := h.service.Get(c.Request.Context(), from, to)
 	if errors.Is(err, apperrors.ErrInvalidCalendarRange) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -70,7 +81,7 @@ func (h *TodoHandler) GetCalendar(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": occurrences,
+		"data": result,
 		"from": query.From,
 		"to":   query.To,
 	})

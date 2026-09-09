@@ -251,12 +251,13 @@ export function shanghaiDateTimeParts(value) {
   };
 }
 
-export function calendarEventFromOccurrence(item) {
+export function calendarTodoFromOccurrence(item) {
   const occurrence = shanghaiDateTimeParts(item.occurs_at);
   const start = shanghaiDateTimeParts(item.starts_at || item.occurs_at);
 
   return {
-    id: `${item.todo_id}-${item.occurs_at}`,
+    id: `todo-${item.todo_id}-${item.occurs_at}`,
+    kind: "todo",
     todoId: item.todo_id,
     title: item.title || item.content || "",
     content: item.content ?? item.title ?? "",
@@ -271,6 +272,44 @@ export function calendarEventFromOccurrence(item) {
     allDone: Boolean(item.all_done),
     version: item.version,
   };
+}
+
+export function calendarEventFromOccurrence(item) {
+  const start = shanghaiDateTimeParts(item.starts_at);
+  const end = shanghaiDateTimeParts(item.ends_at);
+
+  return {
+    id: `event-${item.event_id}-${item.starts_at}`,
+    kind: "event",
+    eventId: item.event_id,
+    startsAt: item.starts_at,
+    endsAt: item.ends_at,
+    title: item.title || item.content || "",
+    content: item.content ?? "",
+    color: item.color,
+    date: start.date,
+    time: start.time,
+    endDate: end.date,
+    endTime: end.time,
+    repeat: REPEAT_LABELS[item.repeat_mode] || item.repeat_mode,
+    version: item.version,
+  };
+}
+
+export function calendarItemsFromResponse(result) {
+  const data = result?.data;
+
+  // Keep older backends readable while the desktop backend is being upgraded.
+  if (Array.isArray(data)) {
+    return data.map(calendarTodoFromOccurrence);
+  }
+
+  const todos = Array.isArray(data?.todos) ? data.todos : [];
+  const events = Array.isArray(data?.events) ? data.events : [];
+  return [
+    ...todos.map(calendarTodoFromOccurrence),
+    ...events.map(calendarEventFromOccurrence),
+  ];
 }
 
 export function isEventDone(item) {

@@ -1,0 +1,109 @@
+.day-clock-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.day-clock {
+  display: block;
+  width: min(100%, calc(100vh - 76px));
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  overflow: visible;
+  touch-action: none;
+}
+.clock-face {
+  fill: none;
+  stroke: var(--line);
+}
+.clock-tick {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.clock-hour-tick {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+.clock-hour-label {
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-size: 10px;
+  fill: var(--muted);
+}
+.clock-digital {
+  text-anchor: middle;
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+  fill: var(--text);
+  font-weight: 550;
+  pointer-events: none;
+}
+.clock-center-date {
+  text-anchor: middle;
+  font-size: 10px;
+  fill: var(--muted);
+  pointer-events: none;
+}
+.clock-event {
+  fill: none;
+  stroke: var(--clock-item);
+  stroke-width: 5;
+  stroke-linecap: round;
+  cursor: pointer;
+}
+.clock-event:hover {
+  stroke-width: 8;
+}
+.clock-handle {
+  fill: var(--panel);
+  stroke: var(--clock-item);
+  stroke-width: 2;
+  cursor: grab;
+}
+.clock-handle:active {
+  cursor: grabbing;
+}
+.clock-todo {
+  fill: var(--clock-item);
+  cursor: grab;
+}
+.clock-pin {
+  stroke: var(--clock-item);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.clock-hit {
+  stroke: transparent;
+  stroke-width: 13;
+}
+.clock-todo.is-done {
+  opacity: 0.35;
+}
+.clock-now {
+  stroke: var(--accent-ink);
+  fill: var(--accent-ink);
+  stroke-width: 1;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.clock-selection {
+  height: 24px;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.clock-error {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+.event-repeat-summary {
+  color: var(--muted);
+  font-size: 12px;
+}

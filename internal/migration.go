@@ -16,10 +16,47 @@ func migrateDatabase(db *gorm.DB) error {
 		return err
 	}
 
-	// Event has no relation to the legacy todos table, so it can use
-	// GORM's idempotent schema synchronization independently.
-	if err := db.AutoMigrate(&model.Event{}); err != nil {
-		return fmt.Errorf("auto migrate events: %w", err)
+	if err := migrateEventSchema(db); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func migrateEventSchema(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&model.Event{}) {
+		if err := db.AutoMigrate(&model.Event{}, &model.EventDate{}); err != nil {
+			return fmt.Errorf("auto migrate fresh event schema: %w", err)
+		}
+		return nil
+	}
+
+	// Avoid rebuilding a populated SQLite events table. The SQLite migrator can
+	// omit old columns while copying data into its temporary table.
+	if !db.Migrator().HasColumn(&model.Event{}, "RepeatMode") {
+		if err := db.Exec("ALTER TABLE `events` ADD COLUMN `repeat_mode` text NOT NULL DEFAULT 'once'").Error; err != nil {
+			return fmt.Errorf("add events.repeat_mode: %w", err)
+		}
+	}
+
+	if !db.Migrator().HasTable(&model.EventDate{}) {
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec(`
+				CREATE TABLE event_dates (
+					id integer PRIMARY KEY AUTOINCREMENT,
+					event_id integer NOT NULL,
+					date date NOT NULL,
+					created_at datetime,
+					CONSTRAINT fk_events_custom_dates
+						FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+				)
+			`).Error; err != nil {
+				return err
+			}
+			return tx.Exec("CREATE UNIQUE INDEX idx_event_date ON event_dates(event_id, date)").Error
+		}); err != nil {
+			return fmt.Errorf("create event_dates: %w", err)
+		}
 	}
 
 	return nil
@@ -34,6 +71,7 @@ func migrateTodoSchema(db *gorm.DB) error {
 		); err != nil {
 			return fmt.Errorf("auto migrate fresh schema: %w", err)
 		}
+
 		return nil
 	}
 

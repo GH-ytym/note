@@ -1,0 +1,327 @@
+.multi-view-calendar.calendar-shell {
+  min-height: 0;
+  padding: 0;
+}
+.multi-view-calendar .workspace-stack,
+.multi-view-calendar .month-stack {
+  grid-template-rows: minmax(0, 1fr);
+}
+.multi-view-calendar .calendar-panel {
+  overflow: hidden;
+  grid-template-rows: auto 28px minmax(0, 1fr);
+}
+.multi-view-calendar .calendar-panel:not(.view-month) {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.multi-view-calendar .calendar-header {
+  min-height: 44px;
+  gap: 8px;
+  padding: 4px 12px;
+  flex-wrap: wrap;
+  color: var(--text);
+}
+.calendar-actions {
+  display: flex;
+  margin-left: auto;
+}
+.calendar-actions button,
+.picker-finish {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--text);
+}
+.calendar-actions button:hover,
+.picker-finish:hover {
+  color: var(--accent-ink);
+  background: var(--cell-hover);
+}
+.day-style-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+.day-style-toggle input {
+  accent-color: var(--yellow);
+}
+.multi-view-calendar .calendar-header .window-controls {
+  margin-left: 0;
+}
+.multi-view-calendar .calendar-header .window-controls button {
+  width: 26px;
+  height: 30px;
+}
+.multi-view-calendar .day-clock-wrap {
+  overflow: hidden;
+}
+.multi-view-calendar .day-clock {
+  width: min(100%, calc(100vh - 120px));
+}
+.multi-view-calendar .calendar-header h1 {
+  font-size: 16px;
+  white-space: nowrap;
+}
+.multi-view-calendar .month-controls button {
+  width: 28px;
+}
+.calendar-view-switch {
+  display: flex;
+  flex-shrink: 0;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  gap: 2px;
+}
+.calendar-view-switch button {
+  width: 28px;
+  height: 26px;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.calendar-view-switch button:hover {
+  color: var(--text);
+  background: var(--cell-hover);
+}
+.calendar-view-switch button[aria-pressed="true"] {
+  background: var(--yellow);
+  color: var(--on-theme);
+}
+.year-calendar {
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  align-content: start;
+}
+.year-month {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.year-month:hover {
+  background: var(--cell-hover);
+}
+.year-month > strong {
+  display: block;
+  color: var(--accent-ink);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.mini-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  text-align: center;
+  font-size: 11px;
+  gap: 3px 1px;
+}
+.mini-month-grid > span {
+  height: 18px;
+  line-height: 18px;
+  border-radius: 3px;
+}
+.mini-weekday {
+  color: var(--muted);
+}
+.mini-today {
+  background: var(--yellow);
+  color: var(--on-theme);
+}
+.calendar-timeline {
+  overflow: auto;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+.timeline-inner {
+  min-width: 280px;
+}
+.is-week .timeline-inner {
+  min-width: 540px;
+}
+.timeline-head {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: 48px repeat(var(--day-count), minmax(0, 1fr));
+  height: 36px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.timeline-head > span {
+  align-self: center;
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+}
+.timeline-head button {
+  cursor: pointer;
+  font-size: 12px;
+  border-left: 1px solid var(--line);
+}
+.timeline-head button:hover {
+  background: var(--cell-hover);
+}
+.timeline-head .is-today {
+  color: var(--accent-ink);
+}
+.timeline-body {
+  display: grid;
+  grid-template-columns: 48px repeat(var(--day-count), minmax(0, 1fr));
+  height: 1440px;
+  margin-bottom: 14px;
+}
+.timeline-hours {
+  position: relative;
+  color: var(--muted);
+  font-size: 10px;
+}
+.timeline-hours span {
+  position: absolute;
+  right: 7px;
+  transform: translateY(-50%);
+}
+.timeline-hours span:first-child {
+  transform: none;
+}
+.timeline-day {
+  position: relative;
+  border-left: 1px solid var(--line);
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--line) 0px,
+    var(--line) 1px,
+    transparent 1px,
+    transparent 60px
+  );
+}
+.timeline-event {
+  position: absolute;
+  min-width: 3px;
+  background: var(--event-soft);
+  border: 1px solid var(--event-color);
+  border-left-width: 3px;
+  border-radius: 5px;
+  color: var(--text);
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+}
+.timeline-event-title {
+  display: block;
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  right: 2px;
+  font-size: 11px;
+  line-height: 15px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.is-week .timeline-event {
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(var(--event-color), var(--event-color)) center /
+    3px 100% no-repeat;
+  overflow: visible;
+}
+.is-week .timeline-event::before,
+.is-week .timeline-event::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--event-color);
+}
+.is-week .timeline-event::before {
+  top: 0;
+}
+.is-week .timeline-event::after {
+  bottom: 0;
+}
+.is-week .timeline-event-title {
+  top: 4px;
+  left: 0;
+  right: 0;
+  max-height: calc(100% - 8px);
+  color: var(--text);
+  background: var(--panel);
+  font-size: 10px;
+  line-height: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.timeline-event:hover,
+.timeline-event:focus-visible,
+.timeline-event.is-selected {
+  z-index: 25;
+  filter: brightness(1.2);
+}
+.timeline-todo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 12px;
+  border-top: 2px solid var(--event-color);
+  cursor: pointer;
+  text-align: left;
+}
+.timeline-todo span {
+  position: absolute;
+  top: -15px;
+  padding: 0 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 10px;
+  line-height: 13px;
+}
+.timeline-todo.is-done span {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.timeline-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--yellow);
+  pointer-events: none;
+  z-index: 20;
+}
+@media (max-width: 440px) {
+  .multi-view-calendar .calendar-header {
+    gap: 4px;
+    padding: 0 6px;
+    flex-wrap: wrap;
+  }
+  .multi-view-calendar .calendar-header h1 {
+    font-size: 13px;
+  }
+  .multi-view-calendar .month-controls button {
+    width: 22px;
+  }
+  .calendar-view-switch button {
+    width: 24px;
+  }
+  .year-calendar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+  }
+}

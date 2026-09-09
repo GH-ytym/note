@@ -41,7 +41,10 @@ export default function DetailView({ todoId, date, onDone }) {
       getTodo(todoID),
       getCalendar(occurrenceDate, nextDateKey(occurrenceDate)),
     ]);
-    const occurrence = calendar.data.find((item) => item.todo_id === todoID);
+		const todoOccurrences = Array.isArray(calendar.data)
+			? calendar.data
+			: calendar.data?.todos || [];
+		const occurrence = todoOccurrences.find((item) => item.todo_id === todoID);
     const startsAt = shanghaiDateTimeParts(todo.starts_at);
     setRecord({
       todo,

@@ -22,6 +22,13 @@ type mockEventService struct {
 	createErr   error
 }
 
+func (m *mockEventService) Get(_ context.Context, _ uint) (model.Event, error) {
+	return m.result, m.createErr
+}
+func (m *mockEventService) Patch(_ context.Context, _ uint, _ event.PatchCommand) (model.Event, error) {
+	return m.result, m.createErr
+}
+
 func (m *mockEventService) Create(
 	_ context.Context,
 	cmd event.CreateCommand,
@@ -29,6 +36,14 @@ func (m *mockEventService) Create(
 	m.createCalls++
 	m.received = cmd
 	return m.result, m.createErr
+}
+
+func (m *mockEventService) ListInRange(
+	_ context.Context,
+	_ time.Time,
+	_ time.Time,
+) ([]event.CalendarOccurrence, error) {
+	return nil, nil
 }
 
 func TestCreateEventHandler(t *testing.T) {
@@ -50,7 +65,9 @@ func TestCreateEventHandler(t *testing.T) {
 		"content": "讨论 Event 功能",
 		"color": "#AABBCC",
 		"starts_at": "2026-09-03T10:00:00+08:00",
-		"ends_at": "2026-09-03T11:00:00+08:00"
+		"ends_at": "2026-09-03T11:00:00+08:00",
+		"repeat_mode": "custom",
+		"custom_dates": ["2026-09-05"]
 	}`
 
 	request := httptest.NewRequest(
@@ -113,6 +130,12 @@ func TestCreateEventHandler(t *testing.T) {
 	}
 	if got := service.received.EndsAt.Format(time.RFC3339); got != "2026-09-03T11:00:00+08:00" {
 		t.Errorf("command EndsAt = %q", got)
+	}
+	if service.received.RepeatMode != model.RepeatCustom {
+		t.Errorf("command RepeatMode = %q, want %q", service.received.RepeatMode, model.RepeatCustom)
+	}
+	if len(service.received.CustomDates) != 1 || service.received.CustomDates[0].Format(time.DateOnly) != "2026-09-05" {
+		t.Errorf("command CustomDates = %v, want [2026-09-05]", service.received.CustomDates)
 	}
 }
 
@@ -207,7 +230,8 @@ func TestCreateEventHandlerMapsServiceErrors(t *testing.T) {
 		"content":"讨论 Event 功能",
 		"color":"#AABBCC",
 		"starts_at":"2026-09-03T10:00:00+08:00",
-		"ends_at":"2026-09-03T11:00:00+08:00"
+		"ends_at":"2026-09-03T11:00:00+08:00",
+		"repeat_mode":"once"
 	}`
 
 	for _, test := range tests {

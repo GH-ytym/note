@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"note/internal/calendar"
 	"note/internal/event"
 	"os"
 	"os/signal"
@@ -92,6 +93,10 @@ func Run() (runErr error) {
 	eventService := event.NewService(eventRepository)
 	eventHandler := handler.NewEventHandler(eventService)
 
+	//最后把两个service聚合到calendar
+	calendarService := calendar.NewService(todoService, eventService)
+	calendarHandler := handler.NewCalendarHandler(calendarService)
+
 	//启动服务+优雅关闭
 	serverAddress := os.Getenv("HTTP_ADDR")
 	if serverAddress == "" {
@@ -100,7 +105,7 @@ func Run() (runErr error) {
 
 	server := &http.Server{
 		Addr:              serverAddress,
-		Handler:           router.NewWithWeb(todoHandler, eventHandler, os.Getenv("NOTE_WEB_DIR")),
+		Handler:           router.NewWithWeb(todoHandler, eventHandler, calendarHandler, os.Getenv("NOTE_WEB_DIR")),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	listener, err := net.Listen("tcp", server.Addr)

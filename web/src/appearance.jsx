@@ -1,84 +1,41 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, createContext } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  createContext,
+} from "react";
 import { ArrowCounterClockwise, CheckCircle } from "@phosphor-icons/react";
 
-export const DEFAULT_APPEARANCE = Object.freeze({
-  backgroundColor: "#000000",
-  themeColor: "#F3B51B",
-  opacity: 95,
-});
+import {
+  DEFAULT_APPEARANCE,
+  normalizeAppearance,
+  appearanceTokens,
+  foreground,
+  luminance,
+} from "./lib/appearance";
+export { DEFAULT_APPEARANCE, normalizeAppearance } from "./lib/appearance";
 
 const APPEARANCE_STORAGE_KEY = "note.appearance.v1";
 const AppearanceContext = createContext(null);
 
-function normalizeHex(value, fallback) {
-  const normalized = String(value || "").trim().toUpperCase();
-  return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : fallback;
-}
-
-function clampOpacity(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return DEFAULT_APPEARANCE.opacity;
-  return Math.max(20, Math.min(100, Math.round(parsed)));
-}
-
-export function normalizeAppearance(value = {}) {
-  return {
-    backgroundColor: normalizeHex(value.backgroundColor, DEFAULT_APPEARANCE.backgroundColor),
-    themeColor: normalizeHex(value.themeColor, DEFAULT_APPEARANCE.themeColor),
-    opacity: clampOpacity(value.opacity),
-  };
-}
-
-function hexChannels(value) {
-  const hex = normalizeHex(value, "#000000").slice(1);
-  return [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
-}
-
-function mixHex(from, to, amount) {
-  const start = hexChannels(from);
-  const end = hexChannels(to);
-  const channels = start.map((channel, index) => Math.round(channel + (end[index] - channel) * amount));
-  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
-}
-
-function relativeLuminance(value) {
-  const channels = hexChannels(value).map((channel) => {
-    const normalized = channel / 255;
-    return normalized <= 0.03928
-      ? normalized / 12.92
-      : ((normalized + 0.055) / 1.055) ** 2.4;
-  });
-  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
-}
-
 function applyAppearance(settings) {
   const root = document.documentElement;
-  const background = settings.backgroundColor;
-  const theme = settings.themeColor;
-  const [themeRed, themeGreen, themeBlue] = hexChannels(theme);
-  const lightBackground = relativeLuminance(background) > 0.48;
-  const surfaceTarget = lightBackground ? "#000000" : "#FFFFFF";
-
-  root.style.setProperty("--page", background);
-  root.style.setProperty("--panel", mixHex(background, surfaceTarget, lightBackground ? 0.055 : 0.065));
-  root.style.setProperty("--cell", mixHex(background, surfaceTarget, lightBackground ? 0.075 : 0.085));
-  root.style.setProperty("--cell-hover", mixHex(background, surfaceTarget, lightBackground ? 0.11 : 0.12));
-  root.style.setProperty("--cell-disabled", mixHex(background, surfaceTarget, lightBackground ? 0.035 : 0.04));
-  root.style.setProperty("--text", lightBackground ? "#171A18" : "#F2F4EF");
-  root.style.setProperty("--muted", lightBackground ? "#555C56" : "#8B918B");
-  root.style.setProperty("--dim", lightBackground ? "#737A74" : "#4F554F");
-  root.style.setProperty("--line", lightBackground ? "rgb(12 18 14 / 16%)" : "rgb(225 229 221 / 12%)");
-  root.style.setProperty("--yellow", theme);
-  root.style.setProperty("--theme-rgb", `${themeRed} ${themeGreen} ${themeBlue}`);
-  root.style.setProperty("--on-theme", relativeLuminance(theme) > 0.42 ? "#171100" : "#FFFFFF");
-  root.style.setProperty("--window-opacity", String(settings.opacity / 100));
-  root.style.colorScheme = lightBackground ? "light" : "dark";
+  for (const [name, value] of Object.entries(appearanceTokens(settings)))
+    root.style.setProperty(name, value);
+  root.style.colorScheme =
+    luminance(foreground(settings.backgroundColor)) < 0.5 ? "light" : "dark";
 }
 
 function readStoredAppearance() {
   try {
     const stored = window.localStorage.getItem(APPEARANCE_STORAGE_KEY);
-    return stored ? normalizeAppearance(JSON.parse(stored)) : DEFAULT_APPEARANCE;
+    return stored
+      ? normalizeAppearance(JSON.parse(stored))
+      : DEFAULT_APPEARANCE;
   } catch {
     return DEFAULT_APPEARANCE;
   }
@@ -86,7 +43,10 @@ function readStoredAppearance() {
 
 function storeAppearance(settings) {
   try {
-    window.localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(settings));
+    window.localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify(settings),
+    );
   } catch {
     // Electron 主进程仍会持久化；浏览器禁用存储时只保留本次会话。
   }
@@ -105,14 +65,17 @@ export function AppearanceProvider({ children }) {
     return next;
   }, []);
 
-  const updateAppearance = useCallback((changes) => {
-    const next = acceptAppearance({ ...settingsRef.current, ...changes });
-    const request = window.noteDesktop?.updateAppearance?.(next);
-    request?.catch(() => {
-      // 保留本地预览；主进程错误不会让设置界面失去响应。
-    });
-    return next;
-  }, [acceptAppearance]);
+  const updateAppearance = useCallback(
+    (changes) => {
+      const next = acceptAppearance({ ...settingsRef.current, ...changes });
+      const request = window.noteDesktop?.updateAppearance?.(next);
+      request?.catch(() => {
+        // 保留本地预览；主进程错误不会让设置界面失去响应。
+      });
+      return next;
+    },
+    [acceptAppearance],
+  );
 
   useLayoutEffect(() => {
     applyAppearance(settings);
@@ -120,11 +83,14 @@ export function AppearanceProvider({ children }) {
 
   useEffect(() => {
     let disposed = false;
-    const removeDesktopListener = window.noteDesktop?.onAppearanceChanged?.((next) => {
-      if (!disposed) acceptAppearance(next);
-    });
+    const removeDesktopListener = window.noteDesktop?.onAppearanceChanged?.(
+      (next) => {
+        if (!disposed) acceptAppearance(next);
+      },
+    );
 
-    window.noteDesktop?.getAppearance?.()
+    window.noteDesktop
+      ?.getAppearance?.()
       .then((next) => {
         if (!disposed) acceptAppearance(next);
       })
@@ -147,13 +113,21 @@ export function AppearanceProvider({ children }) {
     };
   }, [acceptAppearance]);
 
-  const value = useMemo(() => ({ settings, updateAppearance }), [settings, updateAppearance]);
-  return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>;
+  const value = useMemo(
+    () => ({ settings, updateAppearance }),
+    [settings, updateAppearance],
+  );
+  return (
+    <AppearanceContext.Provider value={value}>
+      {children}
+    </AppearanceContext.Provider>
+  );
 }
 
 export function useAppearance() {
   const context = useContext(AppearanceContext);
-  if (!context) throw new Error("useAppearance must be used inside AppearanceProvider");
+  if (!context)
+    throw new Error("useAppearance must be used inside AppearanceProvider");
   return context;
 }
 
@@ -161,11 +135,14 @@ export function AppearanceSettingsForm({ onDone }) {
   const { settings, updateAppearance } = useAppearance();
   const backgroundInputRef = useRef(null);
   const themeInputRef = useRef(null);
-  const [backgroundDraft, setBackgroundDraft] = useState(settings.backgroundColor);
+  const [backgroundDraft, setBackgroundDraft] = useState(
+    settings.backgroundColor,
+  );
   const [themeDraft, setThemeDraft] = useState(settings.themeColor);
-  const isDefault = settings.backgroundColor === DEFAULT_APPEARANCE.backgroundColor
-    && settings.themeColor === DEFAULT_APPEARANCE.themeColor
-    && settings.opacity === DEFAULT_APPEARANCE.opacity;
+  const isDefault =
+    settings.backgroundColor === DEFAULT_APPEARANCE.backgroundColor &&
+    settings.themeColor === DEFAULT_APPEARANCE.themeColor &&
+    settings.opacity === DEFAULT_APPEARANCE.opacity;
 
   useEffect(() => {
     setBackgroundDraft(settings.backgroundColor);
@@ -195,7 +172,10 @@ export function AppearanceSettingsForm({ onDone }) {
   }, [updateAppearance]);
 
   const finish = () => {
-    updateAppearance({ backgroundColor: backgroundDraft, themeColor: themeDraft });
+    updateAppearance({
+      backgroundColor: backgroundDraft,
+      themeColor: themeDraft,
+    });
     onDone?.();
   };
 
@@ -208,7 +188,10 @@ export function AppearanceSettingsForm({ onDone }) {
   return (
     <div className="appearance-settings-form">
       <div className="appearance-setting-list">
-        <label className="appearance-color-setting" htmlFor="appearance-background-color">
+        <label
+          className="appearance-color-setting"
+          htmlFor="appearance-background-color"
+        >
           <span>
             <strong>背景颜色</strong>
           </span>
@@ -221,11 +204,16 @@ export function AppearanceSettingsForm({ onDone }) {
               onInput={(event) => setBackgroundDraft(event.currentTarget.value)}
               onChange={() => {}}
             />
-            <output htmlFor="appearance-background-color">{backgroundDraft}</output>
+            <output htmlFor="appearance-background-color">
+              {backgroundDraft}
+            </output>
           </span>
         </label>
 
-        <label className="appearance-color-setting" htmlFor="appearance-theme-color">
+        <label
+          className="appearance-color-setting"
+          htmlFor="appearance-theme-color"
+        >
           <span>
             <strong>主题颜色</strong>
           </span>
@@ -242,7 +230,10 @@ export function AppearanceSettingsForm({ onDone }) {
           </span>
         </label>
 
-        <label className="appearance-opacity-setting" htmlFor="appearance-opacity">
+        <label
+          className="appearance-opacity-setting"
+          htmlFor="appearance-opacity"
+        >
           <span>
             <strong>不透明度</strong>
           </span>
@@ -255,7 +246,9 @@ export function AppearanceSettingsForm({ onDone }) {
             step="1"
             value={settings.opacity}
             style={{ "--range-value": `${settings.opacity}%` }}
-            onChange={(event) => updateAppearance({ opacity: event.target.value })}
+            onChange={(event) =>
+              updateAppearance({ opacity: event.target.value })
+            }
           />
         </label>
       </div>
@@ -270,7 +263,11 @@ export function AppearanceSettingsForm({ onDone }) {
           <ArrowCounterClockwise size={17} aria-hidden="true" />
           恢复默认
         </button>
-        <button className="appearance-done-button" type="button" onClick={finish}>
+        <button
+          className="appearance-done-button"
+          type="button"
+          onClick={finish}
+        >
           <CheckCircle size={18} weight="fill" aria-hidden="true" />
           完成
         </button>

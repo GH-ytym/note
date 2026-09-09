@@ -44,6 +44,16 @@ export function createTodo(todo) {
   });
 }
 
+export function createEvent(event) {
+  return request("/events", {
+    method: "POST",
+    body: JSON.stringify(event),
+  });
+}
+
+export function getEvent(id) { return request(`/events/${id}`); }
+export function patchEvent(id, changes) { return request(`/events/${id}`, { method: "PATCH", body: JSON.stringify(changes) }); }
+
 export function getTodo(id) {
   return request(`/todos/${id}`);
 }

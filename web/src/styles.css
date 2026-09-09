@@ -1,12 +1,15 @@
+@import "./styles/clock.css";
+@import "./styles/calendar-views.css";
+
 :root {
-  color: #f2f4ef;
+  color: var(--text);
   background: var(--page);
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --page: #000000;
-  --panel: #0A0A0A;
-  --cell: #0E0E0E;
+  --panel: #0a0a0a;
+  --cell: #0e0e0e;
   --cell-hover: #141414;
   --cell-disabled: #070707;
   --line: rgb(225 229 221 / 12%);
@@ -16,6 +19,8 @@
   --yellow: #f3b51b;
   --theme-rgb: 243 181 27;
   --on-theme: #171100;
+  --accent-ink: #f3b51b;
+  --danger: #ff8a80;
   --side-width: min(390px, 34vw);
 }
 
@@ -76,7 +81,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   z-index: 40;
-  outline: 2px solid var(--yellow);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 2px;
 }
 
@@ -88,7 +93,11 @@ textarea:focus-visible {
   padding: 14px clamp(20px, 3vw, 44px);
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 45%, rgb(var(--theme-rgb) / 2.5%), transparent 42%),
+    radial-gradient(
+      circle at 50% 45%,
+      rgb(var(--theme-rgb) / 2.5%),
+      transparent 42%
+    ),
     var(--page);
 }
 
@@ -99,7 +108,10 @@ textarea:focus-visible {
   min-width: 0;
   grid-template-rows: clamp(148px, 20vh, 184px) minmax(0, 1fr);
   gap: 12px;
-  transition: width 200ms ease, margin-left 200ms ease, padding 200ms ease;
+  transition:
+    width 200ms ease,
+    margin-left 200ms ease,
+    padding 200ms ease;
 }
 
 .calendar-shell.is-desktop-calendar .workspace-stack {
@@ -116,18 +128,10 @@ textarea:focus-visible {
   grid-template-rows: minmax(0, 1fr);
 }
 
-.calendar-shell.is-desktop-calendar .month-peek {
-  display: none;
-}
-
 .calendar-shell.is-desktop-calendar .calendar-panel {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-
-.calendar-shell.is-desktop-calendar .day-agenda-panel {
-  display: none;
 }
 
 .month-stack {
@@ -137,61 +141,6 @@ textarea:focus-visible {
   min-width: 0;
   min-height: 0;
   grid-template-rows: 48px minmax(0, 1fr) 48px;
-}
-
-.calendar-shell.has-editor-panel .workspace-stack {
-  width: calc(100% - var(--side-width));
-  padding-right: 10px;
-}
-
-.calendar-shell.has-detail-panel .workspace-stack {
-  width: calc(100% - var(--side-width));
-  margin-left: var(--side-width);
-  padding-left: 10px;
-}
-
-.month-peek {
-  z-index: 1;
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  align-items: center;
-  gap: 6px;
-  padding: 0 18px;
-  color: var(--muted);
-  opacity: 0.46;
-  overflow: hidden;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-}
-
-.month-peek.is-previous {
-  align-items: end;
-  padding-bottom: 5px;
-  mask-image: linear-gradient(to bottom, transparent, #000 75%);
-}
-
-.month-peek.is-next {
-  align-items: start;
-  padding-top: 5px;
-  mask-image: linear-gradient(to bottom, #000 25%, transparent);
-}
-
-.month-peek > span {
-  align-self: center;
-  font-weight: 620;
-}
-
-.peek-days {
-  display: grid;
-  align-self: center;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-}
-
-.peek-days i {
-  color: var(--dim);
-  font-size: 10px;
-  font-style: normal;
-  text-align: center;
 }
 
 .calendar-panel {
@@ -205,7 +154,9 @@ textarea:focus-visible {
   border-radius: 12px;
   background: var(--panel);
   box-shadow: 0 18px 64px rgb(0 0 0 / 34%);
-  transition: opacity 180ms ease, grid-template-rows 220ms ease;
+  transition:
+    opacity 180ms ease,
+    grid-template-rows 220ms ease;
 }
 
 .calendar-panel.is-loading {
@@ -244,13 +195,16 @@ textarea:focus-visible {
   height: 34px;
   place-items: center;
   border-radius: 7px;
-  color: var(--yellow);
+  color: var(--accent-ink);
   cursor: pointer;
-  transition: color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms ease;
 }
 
 .month-controls button:hover {
-  color: color-mix(in srgb, var(--yellow) 82%, var(--text));
+  color: var(--accent-ink);
   background: rgb(var(--theme-rgb) / 10%);
 }
 
@@ -305,7 +259,7 @@ textarea:focus-visible {
 }
 
 .desktop-picker-status small {
-  color: color-mix(in srgb, var(--selection-color) 74%, var(--muted));
+  color: var(--accent-ink);
   font-size: 8px;
   font-variant-numeric: tabular-nums;
 }
@@ -353,7 +307,9 @@ textarea:focus-visible {
   border-radius: 7px;
   color: var(--muted);
   cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease;
 }
 
 .window-controls > button:hover,
@@ -429,7 +385,9 @@ textarea:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2;
-  filter: drop-shadow(0 0 3px var(--selection-soft, rgb(var(--theme-rgb) / 30%)));
+  filter: drop-shadow(
+    0 0 3px var(--selection-soft, rgb(var(--theme-rgb) / 30%))
+  );
 }
 
 .day-cell {
@@ -443,7 +401,9 @@ textarea:focus-visible {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: var(--cell);
-  transition: background-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .day-cell:nth-child(7n) {
@@ -488,7 +448,11 @@ textarea:focus-visible {
   gap: 3px;
   padding: 4px 5px;
   border-radius: 6px;
-  transition: color 180ms ease, opacity 180ms ease, filter 180ms ease, background 180ms ease;
+  transition:
+    color 180ms ease,
+    opacity 180ms ease,
+    filter 180ms ease,
+    background 180ms ease;
 }
 
 .date-mark strong {
@@ -503,7 +467,7 @@ textarea:focus-visible {
 }
 
 .is-today .date-mark strong {
-  color: var(--yellow);
+  color: var(--accent-ink);
 }
 
 .date-note {
@@ -527,7 +491,7 @@ textarea:focus-visible {
 }
 
 .is-today .date-note {
-  color: color-mix(in srgb, var(--yellow) 74%, var(--muted));
+  color: var(--accent-ink);
 }
 
 .day-events {
@@ -570,7 +534,9 @@ textarea:focus-visible {
   border-radius: 50%;
   background: var(--event-color);
   box-shadow: 0 0 0 2px var(--event-soft);
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .event-dot::after {
@@ -594,7 +560,9 @@ textarea:focus-visible {
 
 .event-dot-button:hover .event-dot,
 .event-dot-button[aria-pressed="true"] .event-dot {
-  box-shadow: 0 0 0 3px var(--event-soft), 0 0 9px var(--event-color);
+  box-shadow:
+    0 0 0 3px var(--event-soft),
+    0 0 9px var(--event-color);
   transform: scale(1.16);
 }
 
@@ -629,7 +597,9 @@ textarea:focus-visible {
   pointer-events: none;
   text-align: left;
   transform: translate(-50%, -3px);
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
 }
 
 .event-preview b {
@@ -735,8 +705,6 @@ textarea:focus-visible {
 .day-cell.is-past-disabled .date-note {
   filter: saturate(0.35);
 }
-
-.has-editor-panel .day-events,
 .is-calendar-picking .day-events {
   opacity: 0.28;
   pointer-events: none;
@@ -757,7 +725,7 @@ textarea:focus-visible {
 }
 
 .day-cell.is-start-highlighted .date-mark strong {
-  color: color-mix(in srgb, var(--selection-color, var(--yellow)) 76%, white);
+  color: var(--accent-ink);
 }
 
 .day-cell.is-start-selected .date-mark,
@@ -780,421 +748,6 @@ textarea:focus-visible {
   background: var(--selection-soft, rgb(var(--theme-rgb) / 6%));
 }
 
-.day-cell.is-agenda-selected {
-  box-shadow: inset 0 -2px rgb(var(--theme-rgb) / 78%);
-  background: rgb(var(--theme-rgb) / 3.5%);
-}
-
-.day-agenda-panel {
-  position: relative;
-  z-index: 5;
-  display: grid;
-  min-height: 0;
-  grid-template-rows: 46px minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background:
-    linear-gradient(110deg, rgb(var(--theme-rgb) / 4%), transparent 34%),
-    var(--panel);
-  box-shadow: 0 14px 42px rgb(0 0 0 / 28%);
-}
-
-.day-agenda-panel-header {
-  display: flex;
-  min-height: 46px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px 0 17px;
-  border-bottom: 1px solid var(--line);
-}
-
-.day-agenda-panel-title {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.panel-accent {
-  width: 3px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--yellow);
-  box-shadow: 0 0 14px rgb(var(--theme-rgb) / 22%);
-}
-
-.day-agenda-panel-title > div {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 4px;
-}
-
-.day-agenda-panel-title strong {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 660;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.day-agenda-panel-title small {
-  flex: none;
-  margin-left: 3px;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.day-agenda-inline-add {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  flex: none;
-  margin-left: 1px;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--yellow);
-  cursor: pointer;
-  transition: color 150ms ease, background-color 150ms ease;
-}
-
-.day-agenda-inline-add:hover,
-.day-agenda-inline-add:focus-visible {
-  outline: 0;
-  color: color-mix(in srgb, var(--yellow) 82%, var(--text));
-  background: rgb(var(--theme-rgb) / 8%);
-}
-
-.day-agenda-calendar-button {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: none;
-  place-items: center;
-  border-radius: 7px;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color 150ms ease, background-color 150ms ease;
-}
-
-.day-agenda-calendar-button:hover,
-.day-agenda-calendar-button:focus-visible {
-  outline: 0;
-  color: var(--yellow);
-  background: rgb(var(--theme-rgb) / 7%);
-}
-
-.day-agenda-header-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.day-agenda-header-actions > button {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  flex: none;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color 150ms ease, background-color 150ms ease;
-}
-
-.day-agenda-header-actions > button:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-}
-
-.day-agenda-header-actions > .day-agenda-settings {
-  color: var(--muted);
-}
-
-.day-agenda-header-actions > .day-agenda-settings:hover,
-.day-agenda-header-actions > .day-agenda-settings:focus-visible {
-  outline: 0;
-  color: var(--yellow);
-  background: rgb(var(--theme-rgb) / 8%);
-}
-
-.day-agenda-panel-body {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.day-agenda-list {
-  display: grid;
-  min-height: 0;
-  height: 100%;
-  align-content: start;
-  gap: 8px;
-  padding: 7px 10px 9px;
-  overflow-y: auto;
-}
-
-.agenda-section {
-  display: grid;
-  gap: 4px;
-}
-
-.agenda-section-heading {
-  display: flex;
-  height: 20px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 5px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 640;
-  letter-spacing: 0.04em;
-}
-
-.agenda-section-heading small {
-  color: var(--dim);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-}
-
-.agenda-section.is-complete .agenda-section-heading {
-  color: var(--dim);
-}
-
-.agenda-section-items {
-  display: grid;
-  gap: 4px;
-}
-
-.day-agenda-panel-empty {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-}
-
-.day-agenda-panel-empty span {
-  width: min(180px, 28%);
-  height: 1px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 8%, transparent), transparent);
-}
-
-.agenda-item {
-  position: relative;
-  display: grid;
-  min-height: 42px;
-  grid-template-columns: 20px minmax(90px, 1fr) 28px minmax(76px, 94px);
-  align-items: center;
-  gap: 7px;
-  padding: 4px 7px 4px 9px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--cell-hover);
-  transition: opacity 150ms ease;
-}
-
-.agenda-item.has-delete {
-  grid-template-columns: 20px minmax(90px, 1fr) 28px minmax(76px, 94px) 28px;
-}
-
-.agenda-item.is-saving {
-  opacity: 0.74;
-}
-
-.agenda-dot-button {
-  display: grid;
-  width: 20px;
-  height: 28px;
-  place-items: center;
-  border-radius: 50%;
-  outline: 0;
-  color: #0a0d0b;
-  background: transparent;
-  cursor: pointer;
-}
-
-.agenda-dot-button:disabled {
-  cursor: default;
-}
-
-.agenda-dot-button:not(:disabled):hover .agenda-dot,
-.agenda-dot-button:not(:disabled):focus-visible .agenda-dot {
-  box-shadow: 0 0 0 4px var(--agenda-soft);
-  transform: scale(1.08);
-}
-
-.agenda-dot-button:not(:disabled):focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agenda-color) 42%, transparent);
-}
-
-.agenda-dot-button.is-confirming {
-  width: 18px;
-  height: 18px;
-  justify-self: center;
-  color: #0b0e0c;
-  background: var(--agenda-color);
-  box-shadow: 0 0 0 3px var(--agenda-soft);
-}
-
-.agenda-dot {
-  position: relative;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--agenda-color);
-  box-shadow: 0 0 0 3px var(--agenda-soft);
-  transition: box-shadow 150ms ease, transform 150ms ease;
-}
-
-.agenda-dot::after {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 50%;
-  width: 9px;
-  height: 2px;
-  border-radius: 999px;
-  opacity: 0;
-  background: var(--agenda-color);
-  box-shadow: 0 0 5px var(--agenda-soft);
-  content: "";
-  transform: translateX(-50%);
-}
-
-.agenda-item.is-pending .agenda-dot::after {
-  opacity: 0.9;
-}
-
-.agenda-complete-check {
-  animation: agenda-check-pop 220ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both;
-}
-
-.agenda-title {
-  min-width: 0;
-  height: 32px;
-  padding: 0 7px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  outline: 0;
-  color: var(--text);
-  background: transparent;
-  font-size: 12px;
-}
-
-.agenda-title:hover,
-.agenda-title:focus {
-  border-color: color-mix(in srgb, var(--agenda-color) 58%, var(--line));
-  background: color-mix(in srgb, var(--agenda-soft) 34%, var(--cell-hover));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agenda-color) 10%, transparent);
-}
-
-.agenda-title:focus-visible {
-  outline: 0;
-}
-
-.agenda-item .time-trigger {
-  height: 32px;
-  padding-inline: 7px;
-  border-color: transparent;
-  background: transparent;
-}
-
-.agenda-item .time-trigger:hover,
-.agenda-item .time-trigger:focus-visible,
-.agenda-item .time-trigger[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--agenda-color) 58%, var(--line));
-  background: color-mix(in srgb, var(--agenda-soft) 34%, var(--cell-hover));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agenda-color) 10%, transparent);
-}
-
-.agenda-detail-chevron,
-.agenda-delete-button {
-  display: grid;
-  width: 28px;
-  height: 32px;
-  place-items: center;
-  border-radius: 6px;
-  outline: 0;
-  background: transparent;
-  cursor: pointer;
-  transition: color 150ms ease, filter 150ms ease, transform 150ms ease;
-}
-
-.agenda-detail-chevron {
-  color: var(--agenda-color);
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 1;
-}
-
-.agenda-detail-chevron:hover,
-.agenda-detail-chevron:focus-visible {
-  color: color-mix(in srgb, var(--agenda-color) 82%, white);
-  transform: translateX(1px);
-}
-
-.agenda-delete-button {
-  color: #ef6464;
-}
-
-.agenda-delete-button:hover,
-.agenda-delete-button:focus-visible {
-  color: #ff8585;
-  filter: drop-shadow(0 0 5px rgb(239 100 100 / 24%));
-}
-
-.agenda-detail-chevron:focus-visible,
-.agenda-delete-button:focus-visible {
-  box-shadow: 0 0 0 2px currentColor;
-}
-
-.agenda-detail-chevron:disabled,
-.agenda-delete-button:disabled {
-  cursor: default;
-  filter: none;
-  opacity: 0.5;
-  transform: none;
-}
-
-.agenda-error {
-  position: absolute;
-  right: 70px;
-  bottom: 1px;
-  color: #f3c64f;
-  font-size: 9px;
-}
-
-.add-fab {
-  position: fixed;
-  right: clamp(34px, 3.7vw, 58px);
-  bottom: 54px;
-  z-index: 12;
-  display: grid;
-  width: 54px;
-  height: 54px;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--on-theme);
-  background: var(--yellow);
-  box-shadow: 0 12px 30px rgb(0 0 0 / 44%), 0 0 22px rgb(var(--theme-rgb) / 13%);
-  cursor: pointer;
-  transition: transform 160ms ease, box-shadow 160ms ease;
-}
-
-.add-fab:hover {
-  box-shadow: 0 15px 34px rgb(0 0 0 / 50%), 0 0 26px rgb(var(--theme-rgb) / 20%);
-  transform: translateY(-2px);
-}
-
-.calendar-shell.has-editor-panel .add-fab {
-  opacity: 0;
-  pointer-events: none;
-}
-
 .toast {
   position: fixed;
   right: clamp(34px, 3.7vw, 58px);
@@ -1203,7 +756,7 @@ textarea:focus-visible {
   padding: 8px 11px;
   border: 1px solid rgb(var(--theme-rgb) / 30%);
   border-radius: 6px;
-  color: var(--yellow);
+  color: var(--accent-ink);
   background: var(--cell-hover);
   box-shadow: 0 10px 24px rgb(0 0 0 / 40%);
   font-size: 11px;
@@ -1254,7 +807,9 @@ textarea:focus-visible {
   border: 1px solid var(--line);
   box-shadow: 0 16px 44px rgb(0 0 0 / 38%);
   animation: editor-panel-in 190ms ease-out;
-  transition: opacity 180ms ease, filter 180ms ease;
+  transition:
+    opacity 180ms ease,
+    filter 180ms ease;
 }
 
 .editor-panel.is-picking {
@@ -1336,6 +891,29 @@ textarea:focus-visible {
   overflow-y: auto;
 }
 
+.item-kind-switch {
+  display: grid;
+  height: 36px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--cell-hover);
+}
+
+.item-kind-switch button {
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.item-kind-switch button.is-active {
+  color: var(--on-theme);
+  background: var(--yellow);
+}
+
 .side-form label,
 .color-field,
 .select-field,
@@ -1373,12 +951,14 @@ textarea:focus-visible {
   color: var(--muted);
   background: transparent;
   cursor: pointer;
-  transition: color 160ms ease, transform 160ms ease;
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
 }
 
 .content-editor-expand-button:hover,
 .content-editor-expand-button:focus-visible {
-  color: var(--yellow);
+  color: var(--accent-ink);
   background: transparent;
   transform: translate(1px, 1px);
 }
@@ -1394,7 +974,9 @@ textarea:focus-visible {
   color: var(--text);
   background: var(--cell-hover);
   font-size: 13px;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .side-form input,
@@ -1461,7 +1043,7 @@ textarea:focus-visible {
 }
 
 .select-trigger > svg {
-  color: var(--yellow);
+  color: var(--accent-ink);
   transition: transform 150ms ease;
 }
 
@@ -1500,7 +1082,7 @@ textarea:focus-visible {
 .select-menu button:hover,
 .select-menu button:focus-visible {
   outline: 0;
-  color: color-mix(in srgb, var(--yellow) 78%, var(--text));
+  color: var(--accent-ink);
   background: rgb(var(--theme-rgb) / 10%);
 }
 
@@ -1537,7 +1119,10 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
   text-align: left;
   cursor: pointer;
-  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
 }
 
 .time-trigger > svg {
@@ -1545,7 +1130,7 @@ textarea:focus-visible {
 }
 
 .time-trigger > svg:last-child {
-  color: var(--yellow);
+  color: var(--accent-ink);
   transition: transform 150ms ease;
 }
 
@@ -1600,7 +1185,7 @@ textarea:focus-visible {
 .time-unit > button:hover,
 .time-unit > button:focus-visible {
   outline: 0;
-  color: var(--yellow);
+  color: var(--accent-ink);
   background: rgb(var(--theme-rgb) / 9%);
 }
 
@@ -1617,7 +1202,7 @@ textarea:focus-visible {
 }
 
 .time-colon {
-  color: var(--yellow);
+  color: var(--accent-ink);
   font-size: 20px;
   font-weight: 700;
   text-align: center;
@@ -1726,7 +1311,7 @@ textarea:focus-visible {
   padding: 0 11px;
   border: 1px solid rgb(var(--theme-rgb) / 28%);
   border-radius: 7px;
-  color: var(--yellow);
+  color: var(--accent-ink);
   background: rgb(var(--theme-rgb) / 6%);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -1754,7 +1339,8 @@ textarea:focus-visible {
   align-items: center;
   gap: 8px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--linked-date-color) 32%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--linked-date-color) 32%, transparent);
   border-radius: 7px;
   color: var(--text);
   background: color-mix(in srgb, var(--linked-date-color) 6%, var(--cell));
@@ -1766,7 +1352,11 @@ textarea:focus-visible {
 .linked-date-field > button:focus-visible {
   outline: 0;
   border-color: color-mix(in srgb, var(--linked-date-color) 65%, transparent);
-  background: color-mix(in srgb, var(--linked-date-color) 10%, var(--cell-hover));
+  background: color-mix(
+    in srgb,
+    var(--linked-date-color) 10%,
+    var(--cell-hover)
+  );
 }
 
 .linked-date-field > button > svg:first-child {
@@ -1780,7 +1370,7 @@ textarea:focus-visible {
 .linked-date-field strong {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--linked-date-color) 78%, var(--text));
+  color: var(--accent-ink);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -1814,7 +1404,7 @@ textarea:focus-visible {
 }
 
 .custom-pick-status span {
-  color: var(--yellow);
+  color: var(--accent-ink);
   font-weight: 680;
 }
 
@@ -1851,7 +1441,15 @@ textarea:focus-visible {
 
 .color-trigger-swatch.is-random,
 .random-swatch {
-  background: conic-gradient(from 45deg, #f3b51b, #e95b78, #a879f2, #5b8def, #35b7a0, #f3b51b);
+  background: conic-gradient(
+    from 45deg,
+    #f3b51b,
+    #e95b78,
+    #a879f2,
+    #5b8def,
+    #35b7a0,
+    #f3b51b
+  );
 }
 
 .color-palette {
@@ -1876,7 +1474,7 @@ textarea:focus-visible {
   place-items: center;
   border: 2px solid transparent;
   border-radius: 50%;
-  color: #0b0e0c;
+  color: var(--swatch-ink, #0b0e0c);
   background: var(--swatch-color);
   box-shadow: 0 0 0 1px rgb(255 255 255 / 10%);
   cursor: pointer;
@@ -1887,8 +1485,10 @@ textarea:focus-visible {
 }
 
 .palette-swatch.is-selected {
-  border-color: #f5f7f2;
-  box-shadow: 0 0 0 2px #0f1210, 0 0 0 4px rgb(255 255 255 / 22%);
+  border-color: var(--text);
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 4px rgb(255 255 255 / 22%);
 }
 
 .random-swatch {
@@ -1897,8 +1497,16 @@ textarea:focus-visible {
 
 .custom-color-swatch {
   position: relative;
-  color: var(--yellow);
-  background: conic-gradient(from 45deg, #f3b51b, #e95b78, #a879f2, #5b8def, #35b7a0, #f3b51b);
+  color: var(--accent-ink);
+  background: conic-gradient(
+    from 45deg,
+    #f3b51b,
+    #e95b78,
+    #a879f2,
+    #5b8def,
+    #35b7a0,
+    #f3b51b
+  );
   overflow: hidden;
 }
 
@@ -1932,13 +1540,15 @@ textarea:focus-visible {
 }
 
 .custom-color-swatch:focus-within {
-  border-color: #f5f7f2;
-  box-shadow: 0 0 0 2px #0f1210, 0 0 0 4px rgb(var(--theme-rgb) / 42%);
+  border-color: var(--text);
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 4px rgb(var(--theme-rgb) / 42%);
 }
 
 .form-error {
   margin: -4px 0 0;
-  color: #f3c64f;
+  color: var(--danger);
   font-size: 11px;
 }
 
@@ -1951,18 +1561,21 @@ textarea:focus-visible {
   gap: 7px;
   border: 1px solid rgb(224 105 94 / 22%);
   border-radius: 7px;
-  color: #bd8982;
+  color: var(--danger);
   background: rgb(105 39 33 / 9%);
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background-color 160ms ease;
 }
 
 .delete-button:hover,
 .delete-button.is-confirming {
   border-color: rgb(239 116 103 / 52%);
-  color: #f0a49b;
+  color: var(--danger);
   background: rgb(132 45 37 / 18%);
 }
 
@@ -2023,15 +1636,6 @@ textarea:focus-visible {
   background: var(--panel);
 }
 
-.workspace-day-view {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--panel);
-}
-
 .workspace-back-button {
   flex: 0 0 auto;
 }
@@ -2059,7 +1663,11 @@ textarea:focus-visible {
   z-index: 20;
   margin-inline: -2px;
   padding: 16px 2px 24px;
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--panel) 72%, transparent), var(--panel) 28%);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--panel) 72%, transparent),
+    var(--panel) 28%
+  );
 }
 
 .appearance-settings-form {
@@ -2164,7 +1772,7 @@ textarea:focus-visible {
   height: 28px;
   grid-column: 1 / -1;
   margin: -4px 0 0;
-  accent-color: var(--yellow);
+  accent-color: var(--accent-ink);
   cursor: pointer;
 }
 
@@ -2206,7 +1814,10 @@ textarea:focus-visible {
   padding: 0 15px;
   border-radius: 8px;
   cursor: pointer;
-  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background-color 150ms ease;
 }
 
 .appearance-reset-button {
@@ -2263,7 +1874,7 @@ textarea:focus-visible {
   font-size: clamp(16px, 1.7vw, 20px);
   line-height: 1.75;
   resize: none;
-  caret-color: var(--yellow);
+  caret-color: var(--accent-ink);
 }
 
 .focused-editor-form > textarea:focus {
@@ -2286,7 +1897,7 @@ textarea:focus-visible {
 }
 
 .focused-editor-status > span.is-error {
-  color: #F3C64F;
+  color: var(--danger);
 }
 
 .focused-editor-save {
@@ -2296,17 +1907,19 @@ textarea:focus-visible {
   gap: 8px;
   padding-inline: 4px;
   border-radius: 7px;
-  color: var(--yellow);
+  color: var(--accent-ink);
   background: transparent;
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
-  transition: color 150ms ease, transform 150ms ease;
+  transition:
+    color 150ms ease,
+    transform 150ms ease;
 }
 
 .focused-editor-save:hover,
 .focused-editor-save:focus-visible {
-  color: color-mix(in srgb, var(--yellow) 84%, var(--text));
+  color: var(--accent-ink);
   background: transparent;
   transform: translateX(-1px);
 }
@@ -2319,7 +1932,11 @@ textarea:focus-visible {
 
 .is-reminder-window .utility-panel {
   background:
-    radial-gradient(circle at 16% 34%, rgb(var(--theme-rgb) / 7%), transparent 38%),
+    radial-gradient(
+      circle at 16% 34%,
+      rgb(var(--theme-rgb) / 7%),
+      transparent 38%
+    ),
     var(--panel);
 }
 
@@ -2342,7 +1959,11 @@ textarea:focus-visible {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--reminder-color) 34%, transparent);
   border-radius: 10px;
-  background: linear-gradient(140deg, var(--reminder-soft), color-mix(in srgb, var(--text) 1.5%, transparent) 44%);
+  background: linear-gradient(
+    140deg,
+    var(--reminder-soft),
+    color-mix(in srgb, var(--text) 1.5%, transparent) 44%
+  );
 }
 
 .reminder-bell {
@@ -2352,9 +1973,10 @@ textarea:focus-visible {
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--reminder-color) 44%, transparent);
   border-radius: 50%;
-  color: var(--reminder-color);
+  color: var(--accent-ink);
   background: color-mix(in srgb, var(--reminder-color) 12%, var(--panel));
-  box-shadow: 0 0 24px color-mix(in srgb, var(--reminder-color) 12%, transparent);
+  box-shadow: 0 0 24px
+    color-mix(in srgb, var(--reminder-color) 12%, transparent);
   animation: reminder-bell-in 220ms ease-out;
 }
 
@@ -2364,7 +1986,7 @@ textarea:focus-visible {
 
 .reminder-time {
   display: block;
-  color: var(--reminder-color);
+  color: var(--accent-ink);
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -2386,7 +2008,7 @@ textarea:focus-visible {
 
 .reminder-error {
   margin: 0;
-  color: #f0a49b;
+  color: var(--danger);
   font-size: 11px;
 }
 
@@ -2406,7 +2028,11 @@ textarea:focus-visible {
   font-size: 12px;
   font-weight: 680;
   cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease, transform 160ms ease;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
 .reminder-dismiss {
@@ -2433,8 +2059,14 @@ textarea:focus-visible {
 }
 
 @keyframes reminder-bell-in {
-  from { opacity: 0; transform: scale(0.82) rotate(-8deg); }
-  to { opacity: 1; transform: scale(1) rotate(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.82) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
 }
 
 .custom-dates-field {
@@ -2452,7 +2084,7 @@ textarea:focus-visible {
   min-height: 44px;
   border: 1px solid rgb(var(--theme-rgb) / 34%);
   border-radius: 7px;
-  color: var(--yellow);
+  color: var(--accent-ink);
   background: rgb(var(--theme-rgb) / 7%);
   font-size: 12px;
   font-weight: 670;
@@ -2492,7 +2124,7 @@ textarea:focus-visible {
   padding: 0 5px 0 9px;
   border: 1px solid rgb(var(--theme-rgb) / 26%);
   border-radius: 14px;
-  color: var(--yellow);
+  color: var(--accent-ink);
   background: rgb(var(--theme-rgb) / 7%);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -2527,27 +2159,9 @@ textarea:focus-visible {
   width: 22px;
   height: 22px;
   border: 2px solid var(--line);
-  border-top-color: var(--yellow);
+  border-top-color: var(--accent-ink);
   border-radius: 50%;
   animation: utility-spin 700ms linear infinite;
-}
-
-.utility-window.is-day-window {
-  position: relative;
-}
-
-.utility-window.is-day-window .day-agenda-panel-header {
-  app-region: drag;
-  -webkit-app-region: drag;
-  user-select: none;
-}
-
-.utility-window.is-day-window .day-agenda-panel {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
 }
 
 .utility-day-error {
@@ -2558,29 +2172,49 @@ textarea:focus-visible {
   padding: 9px 12px;
   border: 1px solid rgb(var(--theme-rgb) / 28%);
   border-radius: 7px;
-  color: var(--yellow);
+  color: var(--accent-ink);
   background: var(--cell-hover);
   box-shadow: 0 12px 30px rgb(0 0 0 / 36%);
   font-size: 11px;
 }
 
 @keyframes utility-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes agenda-check-pop {
-  from { opacity: 0; transform: scale(0.55); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes detail-panel-in {
-  from { opacity: 0; transform: translateX(-18px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes editor-panel-in {
-  from { opacity: 0; transform: translateX(18px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @media (max-width: 1050px) {
@@ -2629,11 +2263,6 @@ textarea:focus-visible {
 
   .month-stack {
     grid-template-rows: 38px minmax(0, 1fr) 38px;
-  }
-
-  .month-peek {
-    grid-template-columns: 82px minmax(0, 1fr);
-    padding-inline: 4px;
   }
 
   .calendar-panel {
@@ -2718,13 +2347,6 @@ textarea:focus-visible {
     height: 20px;
   }
 
-  .add-fab {
-    right: 20px;
-    bottom: 43px;
-    width: 48px;
-    height: 48px;
-  }
-
   .toast {
     right: 20px;
     bottom: 98px;
@@ -2734,30 +2356,11 @@ textarea:focus-visible {
   .editor-panel {
     width: var(--side-width);
   }
-
-  .agenda-item {
-    grid-template-columns: 18px minmax(64px, 1fr) 26px minmax(70px, 84px);
-    gap: 4px;
-    padding-inline: 6px;
-  }
-
-  .agenda-item.has-delete {
-    grid-template-columns: 18px minmax(64px, 1fr) 26px minmax(70px, 84px) 26px;
-  }
 }
 
 @media (max-width: 560px) {
   .calendar-shell {
     --side-width: calc(100vw - 28px);
-  }
-
-  .calendar-shell.has-editor-panel .workspace-stack,
-  .calendar-shell.has-detail-panel .workspace-stack {
-    width: 100%;
-    margin-left: 0;
-    padding: 0;
-    opacity: 0.18;
-    pointer-events: none;
   }
 
   .detail-layer,
@@ -2794,10 +2397,6 @@ textarea:focus-visible {
     grid-template-rows: 46px 26px minmax(0, 1fr);
   }
 
-  .month-peek {
-    padding-block: 0;
-  }
-
   .side-header {
     height: 62px;
   }
@@ -2818,4 +2417,9 @@ textarea:focus-visible {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+.event-save-button {
+  min-height: 40px;
+  border-radius: 6px;
+  cursor: pointer;
 }

@@ -11,13 +11,6 @@ const {
   fitBounds,
 } = require("./window-layout.cjs");
 const {
-  calendarPairFromDayBounds,
-  dayViewPairBounds,
-  resizePeerBounds,
-  translatePeerBounds,
-  workspacePairBounds,
-} = require("./workspace-layout.cjs");
-const {
   app,
   BrowserWindow,
   dialog,
@@ -29,12 +22,11 @@ const {
   Tray,
 } = require("electron");
 
-// 当天 Todo 与日历共同组成桌面工作区；二者没有父子关系，但保持固定相对位置。
-const PRIMARY_WINDOW_KEY = "day";
-const WORKSPACE_WINDOW_KEYS = new Set(["day", "calendar"]);
+// The calendar is the single primary surface; editors and reminders are auxiliary windows.
+const PRIMARY_WINDOW_KEY = "calendar";
+const WORKSPACE_WINDOW_KEYS = new Set(["calendar"]);
 const WINDOW_PROFILES = {
-  day: { width: 360, height: 150, minWidth: 280, minHeight: 130 },
-  calendar: { width: 620, height: 380, minWidth: 320, minHeight: 240 },
+  calendar: { width: 680, height: 460, minWidth: 380, minHeight: 320 },
   create: { width: 340, height: 650, minWidth: 260, minHeight: 240 },
   detail: { width: 360, height: 650, minWidth: 280, minHeight: 240 },
   reminder: { width: 390, height: 250, minWidth: 320, minHeight: 230 },
@@ -61,12 +53,6 @@ let hiddenToTray = false;
 let calendarExpanded = true;
 let appearanceSettings = { ...DEFAULT_APPEARANCE };
 let reminderScheduler = null;
-let syncingWorkspaceBounds = false;
-let syncingWorkspaceState = false;
-let workspaceInteraction = null;
-let workspaceInteractionTimer = null;
-const expectedWorkspaceBounds = new WeakMap();
-const ignoredWorkspaceEvents = new WeakMap();
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -198,7 +184,7 @@ function registerIPC() {
     assertTrustedSender(event);
     const date = normalizeDate(payload.date);
     const workspace = createWorkspace(date);
-    const editorWindow = showWorkspaceView("create", { date });
+    const editorWindow = createCreateWindow(date);
     return {
       calendar: workspace.calendar ? windowResult(workspace.calendar) : null,
       create: windowResult(editorWindow),
@@ -207,15 +193,17 @@ function registerIPC() {
 
   ipcMain.handle("note:open-create", (event, payload = {}) => {
     assertTrustedSender(event);
-    return windowResult(showWorkspaceView("create", { date: normalizeDate(payload.date) }));
+    return windowResult(createCreateWindow(normalizeDate(payload.date)));
   });
 
   ipcMain.handle("note:open-detail", (event, payload = {}) => {
     assertTrustedSender(event);
-    return windowResult(showWorkspaceView("detail", {
-      todoId: normalizeTodoID(payload.todoId),
-      date: normalizeDate(payload.date),
-    }));
+    const id = normalizeTodoID(payload.eventId || payload.todoId);
+    const date = normalizeDate(payload.date);
+    return windowResult(payload.eventId ? createWindow({
+      key: `detail:event:${id}:${date}`, role: "detail", title: "日程详情 · Note",
+      query: { event_id: id, date },
+    }) : createDetailWindow(id, date));
   });
 
   ipcMain.handle("note:open-day", (event, payload = {}) => {
@@ -225,7 +213,7 @@ function registerIPC() {
 
   ipcMain.handle("note:open-settings", (event) => {
     assertTrustedSender(event);
-    return windowResult(showWorkspaceView("settings", { date: currentWorkspaceDate() }));
+    return windowResult(createSettingsWindow());
   });
 
   ipcMain.handle("note:open-content-editor", (event, payload = {}) => {
@@ -316,10 +304,6 @@ function registerIPC() {
   ipcMain.handle("note:minimize-window", (event) => {
     assertTrustedSender(event);
     const target = BrowserWindow.fromWebContents(event.sender);
-    if (isWorkspaceWindow(target)) {
-      minimizeWorkspaceWindows();
-      return;
-    }
     target?.minimize();
   });
 
@@ -327,7 +311,6 @@ function registerIPC() {
     assertTrustedSender(event);
     const target = BrowserWindow.fromWebContents(event.sender);
     if (!target) return false;
-    if (isWorkspaceWindow(target)) return false;
     if (target.isMaximized()) target.unmaximize();
     else target.maximize();
     return target.isMaximized();
@@ -343,16 +326,6 @@ function registerIPC() {
     assertTrustedSender(event);
     const target = BrowserWindow.fromWebContents(event.sender);
     if (!target || target.noteWindowRole !== "day") return null;
-    const itemCount = Number.isInteger(payload.itemCount)
-      ? clamp(payload.itemCount, 0, 1000)
-      : 0;
-    const pendingCount = Number.isInteger(payload.pendingCount)
-      ? clamp(payload.pendingCount, 0, itemCount)
-      : itemCount;
-    const completedCount = Number.isInteger(payload.completedCount)
-      ? clamp(payload.completedCount, 0, itemCount)
-      : Math.max(0, itemCount - pendingCount);
-    fitDayWindow(target, { itemCount, pendingCount, completedCount });
     return target.getBounds();
   });
 
@@ -507,7 +480,8 @@ async function loadReminderOccurrences(from, to) {
   if (!response.ok) {
     throw new Error(payload.error || `calendar request failed with status ${response.status}`);
   }
-  return payload.data;
+	if (Array.isArray(payload.data)) return payload.data;
+	return Array.isArray(payload.data?.todos) ? payload.data.todos : [];
 }
 
 function startReminderScheduler() {
@@ -694,30 +668,11 @@ function broadcastCalendarVisibility() {
   sendToWindow(windows.get(PRIMARY_WINDOW_KEY), "note:calendar-visibility-changed", calendarVisibilityState());
 }
 
-function positionCalendarBesideDay(calendar, day) {
-  if (!isWorkspaceWindow(calendar) || !isWorkspaceWindow(day)) return;
-  const dayBounds = day.getBounds();
-  const calendarBounds = calendar.getBounds();
-  const display = screen.getDisplayMatching(dayBounds);
-  const pair = calendarPairFromDayBounds(display.workArea, dayBounds, {
-    width: calendarBounds.width,
-    height: calendarBounds.height,
-  }, {
-    edgeMargin: DEFAULT_EDGE_MARGIN,
-    gap: DEFAULT_GAP,
-  });
 
-  syncingWorkspaceBounds = true;
-  setLinkedBounds(calendar, pair.calendar);
-  setLinkedBounds(day, pair.day);
-  syncingWorkspaceBounds = false;
-}
 
 function showCalendarWindow({ focus = true } = {}) {
   calendarExpanded = true;
-  const day = createDayWindow(currentWorkspaceDate());
   const calendar = createCalendarWindow();
-  positionCalendarBesideDay(calendar, day);
   if (calendar.isMinimized()) calendar.restore();
   calendar.show();
   broadcastCalendarVisibility();
@@ -725,19 +680,9 @@ function showCalendarWindow({ focus = true } = {}) {
   return calendar;
 }
 
-function hideCalendarWindow({ focusDay = false } = {}) {
-  calendarExpanded = false;
-  const calendar = windows.get("calendar");
-  if (calendar && !calendar.isDestroyed()) calendar.hide();
-  if (datePickerSession) finishDatePicker(focusDay);
-  broadcastCalendarVisibility();
-
-  if (!focusDay) return;
-  const day = windows.get(PRIMARY_WINDOW_KEY);
-  if (!day || day.isDestroyed()) return;
-  if (day.isMinimized()) day.restore();
-  day.show();
-  day.focus();
+function hideCalendarWindow() {
+  if (datePickerSession) finishDatePicker(false);
+  hideApplicationWindows();
 }
 
 function toggleCalendarWindow() {
@@ -749,15 +694,15 @@ function toggleCalendarWindow() {
 }
 
 function createCreateWindow(date) {
-  return showWorkspaceView("create", { date });
+  return createWindow({ key: "create", role: "create", title: "新建 · Note", query: { date } });
 }
 
 function createDetailWindow(todoID, date) {
-  return showWorkspaceView("detail", { todoId: todoID, date });
+  return createWindow({ key: `detail:${todoID}:${date}`, role: "detail", title: "待办详情 · Note", query: { todo_id: todoID, date } });
 }
 
 function createSettingsWindow() {
-  return showWorkspaceView("settings", { date: currentWorkspaceDate() });
+  return createWindow({ key: "settings", role: "settings", title: "外观设置 · Note" });
 }
 
 function createContentEditorWindow(sourceWindow, state) {
@@ -782,62 +727,25 @@ function createReminderWindow(state) {
   });
 }
 
-function createDayWindow(date) {
-  const existing = windows.get(PRIMARY_WINDOW_KEY);
-  if (existing && !existing.isDestroyed()) {
-    if (existing.noteDate !== date) {
-      existing.noteDate = date;
-      existing.setTitle(`${date} · Note`);
-      sendToWindow(existing, "note:day-date-changed", { date });
-    }
-    if (existing.isMinimized()) existing.restore();
-    existing.show();
-    return existing;
-  }
-
-  const target = createWindow({
-    key: PRIMARY_WINDOW_KEY,
-    role: "day",
-    title: `${date} · Note`,
-    query: { date },
-  });
-  target.noteDate = date;
-  target.noteWorkspaceView = "day";
-  return target;
-}
+function createDayWindow(date) { return showWorkspaceView("day", { date }); }
 
 function currentWorkspaceDate() {
   const target = windows.get(PRIMARY_WINDOW_KEY);
   return target && !target.isDestroyed() ? target.noteDate || todayKey() : todayKey();
 }
 
-function createWorkspace(date = currentWorkspaceDate()) {
-  const day = createDayWindow(date);
-  if (day.isMinimized()) day.restore();
-  day.show();
-  let calendar = null;
-  if (calendarExpanded) {
-    calendar = createCalendarWindow();
-    if (calendar.isMinimized()) calendar.restore();
-    calendar.show();
-    broadcastCalendarVisibility();
-  }
-  return { day, calendar };
+function createWorkspace(date = todayKey()) {
+  const calendar = showCalendarWindow();
+  calendar.noteDate = date;
+  return { calendar };
 }
 
 function showWorkspaceView(view, payload = {}) {
-  const date = normalizeDate(payload.date || currentWorkspaceDate());
-  const { day } = createWorkspace(date);
-  const next = { view, date };
-  if (view === "detail") next.todoId = normalizeTodoID(payload.todoId);
-
-  day.noteDate = date;
-  day.setTitle(view === "day" ? `${date} · Note` : `${view} · Note`);
-  resizeWorkspaceDay(view);
-  sendToWindow(day, "note:workspace-view-changed", next);
-  day.show();
-  day.focus();
-  return day;
+  const date = normalizeDate(payload.date || todayKey());
+  const calendar = showCalendarWindow();
+  calendar.noteDate = date;
+  sendToWindow(calendar, "note:workspace-view-changed", { view, date });
+  return calendar;
 }
 
 function createWindow({
@@ -874,7 +782,7 @@ function createWindow({
     titleBarStyle: "hidden",
     resizable: true,
     minimizable: true,
-    maximizable: WORKSPACE_WINDOW_KEYS.has(key) ? false : maximizable,
+    maximizable,
     alwaysOnTop,
     autoHideMenuBar: true,
     backgroundColor: appearanceSettings.backgroundColor,
@@ -897,7 +805,6 @@ function createWindow({
   target.noteContentEditorState = contentEditorState;
   target.noteReminderState = reminderState;
   windows.set(key, target);
-  if (WORKSPACE_WINDOW_KEYS.has(key)) attachWorkspaceWindow(target);
 
   const url = new URL(backendURL);
   url.searchParams.set("window", role);
@@ -943,24 +850,12 @@ function createWindow({
 }
 
 function windowSizing(role) {
-  const profile = WINDOW_PROFILES[role] || WINDOW_PROFILES.day;
+  const profile = WINDOW_PROFILES[role] || WINDOW_PROFILES.calendar;
   const primary = windows.get(PRIMARY_WINDOW_KEY);
-  const display = primary && !primary.isDestroyed()
-    ? screen.getDisplayMatching(primary.getBounds())
-    : screen.getPrimaryDisplay();
-  const workArea = display.workArea;
-  const workspaceScale = (workArea.width - DEFAULT_EDGE_MARGIN * 2 - DEFAULT_GAP)
-    / (WINDOW_PROFILES.day.width + WINDOW_PROFILES.calendar.width);
-  const scale = Math.max(0.58, Math.min(1, Math.min(
-    workArea.height / 1080,
-    WORKSPACE_WINDOW_KEYS.has(role) ? workspaceScale : workArea.width / 1920,
-  )));
-
+  const area = (primary && !primary.isDestroyed() ? screen.getDisplayMatching(primary.getBounds()) : screen.getPrimaryDisplay()).workArea;
   return {
-    width: Math.min(Math.round(profile.width * scale), workArea.width - 24),
-    height: Math.min(Math.round(profile.height * scale), workArea.height - 24),
-    minWidth: Math.min(Math.round(profile.minWidth * scale), workArea.width - 24),
-    minHeight: Math.min(Math.round(profile.minHeight * scale), workArea.height - 24),
+    width: Math.min(profile.width, area.width - 24), height: Math.min(profile.height, area.height - 24),
+    minWidth: Math.min(profile.minWidth, area.width - 24), minHeight: Math.min(profile.minHeight, area.height - 24),
   };
 }
 
@@ -974,15 +869,7 @@ function initialWindowBounds(role, sizing, parent = null) {
     : screen.getPrimaryDisplay();
   const area = display.workArea;
 
-  if (role === "day" || role === "calendar") {
-    const pair = workspacePairBounds(
-      area,
-      role === "calendar" ? sizing : windowSizing("calendar"),
-      role === "day" ? sizing : windowSizing("day"),
-      { edgeMargin: DEFAULT_EDGE_MARGIN, gap: DEFAULT_GAP },
-    );
-    return role === "day" ? pair.day : pair.calendar;
-  }
+  if (role === "calendar") return bottomRightBounds(area, sizing, DEFAULT_EDGE_MARGIN);
 
   if (role === "reminder") {
     return bottomRightBounds(area, sizing, DEFAULT_EDGE_MARGIN);
@@ -992,7 +879,7 @@ function initialWindowBounds(role, sizing, parent = null) {
     return centeredBounds(area, sizing, parentBounds);
   }
 
-  const dayBounds = primaryBounds || bottomRightBounds(area, windowSizing("day"), DEFAULT_EDGE_MARGIN);
+  const dayBounds = primaryBounds || bottomRightBounds(area, windowSizing("calendar"), DEFAULT_EDGE_MARGIN);
   if (role === "create" || role === "settings" || role === "detail") {
     const openDetails = role === "detail"
       ? [...windows.values()].filter((target) => (
@@ -1013,192 +900,23 @@ function isWorkspaceWindow(target) {
   return Boolean(target && !target.isDestroyed() && WORKSPACE_WINDOW_KEYS.has(target.noteWindowKey));
 }
 
-function workspacePeer(target) {
-  if (!isWorkspaceWindow(target) || !target.isVisible()) return null;
-  const peerKey = target.noteWindowKey === PRIMARY_WINDOW_KEY ? "calendar" : PRIMARY_WINDOW_KEY;
-  const peer = windows.get(peerKey);
-  return peer && !peer.isDestroyed() && peer.isVisible() ? peer : null;
-}
 
-function boundsMatch(left, right) {
-  return Boolean(left && right
-    && left.x === right.x
-    && left.y === right.y
-    && left.width === right.width
-    && left.height === right.height);
-}
 
-function setLinkedBounds(target, bounds) {
-  if (!target || target.isDestroyed()) return;
-  expectedWorkspaceBounds.set(target, bounds);
-  ignoredWorkspaceEvents.set(target, Date.now() + 160);
-  target.setBounds(bounds, false);
-}
 
-function shouldIgnoreWorkspaceEvent(target) {
-  const ignoreUntil = ignoredWorkspaceEvents.get(target) || 0;
-  if (ignoreUntil > Date.now()) return true;
-  ignoredWorkspaceEvents.delete(target);
-  return false;
-}
 
-function beginWorkspaceInteraction(kind, source, peer) {
-  if (workspaceInteraction
-    && (workspaceInteraction.kind !== kind || workspaceInteraction.source !== source)) {
-    return null;
-  }
-  if (!workspaceInteraction) {
-    workspaceInteraction = {
-      kind,
-      source,
-      peer,
-      sourceStart: source.getBounds(),
-      peerStart: peer.getBounds(),
-    };
-  }
-  if (workspaceInteractionTimer) clearTimeout(workspaceInteractionTimer);
-  workspaceInteractionTimer = setTimeout(() => {
-    workspaceInteraction = null;
-    workspaceInteractionTimer = null;
-  }, 1800);
-  return workspaceInteraction;
-}
 
-function finishWorkspaceInteraction(kind, source) {
-  if (!workspaceInteraction
-    || workspaceInteraction.kind !== kind
-    || workspaceInteraction.source !== source) return;
-  if (kind === "move" || kind === "resize") {
-    const peer = workspaceInteraction.peer;
-    if (peer && !peer.isDestroyed()) {
-      const aligned = resizePeerBounds(
-        source.noteWindowKey,
-        source.getBounds(),
-        peer.getBounds(),
-        DEFAULT_GAP,
-      );
-      syncingWorkspaceBounds = true;
-      setLinkedBounds(peer, aligned);
-      syncingWorkspaceBounds = false;
-    }
-  }
-  if (workspaceInteractionTimer) clearTimeout(workspaceInteractionTimer);
-  workspaceInteractionTimer = setTimeout(() => {
-    workspaceInteraction = null;
-    workspaceInteractionTimer = null;
-  }, 80);
-}
 
-function attachWorkspaceWindow(target) {
-  target.on("will-move", (_event, nextBounds) => {
-    if (workspaceInteraction && workspaceInteraction.source !== target) return;
-    if (shouldIgnoreWorkspaceEvent(target)) return;
-    const expected = expectedWorkspaceBounds.get(target);
-    if (boundsMatch(expected, nextBounds)) {
-      expectedWorkspaceBounds.delete(target);
-      return;
-    }
-    if (syncingWorkspaceBounds) return;
-    const peer = workspacePeer(target);
-    if (!peer) return;
-    const interaction = beginWorkspaceInteraction("move", target, peer);
-    if (!interaction) return;
-    const peerBounds = translatePeerBounds(
-      interaction.sourceStart,
-      nextBounds,
-      interaction.peerStart,
-    );
-    syncingWorkspaceBounds = true;
-    setLinkedBounds(peer, peerBounds);
-    syncingWorkspaceBounds = false;
-  });
-  target.on("moved", () => finishWorkspaceInteraction("move", target));
 
-  target.on("will-resize", (_event, nextBounds) => {
-    if (workspaceInteraction && workspaceInteraction.source !== target) return;
-    if (shouldIgnoreWorkspaceEvent(target)) return;
-    const expected = expectedWorkspaceBounds.get(target);
-    if (boundsMatch(expected, nextBounds)) {
-      expectedWorkspaceBounds.delete(target);
-      return;
-    }
-    if (syncingWorkspaceBounds) return;
-    const peer = workspacePeer(target);
-    if (!peer) return;
-    const interaction = beginWorkspaceInteraction("resize", target, peer);
-    if (!interaction) return;
-    const peerBounds = resizePeerBounds(
-      target.noteWindowKey,
-      nextBounds,
-      interaction.peerStart,
-      DEFAULT_GAP,
-    );
-    syncingWorkspaceBounds = true;
-    setLinkedBounds(peer, peerBounds);
-    syncingWorkspaceBounds = false;
-  });
-  target.on("resized", () => finishWorkspaceInteraction("resize", target));
 
-  target.on("minimize", () => {
-    if (syncingWorkspaceState) return;
-    const peer = workspacePeer(target);
-    if (!peer || peer.isMinimized()) return;
-    syncingWorkspaceState = true;
-    peer.minimize();
-    syncingWorkspaceState = false;
-  });
 
-  target.on("restore", () => {
-    if (syncingWorkspaceState) return;
-    const peer = workspacePeer(target);
-    if (!peer || !peer.isMinimized()) return;
-    syncingWorkspaceState = true;
-    peer.restore();
-    syncingWorkspaceState = false;
-  });
-}
 
-function resizeWorkspaceDay(view) {
-  const day = windows.get(PRIMARY_WINDOW_KEY);
-  const calendar = windows.get("calendar");
-  if (!isWorkspaceWindow(day)) return;
 
-  const profileRole = ["create", "detail", "settings"].includes(view) ? view : "day";
-  const sizing = windowSizing(profileRole);
-  day.noteWorkspaceView = view;
-  if (!isWorkspaceWindow(calendar) || !calendar.isVisible()) {
-    const current = day.getBounds();
-    const display = screen.getDisplayMatching(current);
-    const next = fitBounds(display.workArea, {
-      x: current.x + current.width - sizing.width,
-      y: current.y,
-      width: sizing.width,
-      height: sizing.height,
-    });
-    setLinkedBounds(day, next);
-    return;
-  }
 
-  const display = screen.getDisplayMatching(calendar.getBounds());
-  const pair = dayViewPairBounds(display.workArea, calendar.getBounds(), sizing, {
-    edgeMargin: DEFAULT_EDGE_MARGIN,
-    gap: DEFAULT_GAP,
-  });
 
-  syncingWorkspaceBounds = true;
-  setLinkedBounds(calendar, pair.calendar);
-  setLinkedBounds(day, pair.day);
-  syncingWorkspaceBounds = false;
-}
 
-function minimizeWorkspaceWindows() {
-  syncingWorkspaceState = true;
-  for (const key of WORKSPACE_WINDOW_KEYS) {
-    const target = windows.get(key);
-    if (target && !target.isDestroyed() && !target.isMinimized()) target.minimize();
-  }
-  syncingWorkspaceState = false;
-}
+
+
+
 
 function placeWindowAtDefault(target, role, parent = null) {
   if (!target || target.isDestroyed() || target.isMaximized()) return;
@@ -1213,53 +931,7 @@ function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(value, maximum));
 }
 
-function fitDayWindow(target, counts) {
-  if (target.isDestroyed() || target.isMaximized() || target.isMinimized() || target.noteWorkspaceView !== "day") return;
 
-  const { itemCount, pendingCount, completedCount } = counts;
-  const bounds = target.getBounds();
-  const contentBounds = target.getContentBounds();
-  const frameHeight = Math.max(0, bounds.height - contentBounds.height);
-  const display = screen.getDisplayMatching(bounds);
-  const sizing = windowSizing("day");
-  const headerHeight = 46;
-  const sectionCount = [pendingCount, completedCount].filter((count) => count > 0).length;
-  const bodyHeight = itemCount === 0
-    ? 72
-    : 16
-      + sectionCount * 20
-      + itemCount * 42
-      + Math.max(0, itemCount - sectionCount) * 4
-      + Math.max(0, sectionCount - 1) * 8;
-  const maximumHeight = Math.min(
-    display.workArea.height - 24,
-    Math.round(display.workArea.height * 0.75),
-  );
-  const height = clamp(
-    headerHeight + bodyHeight + frameHeight,
-    sizing.minHeight,
-    maximumHeight,
-  );
-  if (height === bounds.height) return;
-
-  const calendar = windows.get("calendar");
-  if (isWorkspaceWindow(calendar) && calendar.isVisible()) {
-    const pair = dayViewPairBounds(display.workArea, calendar.getBounds(), {
-      width: bounds.width,
-      height,
-    }, {
-      edgeMargin: DEFAULT_EDGE_MARGIN,
-      gap: DEFAULT_GAP,
-    });
-    syncingWorkspaceBounds = true;
-    setLinkedBounds(calendar, pair.calendar);
-    setLinkedBounds(target, pair.day);
-    syncingWorkspaceBounds = false;
-    return;
-  }
-
-  target.setBounds({ ...bounds, height }, false);
-}
 
 function installTray() {
   if (tray) return;
@@ -1282,23 +954,10 @@ function hideApplicationWindows() {
 }
 
 function restoreApplicationWindows() {
-  const currentPrimary = windows.get(PRIMARY_WINDOW_KEY);
-  const workspace = createWorkspace(currentPrimary?.noteDate || todayKey());
-  if (hiddenToTray) {
-    for (const target of windows.values()) {
-      if (target.isDestroyed()) continue;
-      if (target.noteWindowKey === "calendar" && !calendarExpanded) continue;
-      target.show();
-    }
-  }
   hiddenToTray = false;
-  if (workspace.day.isMinimized()) workspace.day.restore();
-  workspace.day.show();
-  if (workspace.calendar) {
-    if (workspace.calendar.isMinimized()) workspace.calendar.restore();
-    workspace.calendar.show();
-  }
-  workspace.day.focus();
+  const { calendar } = createWorkspace(todayKey());
+  sendToWindow(calendar, "note:workspace-view-changed", { view: "month", date: todayKey() });
+  calendar.focus();
 }
 
 function installApplicationMenu() {

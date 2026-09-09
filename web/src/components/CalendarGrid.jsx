@@ -1,5 +1,6 @@
 import { DotsThree } from "@phosphor-icons/react";
 import EventDot from "./EventDot";
+import { occursOnDay } from "../lib/timeline";
 import { TODAY_KEY, WEEKDAYS, calendarNote } from "../lib/calendar";
 
 export default function CalendarGrid({
@@ -40,7 +41,7 @@ export default function CalendarGrid({
 
         {days.map((day) => {
           const dayEvents = events
-            .filter((item) => item.date === day.key)
+            .filter((item) => occursOnDay(item, day.key))
             .sort((left, right) => left.time.localeCompare(right.time));
           const isExpanded = expandedDayKey === day.key;
           const visibleEvents = dayEvents.length > 9 ? dayEvents.slice(0, 8) : dayEvents.slice(0, 9);

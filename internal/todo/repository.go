@@ -60,12 +60,16 @@ func (r *gormRepository) CalendarCandidates(
 		WithContext(ctx).
 		Preload(
 			//custom模式
+			//把自定义todo的具体日期读取出来
 			"CustomDates",
 			"date >= ? AND date < ?",
 			fromDate,
 			toDate,
 		).
-		Where(`
+		Where( //1.一次性，startsat在范围内就算
+			//2.普通重复，只要startsat在to之前都有可能
+			//3，custom，自定义日期在from和to之间
+			`
 		starts_at IS NOT NULL
 		AND (
 			(

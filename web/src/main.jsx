@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App.jsx";
-import StandaloneWindow from "./StandaloneWindow.jsx";
+import App from "./views/CalendarWindow.jsx";
+import StandaloneWindow from "./windows/StandaloneWindow.jsx";
 import { AppearanceProvider } from "./appearance.jsx";
 import "./styles.css";
 

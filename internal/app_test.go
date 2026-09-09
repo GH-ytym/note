@@ -45,6 +45,9 @@ func TestSQLiteDatabase(t *testing.T) {
 	if !db.Migrator().HasTable(&model.Event{}) {
 		t.Fatal("events table was not created")
 	}
+	if !db.Migrator().HasTable(&model.EventDate{}) {
+		t.Fatal("event_dates table was not created")
+	}
 
 	var foreignKeys int
 	if err := db.Raw("PRAGMA foreign_keys").Scan(&foreignKeys).Error; err != nil {
@@ -85,18 +88,25 @@ func TestSQLiteDatabase(t *testing.T) {
 	eventStartsAt := time.Date(2026, time.August, 30, 14, 5, 37, 0, time.FixedZone("CST", 8*60*60))
 	eventEndsAt := time.Date(2026, time.August, 30, 15, 45, 12, 0, time.FixedZone("CST", 8*60*60))
 	event := model.Event{
-		Title:    "Calendar event integration test",
-		Color:    "#5B8DEF",
-		StartsAt: eventStartsAt,
-		EndsAt:   eventEndsAt,
+		Title:      "Calendar event integration test",
+		Color:      "#5B8DEF",
+		StartsAt:   eventStartsAt,
+		EndsAt:     eventEndsAt,
+		RepeatMode: model.RepeatCustom,
+		CustomDates: []model.EventDate{
+			{Date: time.Date(2026, time.September, 6, 0, 0, 0, 0, time.UTC)},
+		},
 	}
 	if err := db.Create(&event).Error; err != nil {
 		t.Fatalf("create calendar event: %v", err)
 	}
 
 	var loadedEvent model.Event
-	if err := db.First(&loadedEvent, event.ID).Error; err != nil {
+	if err := db.Preload("CustomDates").First(&loadedEvent, event.ID).Error; err != nil {
 		t.Fatalf("load calendar event: %v", err)
+	}
+	if loadedEvent.RepeatMode != model.RepeatCustom || len(loadedEvent.CustomDates) != 1 {
+		t.Fatalf("calendar event recurrence did not round-trip: mode=%q dates=%d", loadedEvent.RepeatMode, len(loadedEvent.CustomDates))
 	}
 	if !loadedEvent.StartsAt.Equal(eventStartsAt) || !loadedEvent.EndsAt.Equal(eventEndsAt) {
 		t.Fatalf(
@@ -213,6 +223,29 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 	`, "legacy content", "#F3B51B", time.Now(), model.RepeatOnce, model.NotifyNone, false, 1).Error; err != nil {
 		t.Fatalf("insert legacy todo: %v", err)
 	}
+	if err := db.Exec(`
+		CREATE TABLE events (
+			id integer PRIMARY KEY AUTOINCREMENT,
+			title text NOT NULL,
+			content text,
+			color text NOT NULL DEFAULT '#F3B51B',
+			starts_at datetime NOT NULL,
+			ends_at datetime NOT NULL,
+			created_at datetime,
+			updated_at datetime,
+			version integer NOT NULL DEFAULT 1,
+			CONSTRAINT chk_events_time_range CHECK (ends_at > starts_at)
+		)
+	`).Error; err != nil {
+		t.Fatalf("create legacy events table: %v", err)
+	}
+	legacyEventStart := time.Date(2026, time.September, 9, 10, 0, 0, 0, time.Local)
+	if err := db.Exec(`
+		INSERT INTO events (title, color, starts_at, ends_at, version)
+		VALUES (?, ?, ?, ?, ?)
+	`, "legacy event", "#F3B51B", legacyEventStart, legacyEventStart.Add(time.Hour), 1).Error; err != nil {
+		t.Fatalf("insert legacy event: %v", err)
+	}
 
 	if err := migrateDatabase(db); err != nil {
 		t.Fatalf("migrate legacy database: %v", err)
@@ -223,7 +256,16 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 	if !db.Migrator().HasTable(&model.Event{}) {
 		t.Fatal("events table was not added to the legacy database")
 	}
-
+	if !db.Migrator().HasTable(&model.EventDate{}) {
+		t.Fatal("event_dates table was not added to the legacy database")
+	}
+	var migratedEvent model.Event
+	if err := db.Where("title = ?", "legacy event").First(&migratedEvent).Error; err != nil {
+		t.Fatalf("load migrated event: %v", err)
+	}
+	if migratedEvent.RepeatMode != model.RepeatOnce {
+		t.Fatalf("migrated event repeat mode = %q, want %q", migratedEvent.RepeatMode, model.RepeatOnce)
+	}
 	var loaded model.Todo
 	if err := db.First(&loaded).Error; err != nil {
 		t.Fatalf("load migrated todo: %v", err)

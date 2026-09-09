@@ -36,6 +36,7 @@ export default function CalendarWindow({
   const [view, setView] = useState(initialView);
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [dayStyle, setDayStyle] = useState("clock");
+  const [handMode, setHandMode] = useState("full");
   const [saving, setSaving] = useState(false);
   const now = useNow();
   const [expandedDayKey, setExpandedDayKey] = useState(null);
@@ -393,6 +394,8 @@ export default function CalendarWindow({
               onFinish={finishDesktopDatePicking}
               dayStyle={dayStyle}
               onDayStyle={setDayStyle}
+              handMode={handMode}
+              onHandMode={setHandMode}
             />
 
             {view === "year" && (
@@ -419,6 +422,7 @@ export default function CalendarWindow({
                 date={selectedDate}
                 items={events}
                 now={now}
+                handMode={handMode}
                 onOpen={openEvent}
                 onRetime={retime}
                 saving={saving}

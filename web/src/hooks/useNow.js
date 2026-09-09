@@ -6,7 +6,7 @@ export default function useNow() {
   useEffect(() => {
     const timer = setInterval(
       () => setNow(shanghaiDateTimeParts(new Date())),
-      10000,
+      1000,
     );
     return () => clearInterval(timer);
   }, []);

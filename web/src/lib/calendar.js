@@ -241,6 +241,7 @@ export function shanghaiDateTimeParts(value) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hourCycle: "h23",
   }).formatToParts(date);
   const part = (type) => parts.find((itemPart) => itemPart.type === type)?.value;
@@ -248,6 +249,8 @@ export function shanghaiDateTimeParts(value) {
   return {
     date: `${part("year")}-${part("month")}-${part("day")}`,
     time: `${part("hour")}:${part("minute")}`,
+    second: Number(part("second")),
+    millisecond: date.getMilliseconds(),
   };
 }
 

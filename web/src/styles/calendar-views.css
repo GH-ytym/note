@@ -49,6 +49,13 @@
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
+.day-view-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
 .day-style-toggle input {
   accent-color: var(--yellow);
 }

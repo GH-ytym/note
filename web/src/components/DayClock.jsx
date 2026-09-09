@@ -6,6 +6,7 @@ export default function DayClock({
   date,
   items,
   now,
+  handMode,
   onOpen,
   onRetime,
   saving,
@@ -86,9 +87,15 @@ export default function DayClock({
     role: "button",
     tabIndex: 0,
   });
-  const nowMinute =
-    Number(now.time.slice(0, 2)) * 60 + Number(now.time.slice(3));
-  const hand = clockPoint(nowMinute, 105);
+  const hour = Number(now.time.slice(0, 2));
+  const minute = Number(now.time.slice(3));
+  const second = now.second + now.millisecond / 1000;
+  const nowMinute = hour * 60 + minute + second / 60;
+  const compactHand = clockPoint(nowMinute, 105);
+  const hourHand = clockPoint(nowMinute, 73);
+  const minuteHand = clockPoint((minute + second / 60) * 24, 100);
+  const secondHand = clockPoint(second * 24, 108);
+  const isToday = date === now.date;
   return (
     <div className="day-clock-wrap" aria-busy={saving}>
       <svg
@@ -103,10 +110,10 @@ export default function DayClock({
           if (drag.current) finish(true);
         }}
       >
-        <circle cx="180" cy="180" r="140" className="clock-face" />
+        <circle cx="180" cy="180" r="119" className="clock-face" />
         {Array.from({ length: 96 }, (_, index) => {
-          const a = clockPoint(index * 15, 140),
-            b = clockPoint(index * 15, index % 4 === 0 ? 132 : 137);
+          const a = clockPoint(index * 15, 138),
+            b = clockPoint(index * 15, index % 4 === 0 ? 128 : 134);
           return (
             <line
               key={index}
@@ -119,7 +126,7 @@ export default function DayClock({
           );
         })}
         {Array.from({ length: 12 }, (_, index) => {
-          const p = clockPoint(index * 120, 119);
+          const p = clockPoint(index * 120, 151);
           return (
             <text x={p.x} y={p.y} key={index} className="clock-hour-label">
               {index * 2}
@@ -131,7 +138,7 @@ export default function DayClock({
             const delta = preview?.id === item.id ? preview.delta : 0;
             const a = start + (preview?.edge === "start" ? delta : 0),
               b = end + (preview?.edge === "end" ? delta : 0);
-            const radius = 100 - (track % 7) * 9 - Math.floor(track / 7) * 2;
+            const radius = 108 - (track % 7) * 9 - Math.floor(track / 7) * 2;
             const head = clockPoint(a, radius),
               tail = clockPoint(b, radius);
             return (
@@ -178,8 +185,8 @@ export default function DayClock({
               delta;
             const peers = all.filter((other) => other.time === item.time),
               lane = peers.findIndex((other) => other.id === item.id);
-            const a = clockPoint(minute, 145 + lane * 6),
-              b = clockPoint(minute, 159 + lane * 6);
+            const a = clockPoint(minute, 151 + lane * 5),
+              b = clockPoint(minute, 166 + lane * 5);
             return (
               <g
                 key={item.id}
@@ -207,18 +214,49 @@ export default function DayClock({
               </g>
             );
           })}
-        {date === now.date && (
-          <g className="clock-now">
-            <line x1="180" y1="180" x2={hand.x} y2={hand.y} />
+        {isToday && (
+          <g className={`clock-now is-${handMode}`}>
+            {handMode === "full" ? (
+              <>
+                <line
+                  className="clock-hour-hand"
+                  x1="180"
+                  y1="180"
+                  x2={hourHand.x}
+                  y2={hourHand.y}
+                />
+                <line
+                  className="clock-minute-hand"
+                  x1="180"
+                  y1="180"
+                  x2={minuteHand.x}
+                  y2={minuteHand.y}
+                />
+                <line
+                  className="clock-second-hand"
+                  x1="180"
+                  y1="180"
+                  x2={secondHand.x}
+                  y2={secondHand.y}
+                />
+              </>
+            ) : (
+              <line
+                className="clock-compact-hand"
+                x1="180"
+                y1="180"
+                x2={compactHand.x}
+                y2={compactHand.y}
+              />
+            )}
             <circle cx="180" cy="180" r="3" />
+            <text x="180" y="210" className="clock-digital">
+              {handMode === "full"
+                ? `${now.time}:${String(now.second).padStart(2, "0")}`
+                : now.time}
+            </text>
           </g>
         )}
-        <text x="180" y="172" className="clock-digital">
-          {now.time}
-        </text>
-        <text x="180" y="193" className="clock-center-date">
-          {date.slice(5).replace("-", " / ")}
-        </text>
       </svg>
       <div className="clock-selection" role="status">
         {preview

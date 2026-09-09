@@ -20,6 +20,8 @@ export default function CalendarToolbar({
   onFinish,
   dayStyle,
   onDayStyle,
+  handMode,
+  onHandMode,
 }) {
   return (
     <header className="calendar-header">
@@ -69,16 +71,30 @@ export default function CalendarToolbar({
             ))}
           </div>
           {view === "day" && (
-            <label className="day-style-toggle">
-              <input
-                type="checkbox"
-                checked={dayStyle === "clock"}
-                onChange={(e) =>
-                  onDayStyle(e.target.checked ? "clock" : "timeline")
-                }
-              />
-              时钟
-            </label>
+            <div className="day-view-options">
+              <label className="day-style-toggle">
+                <input
+                  type="checkbox"
+                  checked={dayStyle === "clock"}
+                  onChange={(e) =>
+                    onDayStyle(e.target.checked ? "clock" : "timeline")
+                  }
+                />
+                时钟
+              </label>
+              {dayStyle === "clock" && (
+                <label className="day-style-toggle">
+                  <input
+                    type="checkbox"
+                    checked={handMode === "full"}
+                    onChange={(e) =>
+                      onHandMode(e.target.checked ? "full" : "compact")
+                    }
+                  />
+                  {handMode === "full" ? "完整时针" : "精简时针"}
+                </label>
+              )}
+            </div>
           )}
           <div className="calendar-actions">
             <button onClick={onToday} title="回到今天" aria-label="回到今天">

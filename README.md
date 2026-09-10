@@ -1,6 +1,6 @@
 # Note
 
-一个本地优先的 Windows / macOS 日历待办应用。Todo 用于记录需要完成的事项，Event 用于安排具有开始和结束时间的日程；所有数据都保存在本机。
+一个本地优先的 Windows / macOS 日历待办应用。Todo（待办）用于记录需要完成的事项，Event（日程）用于安排具有开始和结束时间的日程；所有数据都保存在本机。
 
 <p align="center">
   <img src="desktop/build/icon.svg" alt="Note 图标" width="88">

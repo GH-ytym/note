@@ -1,23 +1,26 @@
 import { useEffect, useState } from "react";
 import { REPEAT_VALUES, validDate } from "../lib/calendar";
 
-function pickerPayload(form, customDates) {
+function pickerPayload(form, customDates, field = "date") {
   return {
-    repeatMode: REPEAT_VALUES[form.repeat],
-    date: form.date,
-    customDates: form.repeat === "自定义" ? customDates : [],
+    field,
+    repeatMode: field === "endDate" ? "once" : REPEAT_VALUES[form.repeat],
+    date: form[field],
+    customDates: field === "date" && form.repeat === "自定义" ? customDates : [],
     color: form.color,
   };
 }
 
 export default function useLinkedDatePicker({ setForm, setCustomDates, setError }) {
   const [active, setActive] = useState(false);
+  const [field, setField] = useState("date");
 
   useEffect(() => {
     const removeSelectionListener = window.noteDesktop?.onDatePickerSelection?.((selection) => {
       if (!selection) return;
-      setForm((current) => current ? { ...current, date: validDate(selection.date) } : current);
-      setCustomDates(Array.isArray(selection.customDates) ? selection.customDates : []);
+      const selectedField = selection.field === "endDate" ? "endDate" : "date";
+      setForm((current) => current ? { ...current, [selectedField]: validDate(selection.date) } : current);
+      if (selectedField === "date") setCustomDates(Array.isArray(selection.customDates) ? selection.customDates : []);
       setError("");
     });
     const removeFinishedListener = window.noteDesktop?.onDatePickerFinished?.(() => setActive(false));
@@ -28,11 +31,12 @@ export default function useLinkedDatePicker({ setForm, setCustomDates, setError 
     };
   }, [setCustomDates, setError, setForm]);
 
-  async function start(form, customDates) {
+  async function start(form, customDates, nextField = "date") {
     if (!window.noteDesktop?.startDatePicker) return;
     try {
       setActive(true);
-      await window.noteDesktop.startDatePicker(pickerPayload(form, customDates));
+      setField(nextField);
+      await window.noteDesktop.startDatePicker(pickerPayload(form, customDates, nextField));
     } catch (pickerError) {
       setActive(false);
       setError(pickerError.message);
@@ -42,12 +46,12 @@ export default function useLinkedDatePicker({ setForm, setCustomDates, setError 
   async function update(form, customDates) {
     if (!active || !window.noteDesktop?.updateDatePicker) return;
     try {
-      await window.noteDesktop.updateDatePicker(pickerPayload(form, customDates));
+      await window.noteDesktop.updateDatePicker(pickerPayload(form, customDates, field));
     } catch (pickerError) {
       setActive(false);
       setError(pickerError.message);
     }
   }
 
-  return { active, start, update };
+  return { active, field, start, update };
 }

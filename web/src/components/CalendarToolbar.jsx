@@ -1,7 +1,7 @@
 import {
   CaretLeft,
   CaretRight,
-  Check,
+  ArrowsIn,
   Crosshair,
   GearSix,
   Plus,
@@ -22,6 +22,7 @@ export default function CalendarToolbar({
   onDayStyle,
   handMode,
   onHandMode,
+  onMini,
 }) {
   return (
     <header className="calendar-header">
@@ -40,13 +41,7 @@ export default function CalendarToolbar({
         </button>
       </div>
       {picker ? (
-        <button
-          className="picker-finish"
-          onClick={onFinish}
-          aria-label="完成日期选择"
-        >
-          <Check size={17} />
-        </button>
+        <span className="picker-instruction">{picker.field === "endDate" ? "选择结束日期" : "选择开始前日期"}</span>
       ) : (
         <>
           <div
@@ -97,6 +92,9 @@ export default function CalendarToolbar({
             </div>
           )}
           <div className="calendar-actions">
+            <button onClick={onMini} title="小窗模式" aria-label="小窗模式">
+              <ArrowsIn size={18} />
+            </button>
             <button onClick={onToday} title="回到今天" aria-label="回到今天">
               <Crosshair size={18} />
             </button>
@@ -109,7 +107,7 @@ export default function CalendarToolbar({
           </div>
         </>
       )}
-      <WindowControls variant="hide-app" />
+      <WindowControls variant={picker ? "collapse" : "hide-app"} />
     </header>
   );
 }

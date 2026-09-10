@@ -13,6 +13,7 @@ export default function CalendarTimeline({
   items,
   mode,
   orientation = "vertical",
+  trackCount = 7,
   onDay,
   onTodo,
 }) {
@@ -31,6 +32,7 @@ export default function CalendarTimeline({
         days={days}
         items={items}
         week={week}
+        trackCount={trackCount}
         now={now}
         selected={selected}
         onSelect={setSelected}
@@ -73,7 +75,7 @@ export default function CalendarTimeline({
             const { segments, tracks } = layoutDay(
               items,
               key,
-              week ? 4 : Infinity,
+              trackCount,
             );
             const todos = items.filter(
               (item) => item.kind === "todo" && item.date === key,
@@ -81,8 +83,8 @@ export default function CalendarTimeline({
             return (
               <div className="timeline-day" key={key} aria-label={key}>
                 {segments.map((segment) => {
-                  const { item, start, end, track, slot, slots } = segment;
-                  const columns = week ? 4 : tracks;
+                  const { item, start, end, track } = segment;
+                  const columns = tracks;
                   const label = `${item.title} · ${item.date} ${item.time} — ${item.endDate} ${item.endTime}`;
                   return (
                     <button
@@ -91,14 +93,12 @@ export default function CalendarTimeline({
                       className={`timeline-event ${selected === item.id ? "is-selected" : ""}`}
                       title={label}
                       aria-label={label}
-                      onClick={() =>
-                        setSelected(selected === item.id ? null : item.id)
-                      }
+                      onClick={() => onTodo(item)}
                       style={{
                         top: start,
                         height: Math.max(3, end - start),
-                        left: `calc(${((track + slot / slots) * 100) / columns}% + 2px)`,
-                        width: `max(3px, calc(${100 / columns / slots}% - 4px))`,
+                        left: `calc(${(track * 100) / columns}% + 2px)`,
+                        width: `max(3px, calc(${100 / columns}% - 4px))`,
                         "--event-color": item.color,
                         "--event-soft": colorWithAlpha(item.color, 0.18),
                       }}
@@ -166,6 +166,7 @@ function HorizontalTimeline({
   days,
   items,
   week,
+  trackCount,
   now,
   selected,
   onSelect,
@@ -191,7 +192,7 @@ function HorizontalTimeline({
           const { segments, tracks } = layoutDay(
             items,
             key,
-            week ? 4 : Infinity,
+            trackCount,
           );
           const todos = items.filter(
             (item) => item.kind === "todo" && item.date === key,
@@ -214,9 +215,10 @@ function HorizontalTimeline({
               </button>
               <div className="horizontal-timeline-track">
                 {segments.map((segment) => {
-                  const { item, start, end, track, slot, slots } = segment;
+                  const { item, start, end, track } = segment;
                   const label = `${item.title} · ${item.date} ${item.time} — ${item.endDate} ${item.endTime}`;
-                  const laneHeight = 18 / slots;
+                  const eventAreaHeight = rowHeight - 30;
+                  const laneHeight = eventAreaHeight / tracks;
                   return (
                     <button
                       type="button"
@@ -224,14 +226,12 @@ function HorizontalTimeline({
                       className={`horizontal-event ${selected === item.id ? "is-selected" : ""}`}
                       title={label}
                       aria-label={label}
-                      onClick={() =>
-                        onSelect(selected === item.id ? null : item.id)
-                      }
+                      onClick={() => onTodo(item)}
                       style={{
                         left: start,
                         width: Math.max(3, end - start),
-                        top: 6 + track * 18 + slot * laneHeight,
-                        height: Math.max(3, laneHeight - 2),
+                        top: 2 + track * laneHeight,
+                        height: Math.max(3, laneHeight - 4),
                         "--event-color": item.color,
                         "--event-soft": colorWithAlpha(item.color, 0.18),
                       }}

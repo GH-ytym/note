@@ -16,19 +16,23 @@ export function clockArc(start, end, radius) {
   return `M ${a.x} ${a.y} A ${radius} ${radius} 0 ${end - start > 720 ? 1 : 0} 1 ${b.x} ${b.y}`;
 }
 
-export function stableClockTrack(item, trackCount) {
-  const count = Math.max(1, Math.round(Number(trackCount) || 1));
-  const key = String(item.eventId ?? item.id ?? "");
-  let hash = 2166136261;
-  for (let index = 0; index < key.length; index++) {
-    hash ^= key.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0) % count;
+export function clockTrackRadius(track) {
+  return 116 - track * 5.5;
 }
 
-export function clockTrackRadius(track, trackCount) {
-  const count = Math.max(1, Math.round(Number(trackCount) || 1));
-  if (count === 1) return 112;
-  return 112 - track * (66 / (count - 1));
+export function layoutTodoTracks(items, date, trackCount = 7) {
+  const count = Math.max(1, Math.min(10, Number(trackCount) || 7));
+  const tracks = Array.from({ length: count }, () => []);
+  return items.filter(item => item.kind === "todo" && item.date === date)
+    .map(item => ({ item, minute: Number(item.time.slice(0, 2)) * 60 + Number(item.time.slice(3, 5)) }))
+    .sort((a, b) => a.minute - b.minute || String(a.item.id).localeCompare(String(b.item.id)))
+    .map(segment => {
+      let track = tracks.findIndex(placed => placed.every(minute => {
+        const distance = Math.abs(minute - segment.minute);
+        return Math.min(distance, 1440 - distance) >= 20;
+      }));
+      if (track < 0) { tracks.forEach(placed => placed.length = 0); track = 0; }
+      tracks[track].push(segment.minute);
+      return { ...segment, track };
+    });
 }

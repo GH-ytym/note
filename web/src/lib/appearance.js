@@ -11,6 +11,7 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   weekOrientation: "vertical",
   dayOrientation: "vertical",
   clockTracks: 7,
+  wakeStyle: "mini",
 });
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -48,6 +49,7 @@ export function normalizeSettings(value = {}) {
   const clockTracks = Number(value.clockTracks);
   return {
     ...appearance,
+    wakeStyle: oneOf(value.wakeStyle, ["mini", "last", "year", "month", "week", "timeline", "clock"], DEFAULT_PREFERENCES.wakeStyle),
     defaultView: oneOf(
       value.defaultView,
       ["year", "month", "week", "day"],

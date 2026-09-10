@@ -120,7 +120,7 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }) {
   }
 
   return (
-    <WindowFrame title="新日程" className="is-form-window" onBack={onDone}>
+    <WindowFrame title="新建" className="is-form-window" onBack={onDone}>
 		<form className="side-form utility-form" onSubmit={submit}>
 			<div className="item-kind-switch" role="group" aria-label="类型">
 				<button className={kind === "todo" ? "is-active" : ""} type="button" onClick={() => setKind("todo")}>待办</button>
@@ -169,15 +169,13 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }) {
 
 		{kind === "event" && (
 			<div className="form-row">
-				<label>
-					<span>结束日期</span>
-					<input
-						type="date"
-						min={form.date || TODAY_KEY}
-						value={form.endDate}
-						onChange={(event) => setField("endDate", event.target.value)}
-					/>
-				</label>
+                <LinkedDateField
+                  label="结束日期" repeat="仅一次" date={form.endDate}
+                  min={form.date || TODAY_KEY} color={form.color}
+                  active={datePicker.active && datePicker.field === "endDate"}
+                  onOpen={() => void datePicker.start(form, customDates, "endDate")}
+                  onNativeChange={(value) => setField("endDate", value)}
+                />
 				<TimeField label="结束时间" value={form.endTime} onChange={(value) => setField("endTime", value)} />
 			</div>
 		)}

@@ -383,10 +383,11 @@ export function ConfigurationSettingsForm({ onDone }) {
   const isDefault =
     settings.weekOrientation === DEFAULT_PREFERENCES.weekOrientation &&
     settings.dayOrientation === DEFAULT_PREFERENCES.dayOrientation &&
-    settings.clockTracks === DEFAULT_PREFERENCES.clockTracks;
+    settings.clockTracks === DEFAULT_PREFERENCES.clockTracks &&
+    settings.wakeStyle === DEFAULT_PREFERENCES.wakeStyle;
   const orientationOptions = [
-    ["vertical", "纵向"],
-    ["horizontal", "横向"],
+    ["vertical", "横向"],
+    ["horizontal", "纵向"],
   ];
 
   return (
@@ -394,7 +395,7 @@ export function ConfigurationSettingsForm({ onDone }) {
       <div className="settings-choice-list">
         <SettingSelect
           id="configuration-week-orientation"
-          label="周视图时间轴"
+          label="周视图轨道"
           value={settings.weekOrientation}
           options={orientationOptions}
           onChange={(event) =>
@@ -402,8 +403,15 @@ export function ConfigurationSettingsForm({ onDone }) {
           }
         />
         <SettingSelect
+          id="configuration-wake-style"
+          label="后台唤醒样式"
+          value={settings.wakeStyle}
+          options={[["mini", "小窗模式"], ["last", "上一次关闭时的样式"], ["year", "年视图"], ["month", "月视图"], ["week", "周视图"], ["timeline", "日视图 · 时间轴"], ["clock", "日视图 · 时钟"]]}
+          onChange={(event) => updateAppearance({ wakeStyle: event.target.value })}
+        />
+        <SettingSelect
           id="configuration-day-orientation"
-          label="日视图时间轴"
+          label="日视图轨道"
           value={settings.dayOrientation}
           options={orientationOptions}
           onChange={(event) =>
@@ -411,7 +419,7 @@ export function ConfigurationSettingsForm({ onDone }) {
           }
         />
         <label className="settings-choice settings-track-count" htmlFor="configuration-clock-tracks">
-          <strong>时钟轨道数</strong>
+          <strong>轨道数</strong>
           <output htmlFor="configuration-clock-tracks">{settings.clockTracks}</output>
           <input
             id="configuration-clock-tracks"
@@ -434,6 +442,7 @@ export function ConfigurationSettingsForm({ onDone }) {
             weekOrientation: DEFAULT_PREFERENCES.weekOrientation,
             dayOrientation: DEFAULT_PREFERENCES.dayOrientation,
             clockTracks: DEFAULT_PREFERENCES.clockTracks,
+            wakeStyle: DEFAULT_PREFERENCES.wakeStyle,
           })
         }
         onDone={onDone}

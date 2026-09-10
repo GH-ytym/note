@@ -9,7 +9,7 @@ const searchParams = new URLSearchParams(window.location.search);
 const windowRole = searchParams.get("window") || "calendar";
 const windowTitles = {
   calendar: "Note · 日历",
-  create: "新日程 · Note",
+  create: "新建 · Note",
   detail: "日程详情 · Note",
   reminder: "日程到点了 · Note",
   day: `${searchParams.get("date") || "当天日程"} · Note`,

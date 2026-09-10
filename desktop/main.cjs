@@ -1,6 +1,7 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { WAKE_STYLES, normalizeWorkspace, wakeWorkspace } = require("./workspace-mode.cjs");
 const { ReminderScheduler, dateKeyAt } = require("./reminder-scheduler.cjs");
 const {
   DEFAULT_EDGE_MARGIN,
@@ -43,6 +44,7 @@ const DEFAULT_APPEARANCE = Object.freeze({
   weekOrientation: "vertical",
   dayOrientation: "vertical",
   clockTracks: 7,
+  wakeStyle: "mini",
 });
 const TRAY_ICON_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACtSURBVFhH7c7RDQIhFETRbcJEY/8lWJkFaPjkCCw8XLOJ3OR+wZuZbVssBng+7q9evZ3Ggh7NCGFoRDO7MWhGs3cxQK+3S6bvJe1o4rEeOsDDkpEBSbs+8KBmdEDSzgw/1/yfARaNat65B/jx5wMSfjZwVPOGB9TsKappZ4afa64Bhw1IeFAyOsCuKh5qZIAdTTz+hnbsYsCMZndjUEQzQxjaoxnTWNDS28VpeQN+CwQ4E8tohAAAAABJRU5ErkJggg==";
 
@@ -59,6 +61,9 @@ let hiddenToTray = false;
 let calendarExpanded = true;
 let appearanceSettings = { ...DEFAULT_APPEARANCE };
 let reminderScheduler = null;
+let workspaceState = null;
+let lastWorkspaceState = null;
+let normalWorkspaceState = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -93,6 +98,8 @@ async function startApplication() {
   app.setAppUserModelId("cn.note.calendar");
   app.setAppLogsPath();
   appearanceSettings = loadAppearanceSettings();
+  try { lastWorkspaceState = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "workspace.json"), "utf8")); } catch {}
+  workspaceState = wakeWorkspace(appearanceSettings.wakeStyle, lastWorkspaceState, todayKey(), appearanceSettings);
 
   backendURL = await startBackend();
   registerIPC();
@@ -176,6 +183,29 @@ function startBackend() {
 }
 
 function registerIPC() {
+  ipcMain.handle("note:workspace-state", (event) => { assertTrustedSender(event); return workspaceState; });
+  ipcMain.handle("note:workspace-save", (event, payload) => {
+    assertTrustedSender(event);
+    if (BrowserWindow.fromWebContents(event.sender)?.noteWindowKey !== "calendar" || datePickerSession) return;
+    workspaceState = normalizeWorkspace(payload, todayKey(), appearanceSettings);
+  });
+  ipcMain.handle("note:mini-mode", (event, enabled) => {
+    assertTrustedSender(event);
+    if (BrowserWindow.fromWebContents(event.sender)?.noteWindowKey !== "calendar") return;
+    if (enabled) normalWorkspaceState = { ...workspaceState, mini: false };
+    workspaceState = enabled
+      ? normalizeWorkspace({ ...workspaceState, mini: true }, todayKey(), appearanceSettings)
+      : normalizeWorkspace(normalWorkspaceState || { view: appearanceSettings.defaultView }, todayKey(), appearanceSettings);
+    const target = windows.get("calendar");
+    applyWorkspaceSize(target);
+    sendToWindow(target, "note:workspace-view-changed", workspaceState);
+  });
+  ipcMain.handle("note:mini-fit", (event, payload = {}) => {
+    assertTrustedSender(event);
+    const target = BrowserWindow.fromWebContents(event.sender);
+    if (target?.noteWindowKey !== "calendar" || !workspaceState?.mini || datePickerSession) return;
+    applyWorkspaceSize(target, Number(payload.size) || 360);
+  });
   ipcMain.handle("note:toggle-calendar", (event) => {
     assertTrustedSender(event);
     return toggleCalendarWindow();
@@ -358,6 +388,7 @@ function registerIPC() {
     };
 
     const calendarWindow = showCalendarWindow({ focus: true });
+    applyWorkspaceSize(calendarWindow);
     sendDatePickerState(calendarWindow);
     return publicDatePickerState();
   });
@@ -486,6 +517,7 @@ function normalizeAppearance(value = {}) {
     clockTracks: Number.isFinite(rawClockTracks)
       ? clamp(Math.round(rawClockTracks), 3, 10)
       : DEFAULT_APPEARANCE.clockTracks,
+    wakeStyle: choice(value.wakeStyle, WAKE_STYLES, "mini"),
   };
 }
 
@@ -619,6 +651,7 @@ function normalizeDatePickerState(payload) {
 
   return {
     repeatMode,
+    field: payload.field === "endDate" ? "endDate" : "date",
     date: normalizeDate(payload.date),
     customDates: normalizeDateList(payload.customDates),
     color,
@@ -718,7 +751,13 @@ function showCalendarWindow({ focus = true } = {}) {
 }
 
 function hideCalendarWindow() {
-  if (datePickerSession) finishDatePicker(false);
+  if (datePickerSession) {
+    const source = datePickerSession.sourceWindow;
+    windows.get("calendar")?.hide();
+    finishDatePicker(false);
+    if (source && !source.isDestroyed()) { source.show(); source.focus(); }
+    return;
+  }
   hideApplicationWindows();
 }
 
@@ -747,8 +786,6 @@ function createContentEditorWindow(sourceWindow, state) {
     key: `content-editor:${sourceWindow.noteWindowKey}`,
     role: "content-editor",
     title: "专注编辑 · Note",
-    parent: sourceWindow,
-    modal: true,
     contentEditorState: state,
   });
 }
@@ -781,7 +818,9 @@ function showWorkspaceView(view, payload = {}) {
   const date = normalizeDate(payload.date || todayKey());
   const calendar = showCalendarWindow();
   calendar.noteDate = date;
-  sendToWindow(calendar, "note:workspace-view-changed", { view, date });
+  workspaceState = normalizeWorkspace({ ...workspaceState, view, date, mini: false }, todayKey(), appearanceSettings);
+  applyWorkspaceSize(calendar);
+  sendToWindow(calendar, "note:workspace-view-changed", workspaceState);
   return calendar;
 }
 
@@ -797,6 +836,14 @@ function createWindow({
   alwaysOnTop = false,
   maximizable = true,
 }) {
+  if (key !== PRIMARY_WINDOW_KEY) {
+    for (const other of [...windows.values()]) {
+      if (other.noteWindowKey !== PRIMARY_WINDOW_KEY && other.noteWindowKey !== key && !other.isDestroyed()) {
+        other.noteReplaced = true;
+        other.close();
+      }
+    }
+  }
   const existing = windows.get(key);
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
@@ -842,6 +889,7 @@ function createWindow({
   target.noteContentEditorState = contentEditorState;
   target.noteReminderState = reminderState;
   windows.set(key, target);
+  if (key === PRIMARY_WINDOW_KEY) applyWorkspaceSize(target);
 
   const url = new URL(backendURL);
   url.searchParams.set("window", role);
@@ -877,9 +925,8 @@ function createWindow({
   target.on("closed", () => {
     windows.delete(key);
     if (datePickerSession?.sourceWindow === target) finishDatePicker(false);
-    if (contentEditorState?.sourceWindow && !contentEditorState.sourceWindow.isDestroyed()) {
-      contentEditorState.sourceWindow.show();
-      contentEditorState.sourceWindow.focus();
+    if (contentEditorState && !target.noteReplaced && !quitting) {
+      createDetailWindow(contentEditorState.todoId, contentEditorState.date);
     }
   });
   target.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -984,6 +1031,8 @@ function installTray() {
 }
 
 function hideApplicationWindows() {
+  lastWorkspaceState = workspaceState;
+  fs.writeFileSync(path.join(app.getPath("userData"), "workspace.json"), JSON.stringify(lastWorkspaceState));
   hiddenToTray = true;
   for (const target of windows.values()) {
     if (!target.isDestroyed()) target.hide();
@@ -992,9 +1041,32 @@ function hideApplicationWindows() {
 
 function restoreApplicationWindows() {
   hiddenToTray = false;
+  workspaceState = wakeWorkspace(appearanceSettings.wakeStyle, lastWorkspaceState, todayKey(), appearanceSettings);
   const { calendar } = createWorkspace(todayKey());
-  sendToWindow(calendar, "note:workspace-view-changed", { view: "month", date: todayKey() });
+  applyWorkspaceSize(calendar);
+  sendToWindow(calendar, "note:workspace-view-changed", workspaceState);
   calendar.focus();
+}
+
+function applyWorkspaceSize(target, miniSize = 360) {
+  if (!target || target.isDestroyed()) return;
+  const mini = workspaceState?.mini && !datePickerSession;
+  if (target.isMaximized()) target.unmaximize();
+  if (mini) {
+    if (!target.noteMini) target.noteNormalBounds = target.getBounds();
+    const area = screen.getDisplayMatching(target.getBounds()).workArea;
+    const size = Math.round(clamp(miniSize, 280, Math.min(area.width, area.height) - 24));
+    target.setMinimumSize(240, 240);
+    target.setResizable(false);
+    const current = target.getBounds();
+    target.setBounds(fitBounds(area, { x: current.x + current.width - size, y: current.y + current.height - size, width: size, height: size }), false);
+  } else if (target.noteMini || datePickerSession) {
+    target.setResizable(true);
+    target.setMinimumSize(WINDOW_PROFILES.calendar.minWidth, WINDOW_PROFILES.calendar.minHeight);
+    const area = screen.getDisplayMatching(target.getBounds()).workArea;
+    target.setBounds(fitBounds(area, target.noteNormalBounds || bottomRightBounds(area, WINDOW_PROFILES.calendar)), false);
+  }
+  target.noteMini = Boolean(mini);
 }
 
 function installApplicationMenu() {
@@ -1003,7 +1075,7 @@ function installApplicationMenu() {
       label: "日程",
       submenu: [
         {
-          label: "新建日程",
+          label: "新建",
           accelerator: "CmdOrCtrl+N",
           click: () => createCreateWindow(todayKey()),
         },

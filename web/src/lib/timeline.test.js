@@ -14,16 +14,22 @@ test("cross-month events cover each intersected day but exclude the midnight end
   assert.equal(segments[0].continuesBefore, true);
   assert.equal(segments[0].continuesAfter, true);
 });
-test("week caps lanes at four without discarding collisions; day keeps all lanes", () => {
+test("configured lanes stay fixed even when only two are occupied", () => {
+  const items = [event("a", "2026-09-09", "09:00", "2026-09-09", "11:00"), event("b", "2026-09-09", "10:00", "2026-09-09", "12:00")];
+  const result = layoutDay(items, "2026-09-09", 7);
+  assert.equal(result.tracks, 7);
+  assert.deepEqual(result.segments.map(item => item.track), [0, 1]);
+});
+test("all views wrap at the configured limit without dropping events", () => {
   const items = Array.from({ length: 6 }, (_, i) => event(String(i), "2026-09-09", "09:00", "2026-09-09", "11:00"));
   const week = layoutDay(items, "2026-09-09", 4);
   assert.equal(week.segments.length, 6);
   assert.equal(week.tracks, 4);
-  assert.deepEqual(week.segments.slice(0, 4).map(item => item.track), [0, 1, 2, 3]);
-  assert.equal(layoutDay(items, "2026-09-09").tracks, 6);
+  assert.deepEqual(week.segments.map(item => item.track), [0, 1, 2, 3, 0, 1]);
+  assert.equal(layoutDay(items, "2026-09-09", 7).tracks, 7);
 });
 test("adjacent intervals reuse tracks and todo stays on its own date", () => {
   const items = [event("a", "2026-09-09", "09:00", "2026-09-09", "10:00"), event("b", "2026-09-09", "10:00", "2026-09-09", "11:00")];
-  assert.equal(layoutDay(items, "2026-09-09").tracks, 1);
+  assert.deepEqual(layoutDay(items, "2026-09-09", 7).segments.map(item => item.track), [0, 0]);
   assert.equal(occursOnDay({ kind: "todo", date: "2026-09-09" }, "2026-09-10"), false);
 });

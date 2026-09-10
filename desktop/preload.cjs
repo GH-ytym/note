@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
   isDesktop: true,
+  getWorkspaceState: () => ipcRenderer.invoke("note:workspace-state"),
+  saveWorkspaceState: (payload) => ipcRenderer.invoke("note:workspace-save", payload),
+  setMiniMode: (enabled) => ipcRenderer.invoke("note:mini-mode", enabled),
+  fitMiniWindow: (payload) => ipcRenderer.invoke("note:mini-fit", payload),
   toggleCalendar: () => ipcRenderer.invoke("note:toggle-calendar"),
   getCalendarVisibility: () => ipcRenderer.invoke("note:calendar-visibility"),
   openCompose: (payload) => ipcRenderer.invoke("note:open-compose", payload),

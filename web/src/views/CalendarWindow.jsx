@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowsOut } from "@phosphor-icons/react";
 import CalendarToolbar from "../components/CalendarToolbar";
 import DayClock from "../components/DayClock";
 import useNow from "../hooks/useNow";
@@ -40,6 +41,8 @@ export default function CalendarWindow({
   const [dayStyle, setDayStyle] = useState(settings.dayViewMode);
   const [handMode, setHandMode] = useState(settings.handMode);
   const [saving, setSaving] = useState(false);
+  const [mini, setMini] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(!IS_DESKTOP);
   const now = useNow();
   const [expandedDayKey, setExpandedDayKey] = useState(null);
   const [notice, setNotice] = useState("");
@@ -133,16 +136,36 @@ export default function CalendarWindow({
     setHandMode(settings.handMode);
   }, [settings.dayViewMode, settings.handMode]);
 
-  useEffect(
-    () =>
-      window.noteDesktop?.onWorkspaceViewChanged?.((payload) => {
+  useEffect(() => {
+    let disposed = false;
+    const apply = (payload) => {
+        if (!payload || disposed) return;
         const date = payload?.date || getShanghaiTodayKey();
         setSelectedDate(date);
         setCurrentMonth(monthFromKey(date));
-        setView(payload?.view === "day" ? "day" : "month");
-      }),
-    [],
-  );
+        setView(payload.view || "month");
+        setMini(Boolean(payload.mini));
+        if (payload.dayStyle) setDayStyle(payload.dayStyle);
+        if (payload.handMode) setHandMode(payload.handMode);
+        setWorkspaceReady(true);
+    };
+    const remove = window.noteDesktop?.onWorkspaceViewChanged?.(apply);
+    window.noteDesktop?.getWorkspaceState?.().then(apply).catch(error => setNotice(error.message));
+    return () => { disposed = true; remove?.(); };
+  }, []);
+
+  useEffect(() => {
+    if (workspaceReady && !desktopPicker) void window.noteDesktop?.saveWorkspaceState?.({ view, date: selectedDate, dayStyle, handMode, mini });
+  }, [workspaceReady, view, selectedDate, dayStyle, handMode, mini, desktopPicker]);
+
+  useEffect(() => {
+    if (mini) { setSelectedDate(now.date); setCurrentMonth(monthFromKey(now.date)); }
+  }, [mini, now.date]);
+
+  function changeMini(next) {
+    if (window.noteDesktop?.setMiniMode) void window.noteDesktop.setMiniMode(next);
+    else { setMini(next); if (next) { setView("day"); setDayStyle("clock"); setSelectedDate(now.date); } }
+  }
 
   function goToday() {
     const date = getShanghaiTodayKey();
@@ -194,6 +217,7 @@ export default function CalendarWindow({
       setHoveredStartDate(null);
 
       if (state && desktopPickerSessionRef.current !== state.sessionId) {
+        setMini(false);
         setView("month");
         desktopPickerSessionRef.current = state.sessionId;
         setCurrentMonth(monthFromKey(state.date));
@@ -369,7 +393,7 @@ export default function CalendarWindow({
 
   return (
     <main
-      className={`calendar-shell multi-view-calendar ${IS_DESKTOP ? "is-desktop-calendar" : ""} ${calendarPicking ? "is-calendar-picking is-desktop-date-picking" : ""}`}
+      className={`calendar-shell multi-view-calendar ${mini ? "is-mini-clock" : ""} ${IS_DESKTOP ? "is-desktop-calendar" : ""} ${calendarPicking ? "is-calendar-picking is-desktop-date-picking" : ""}`}
       style={{
         "--selection-color": selectionColor,
         "--selection-soft": colorWithAlpha(selectionColor, 0.12),
@@ -383,7 +407,7 @@ export default function CalendarWindow({
             aria-label={`${monthLabel(currentMonth)}日历`}
             aria-busy={calendarLoading}
           >
-            <CalendarToolbar
+            {mini ? <><div className="mini-drag-handle" aria-hidden="true" /><button className="mini-restore" onClick={() => changeMini(false)} title="恢复主面板" aria-label="恢复主面板"><ArrowsOut size={18} /></button></> : <CalendarToolbar
               title={
                 view === "year"
                   ? `${currentMonth.getUTCFullYear()}年`
@@ -405,7 +429,8 @@ export default function CalendarWindow({
               onDayStyle={setDayStyle}
               handMode={handMode}
               onHandMode={setHandMode}
-            />
+              onMini={() => changeMini(true)}
+            />}
 
             {view === "year" && (
               <YearCalendar
@@ -424,6 +449,7 @@ export default function CalendarWindow({
                 days={timelineDays}
                 items={events}
                 mode={view}
+                trackCount={settings.clockTracks}
                 orientation={
                   view === "week"
                     ? settings.weekOrientation
@@ -441,6 +467,7 @@ export default function CalendarWindow({
                 handMode={handMode}
                 trackCount={settings.clockTracks}
                 onOpen={openEvent}
+                mini={mini}
                 onRetime={retime}
                 saving={saving}
               />

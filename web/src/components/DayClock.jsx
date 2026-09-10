@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   clockArc,
   clockMinute,
   clockPoint,
   clockTrackRadius,
+  layoutTodoTracks,
   minuteDelta,
-  stableClockTrack,
 } from "../lib/clock";
 import { layoutDay } from "../lib/timeline";
 
@@ -18,18 +18,25 @@ export default function DayClock({
   onOpen,
   onRetime,
   saving,
+  mini = false,
 }) {
   const svg = useRef(null),
     drag = useRef(null),
     suppressClick = useRef(false);
   const [preview, setPreview] = useState(null),
     [hover, setHover] = useState(null);
-  const { segments } = layoutDay(items, date);
+  const { segments } = layoutDay(items, date, trackCount);
+  const todos = layoutTodoTracks(items, date, trackCount);
+  const outerTrack = Math.max(0, ...todos.map(todo => todo.track));
+  const extent = Math.max(180, 176 + outerTrack * 20);
+  useEffect(() => {
+    if (mini) void window.noteDesktop?.fitMiniWindow?.({ size: extent * 2 });
+  }, [mini, extent]);
   const minuteAt = (event) => {
     const rect = svg.current.getBoundingClientRect();
     return clockMinute(
-      ((event.clientX - rect.left) * 360) / rect.width,
-      ((event.clientY - rect.top) * 360) / rect.height,
+      180 - extent + ((event.clientX - rect.left) * extent * 2) / rect.width,
+      180 - extent + ((event.clientY - rect.top) * extent * 2) / rect.height,
     );
   };
   function begin(event, item, edge) {
@@ -109,7 +116,7 @@ export default function DayClock({
       <svg
         ref={svg}
         className="day-clock"
-        viewBox="0 0 360 360"
+        viewBox={`${180 - extent} ${180 - extent} ${extent * 2} ${extent * 2}`}
         aria-label={`${date} 24小时日程钟`}
         onPointerMove={move}
         onPointerUp={() => finish()}
@@ -142,12 +149,11 @@ export default function DayClock({
           );
         })}
         {segments.map(
-          ({ item, start, end, continuesBefore, continuesAfter }) => {
+          ({ item, start, end, track, continuesBefore, continuesAfter }) => {
             const delta = preview?.id === item.id ? preview.delta : 0;
             const a = start + (preview?.edge === "start" ? delta : 0),
               b = end + (preview?.edge === "end" ? delta : 0);
-            const track = stableClockTrack(item, trackCount);
-            const radius = clockTrackRadius(track, trackCount);
+            const radius = clockTrackRadius(track);
             const head = clockPoint(a, radius),
               tail = clockPoint(b, radius);
             return (
@@ -184,18 +190,14 @@ export default function DayClock({
             );
           },
         )}
-        {items
-          .filter((item) => item.kind === "todo" && item.date === date)
-          .map((item, index, all) => {
+        {todos.map(({ item, track }) => {
             const delta = preview?.id === item.id ? preview.delta : 0;
             const minute =
               Number(item.time.slice(0, 2)) * 60 +
               Number(item.time.slice(3)) +
               delta;
-            const peers = all.filter((other) => other.time === item.time),
-              lane = peers.findIndex((other) => other.id === item.id);
-            const a = clockPoint(minute, 151 + lane * 5),
-              b = clockPoint(minute, 166 + lane * 5);
+            const a = clockPoint(minute, 155 + track * 20),
+              b = clockPoint(minute, 167 + track * 20);
             return (
               <g
                 key={item.id}

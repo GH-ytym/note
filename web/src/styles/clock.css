@@ -88,6 +88,14 @@
   stroke: transparent;
   stroke-width: 13;
 }
+.multi-view-calendar.is-mini-clock .calendar-panel { position: relative; display: flex; border: 0; border-radius: 0; }
+.multi-view-calendar.is-mini-clock .day-clock { width: 100%; height: 100%; }
+.multi-view-calendar.is-mini-clock .day-clock-wrap { width: 100%; height: 100%; -webkit-app-region: no-drag; }
+.mini-drag-handle { position: absolute; top: 0; left: 0; width: 42px; height: 24px; z-index: 40; -webkit-app-region: drag; }
+.is-mini-clock .clock-todo, .is-mini-clock .clock-event, .is-mini-clock .clock-handle { -webkit-app-region: no-drag; }
+.is-mini-clock .clock-selection { display: none; }
+.mini-restore { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; z-index: 50; display: grid; place-items: center; cursor: pointer; -webkit-app-region: no-drag; }
+.picker-instruction { margin-left: auto; font-size: 12px; white-space: nowrap; }
 .clock-todo.is-done {
   fill: var(--clock-item);
 }

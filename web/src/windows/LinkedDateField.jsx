@@ -1,7 +1,7 @@
 import { ArrowSquareOut, CalendarBlank } from "@phosphor-icons/react";
 import { TODAY_KEY } from "../lib/calendar";
 
-export default function LinkedDateField({ repeat, date, customDates, color, active, onOpen, onNativeChange }) {
+export default function LinkedDateField({ repeat, date, customDates = [], color, active, onOpen, onNativeChange, label, min = TODAY_KEY }) {
   const custom = repeat === "自定义";
   const summary = custom
     ? customDates.length > 0 ? `已选 ${customDates.length} 天` : "尚未选择"
@@ -9,16 +9,15 @@ export default function LinkedDateField({ repeat, date, customDates, color, acti
 
   return (
     <div className="linked-date-field" style={{ "--linked-date-color": color || "#F3B51B" }}>
-      <span>{custom ? "日期" : "开始日期"}</span>
+      <span>{label || (custom ? "日期" : "开始日期")}</span>
       {window.noteDesktop?.isDesktop ? (
-        <button type="button" onClick={onOpen} aria-label="在右侧日历中选择日期">
+        <button type="button" onClick={onOpen} aria-label={`选择${label || "开始日期"}`}>
           <CalendarBlank size={17} />
           <strong>{summary}</strong>
-          <small>{active ? "正在右侧日历选择" : "去右侧日历选择"}</small>
           <ArrowSquareOut size={16} />
         </button>
       ) : (
-        <input type="date" min={TODAY_KEY} value={date} onChange={(event) => onNativeChange(event.target.value)} />
+        <input type="date" min={min} value={date} onChange={(event) => onNativeChange(event.target.value)} />
       )}
     </div>
   );

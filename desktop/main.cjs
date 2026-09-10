@@ -115,15 +115,16 @@ async function startApplication() {
 }
 
 function resolveRuntimePaths() {
+  const backendName = process.platform === "win32" ? "note-api.exe" : "note-api";
   if (app.isPackaged) {
     return {
-      backend: path.join(process.resourcesPath, "backend", "note-api.exe"),
+      backend: path.join(process.resourcesPath, "backend", backendName),
       web: path.join(process.resourcesPath, "web"),
     };
   }
 
   return {
-    backend: path.join(__dirname, "resources", "note-api.exe"),
+    backend: path.join(__dirname, "resources", backendName),
     web: path.resolve(__dirname, "..", "web", "dist"),
   };
 }
@@ -864,6 +865,7 @@ function createWindow({
     // 这能避开 Electron 41.3+ 的 frameless + thickFrame 边界回归，
     // 页面仍然使用自己的拖动区和窗口按钮。
     titleBarStyle: "hidden",
+    ...(process.platform === "darwin" ? { trafficLightPosition: { x: 12, y: 12 } } : {}),
     resizable: true,
     minimizable: true,
     maximizable,
@@ -883,6 +885,8 @@ function createWindow({
     },
   });
   applyAppearanceToWindow(target);
+  // The renderer supplies window controls, including in the compact clock.
+  if (process.platform === "darwin") target.setWindowButtonVisibility(false);
 
   target.noteWindowKey = key;
   target.noteWindowRole = role;
@@ -1071,6 +1075,7 @@ function applyWorkspaceSize(target, miniSize = 360) {
 
 function installApplicationMenu() {
   const template = [
+    ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
     {
       label: "日程",
       submenu: [

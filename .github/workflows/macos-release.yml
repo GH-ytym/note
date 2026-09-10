@@ -1,0 +1,74 @@
+name: macOS release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: x64
+          - runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            desktop/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: npm ci --prefix web && npm ci --prefix desktop
+      - name: Validate architecture and release version
+        run: |
+          test "$(node -p 'process.arch')" = '${{ matrix.arch }}'
+          test "$(node -p 'require("./desktop/package.json").version')" = '0.5.0'
+      - run: go test ./...
+      - run: node --test web/src/lib/*.test.js && npm test --prefix desktop
+      - name: Build native macOS packages
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:mac
+      - name: Smoke test packaged application
+        run: node desktop/scripts/smoke-mac.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-${{ matrix.arch }}
+          path: |
+            desktop/release/*-mac-${{ matrix.arch }}.dmg
+            desktop/release/*-mac-${{ matrix.arch }}.zip
+          if-no-files-found: error
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mac-*
+          path: packages
+          merge-multiple: true
+      - name: Append macOS downloads to existing v0.5.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view v0.5.0
+          gh release upload v0.5.0 packages/*.dmg packages/*.zip

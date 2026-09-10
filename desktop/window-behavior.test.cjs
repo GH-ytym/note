@@ -6,7 +6,7 @@ const path = require("node:path");
 const { EventEmitter } = require("node:events");
 const { wakeWorkspace } = require("./workspace-mode.cjs");
 
-function harness() {
+function harness(platform = process.platform, packaged = false) {
   const handlers = new Map();
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
   class Window extends EventEmitter {
@@ -23,6 +23,7 @@ function harness() {
     getBounds() { const {x,y,width,height} = this.bounds; return {x,y,width,height}; }
     setBounds(bounds) { this.bounds = bounds; }
     setMinimumSize() {} setResizable() {} setOpacity() {} setBackgroundColor() {}
+    setWindowButtonVisibility(visible) { this.nativeButtonsVisible = visible; }
     isDestroyed() { return this.destroyed; } isMinimized() { return false; }
     isMaximized() { return false; } isVisible() { return this.visible; }
     restore() {} show() { this.visible = true; } hide() { this.visible = false; }
@@ -31,21 +32,33 @@ function harness() {
   }
   const electron = {
     BrowserWindow: Window,
-    app: { requestSingleInstanceLock: () => true, on() {}, whenReady: () => new Promise(() => {}), getPath: () => "C:/temp" },
+    app: { isPackaged: packaged, requestSingleInstanceLock: () => true, on() {}, whenReady: () => new Promise(() => {}), getPath: () => "C:/temp" },
     ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
     screen: { getPrimaryDisplay: () => ({workArea: area}), getDisplayMatching: () => ({workArea: area}) },
   };
-  const sandbox = { require: name => name === "electron" ? electron : name === "node:fs" ? {...fs, writeFileSync() {}} : name.startsWith(".") ? require(path.join(__dirname, name)) : require(name), __dirname, process, URL, console, setTimeout, clearTimeout };
+  const sandbox = { require: name => name === "electron" ? electron : name === "node:fs" ? {...fs, writeFileSync() {}} : name.startsWith(".") ? require(path.join(__dirname, name)) : require(name), __dirname, process: { platform, resourcesPath: path.join(__dirname, "packaged-resources") }, URL, console, setTimeout, clearTimeout };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "main.cjs"), "utf8") + `
     backendURL = "http://127.0.0.1:12345";
     workspaceState = normalizeWorkspace({view:"day"}, todayKey(), appearanceSettings);
     registerIPC();
-    globalThis.api = {createCalendarWindow, createCreateWindow, createDetailWindow, createSettingsWindow, createContentEditorWindow, createReminderWindow, windows, hideApplicationWindows, restoreApplicationWindows};
+    globalThis.api = {resolveRuntimePaths, createCalendarWindow, createCreateWindow, createDetailWindow, createSettingsWindow, createContentEditorWindow, createReminderWindow, windows, hideApplicationWindows, restoreApplicationWindows};
   `, sandbox);
   const invoke = (window, name, payload) => handlers.get(name)({sender: window.webContents, senderFrame: {url:"http://127.0.0.1:12345/"}}, payload);
   return {...sandbox.api, invoke};
 }
+
+test("development and packaged runtimes use the native backend executable", () => {
+  for (const platform of ["win32", "darwin"]) {
+    for (const packaged of [false, true]) {
+      const h = harness(platform, packaged);
+      const expected = platform === "win32" ? "note-api.exe" : "note-api";
+      assert.equal(path.basename(h.resolveRuntimePaths().backend), expected);
+      assert.equal(path.basename(path.dirname(h.resolveRuntimePaths().backend)), packaged ? "backend" : "resources");
+      if (platform === "darwin") assert.equal(h.createCalendarWindow().nativeButtonsVisible, false);
+    }
+  }
+});
 
 test("every auxiliary role replaces the previous window, never the main calendar", () => {
   const h = harness(); const calendar = h.createCalendarWindow();

@@ -9,7 +9,8 @@
     "test": "node --test reminder-scheduler.test.cjs window-layout.test.cjs workspace-layout.test.cjs window-behavior.test.cjs",
     "start": "npm run prepare:app && electron .",
     "pack": "npm run prepare:app && electron-builder --dir --win --x64",
-    "dist": "npm run prepare:app && electron-builder --win --x64"
+    "dist": "npm run prepare:app && electron-builder --win --x64",
+    "dist:mac": "npm run prepare:app && electron-builder --mac --publish never"
   },
   "devDependencies": {
     "electron": "44.0.0",
@@ -34,15 +35,12 @@
     ],
     "extraResources": [
       {
-        "from": "resources/note-api.exe",
-        "to": "backend/note-api.exe"
-      },
-      {
         "from": "../web/dist",
         "to": "web"
       }
     ],
     "win": {
+      "extraResources": [{ "from": "resources/note-api.exe", "to": "backend/note-api.exe" }],
       "icon": "build/icon.ico",
       "target": [
         {
@@ -58,6 +56,14 @@
           ]
         }
       ]
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "resources/icon.png",
+      "target": ["dmg", "zip"],
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+      "identity": null,
+      "extraResources": [{ "from": "resources/note-api", "to": "backend/note-api" }]
     },
     "nsis": {
       "artifactName": "${productName}-Setup-${version}.${ext}",

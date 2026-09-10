@@ -11,6 +11,10 @@ const backendName = process.platform === "win32" ? "note-api.exe" : "note-api";
 
 fs.mkdirSync(resourcesRoot, { recursive: true });
 
+if (process.platform === "darwin") {
+  run("sips", ["-z", "512", "512", path.join(desktopRoot, "build", "window-icon.png"), "--out", path.join(resourcesRoot, "icon.png")], desktopRoot);
+}
+
 if (!npmCLI) throw new Error("npm_execpath is unavailable; run this script through npm");
 
 run(process.execPath, [npmCLI, "run", "build"], webRoot);

@@ -1,6 +1,6 @@
 # Note
 
-一个本地优先的 Windows 日历待办应用。Todo 用于记录需要完成的事项，Event 用于安排具有开始和结束时间的日程；所有数据都保存在本机。
+一个本地优先的 Windows / macOS 日历待办应用。Todo 用于记录需要完成的事项，Event 用于安排具有开始和结束时间的日程；所有数据都保存在本机。
 
 <p align="center">
   <img src="desktop/build/icon.svg" alt="Note 图标" width="88">
@@ -12,7 +12,7 @@
 
 ## 下载安装
 
-当前提供 Windows x64 版本：
+提供 Windows x64、macOS Apple Silicon（arm64）和 Intel（x64）版本：
 
 `v0.5.0` 是 v0 系列最终版；后续发布从 v1 系列开始。
 
@@ -20,10 +20,14 @@
 | --- | --- | --- |
 | 安装版 | 安装到电脑，并创建桌面与开始菜单快捷方式 | [Note-Setup-0.5.0.exe](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-Setup-0.5.0.exe) |
 | 便携版 | 不安装，下载后直接运行 | [Note-0.5.0.exe](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0.exe) |
+| macOS Apple Silicon | M 系列芯片的 Mac | [Note-0.5.0-mac-arm64.dmg](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0-mac-arm64.dmg) |
+| macOS Intel | Intel 芯片的 Mac | [Note-0.5.0-mac-x64.dmg](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0-mac-x64.dmg) |
 
 安装包已经包含界面、Go 后端和 SQLite 支持，使用者不需要另行安装 Go、Node.js、数据库或其他运行环境。
 
 > 当前安装包没有代码签名。Windows SmartScreen 可能显示“Windows 已保护你的电脑”，确认文件来自本仓库后，可选择“更多信息” → “仍要运行”。
+
+macOS：打开 DMG，将 Note 拖入 Applications（应用程序）。另提供 ZIP 包。Mac 版没有 Apple Developer 签名或公证；首次打开若被系统阻止，请确认下载来源后，在“系统设置 → 隐私与安全性”中选择“仍要打开”。无需关闭系统的安全检查。Mac 版通过构建机启动检查，窗口交互与通知仍欢迎用户实机验证；通知需在系统设置中允许 Note 发送。
 
 ## 功能
 
@@ -165,6 +169,8 @@ Note 没有账户、云同步、广告或多人协作功能。日程只保存在
 %APPDATA%\note-desktop\data\note.db
 ```
 
+macOS 对应路径为 `~/Library/Application Support/note-desktop/data/note.db`；备份整个 `~/Library/Application Support/note-desktop` 文件夹前，请先完全退出应用。
+
 应用设置保存在同一目录上一级的 `appearance.json`，关闭到后台时的视图状态保存在 `workspace.json`。旧版本的设置文件会自动补齐新增选项。备份或迁移时，先从系统托盘中完全退出 Note，再复制整个 `%APPDATA%\note-desktop` 文件夹。
 
 ## 技术栈
@@ -201,7 +207,7 @@ note/
 
 - Go 1.26 或更高版本
 - Node.js 和 npm
-- Windows x64（当前 Electron 打包目标）
+- Windows x64 或 macOS（Intel / Apple Silicon）
 
 第一次运行先安装两部分依赖：
 
@@ -298,6 +304,12 @@ npm run dist
 ```
 
 构建结果位于 `desktop/release/`。打包过程会自动重新构建 React 前端和 Go 后端。
+
+### 构建 macOS 桌面程序
+
+在 Mac 上安装前端及桌面依赖后，从 `desktop` 目录运行 `npm run dist:mac`，生成当前机器架构的 DMG 和 ZIP。Go 后端与 Electron 使用相同架构；不要在一次构建中混用架构。
+
+GitHub Actions 的 `macOS release` 工作流分别在 Intel 和 Apple Silicon 构建机上测试、打包并启动应用检查，全部通过后将四个文件追加到现有 `v0.5.0` Release，不替换 Windows 文件，也不移动版本标签。Mac 安装包源码对应工作流运行的提交，包含 v0.5.0 功能及 macOS 适配。
 
 ## 检查
 

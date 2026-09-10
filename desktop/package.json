@@ -62,7 +62,8 @@
       "icon": "resources/icon.png",
       "target": ["dmg", "zip"],
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
-      "identity": null,
+      "identity": "-",
+      "hardenedRuntime": false,
       "extraResources": [{ "from": "resources/note-api", "to": "backend/note-api" }]
     },
     "nsis": {

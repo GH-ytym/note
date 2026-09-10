@@ -11,7 +11,8 @@ async function main() {
   // __dirname is desktop/scripts, so the output is one level above scripts.
   const backend = path.join(bundle, "Contents/Resources/backend/note-api");
   fs.accessSync(backend, fs.constants.X_OK);
-  const log = path.join(os.homedir(), "Library/Logs/note-desktop/backend.log");
+  // macOS resolves the log directory from the application bundle name.
+  const logs = ["Note", "note-desktop"].map(name => path.join(os.homedir(), "Library/Logs", name, "backend.log"));
   const child = spawn(path.join(bundle, "Contents/MacOS/Note"), [], { stdio: "inherit" });
   let error;
   child.on("error", value => { error = value; });
@@ -20,11 +21,17 @@ async function main() {
     for (let attempt = 0; attempt < 60; attempt++) {
       if (error) throw error;
       assert.equal(child.exitCode, null, "Electron exited before startup");
-      if (fs.existsSync(log)) {
-        url = fs.readFileSync(log, "utf8").match(/NOTE_SERVER_URL=(http:\/\/[^\s]+)/)?.[1];
+      for (const log of logs) {
+        if (fs.existsSync(log)) {
+          url = fs.readFileSync(log, "utf8").match(/NOTE_SERVER_URL=(http:\/\/[^\s]+)/)?.[1];
+          if (url) break;
+        }
       }
       if (url) break;
       await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    if (!url) for (const log of logs) {
+      console.error(log, fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "not found");
     }
     assert.ok(url, "Packaged Electron did not start the bundled backend");
     for (const route of ["/api/ping", "/", "/api/calendar?from=2026-09-10&to=2026-09-11"]) {

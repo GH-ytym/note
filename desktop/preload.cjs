@@ -2,6 +2,15 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
   isDesktop: true,
+  startWindowDrag: (point) => ipcRenderer.invoke("note:window-drag-start", point),
+  moveWindowDrag: (point) => ipcRenderer.invoke("note:window-drag-move", point),
+  endWindowDrag: () => ipcRenderer.invoke("note:window-drag-end"),
+  claimInlinePanel: () => ipcRenderer.invoke("note:claim-inline-panel"),
+  onAuxiliaryOpened: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("note:auxiliary-opened", listener);
+    return () => ipcRenderer.removeListener("note:auxiliary-opened", listener);
+  },
   getWorkspaceState: () => ipcRenderer.invoke("note:workspace-state"),
   saveWorkspaceState: (payload) => ipcRenderer.invoke("note:workspace-save", payload),
   setMiniMode: (enabled) => ipcRenderer.invoke("note:mini-mode", enabled),

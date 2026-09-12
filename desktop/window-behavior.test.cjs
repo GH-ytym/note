@@ -68,6 +68,38 @@ test("every auxiliary role replaces the previous window, never the main calendar
   }
 });
 
+test("inline search replaces native auxiliary and opening an auxiliary dismisses search", () => {
+  const h = harness(); const calendar = h.createCalendarWindow();
+  const detail = h.createDetailWindow(1,"2026-09-10");
+  h.invoke(calendar, "note:claim-inline-panel");
+  assert.equal(detail.isDestroyed(), true);
+  assert.equal(h.windows.size, 1);
+  const settings = h.createSettingsWindow();
+  assert.equal(h.windows.size, 2);
+  assert.equal(calendar.webContents.messages.at(-1).channel, "note:auxiliary-opened");
+  assert.equal(calendar.webContents.messages.at(-1).data.role, "settings");
+  h.invoke(settings, "note:claim-inline-panel");
+  assert.equal(h.windows.size, 2, "auxiliary cannot claim primary inline panels");
+});
+
+test("calendar and mini dragging use pointer coordinates and stop after release", () => {
+  const h = harness(); const calendar = h.createCalendarWindow();
+  h.invoke(calendar, "note:mini-mode", true);
+  const before = calendar.getBounds();
+  h.invoke(calendar, "note:window-drag-start", { x: 500, y: 400 });
+  h.invoke(calendar, "note:window-drag-move", { x: 410, y: 498 });
+  assert.deepEqual(calendar.getBounds(), { ...before, x: before.x - 90, y: before.y + 98 });
+  const moved = calendar.getBounds();
+  h.invoke(calendar, "note:window-drag-end");
+  h.invoke(calendar, "note:window-drag-move", { x: 800, y: 800 });
+  assert.deepEqual(calendar.getBounds(), moved);
+  h.invoke(calendar, "note:mini-mode", false);
+  const normal = calendar.getBounds();
+  h.invoke(calendar, "note:window-drag-start", { x: 500, y: 400 });
+  h.invoke(calendar, "note:window-drag-move", { x: 800, y: 800 });
+  assert.deepEqual(calendar.getBounds(), { ...normal, x: normal.x + 300, y: normal.y + 400 });
+});
+
 test("focus editor replaces detail and returns to a new detail, without reopening on replacement", () => {
   const h = harness(); h.createCalendarWindow();
   const detail = h.createDetailWindow(1,"2026-09-10");
@@ -98,5 +130,6 @@ test("mini and restored workspace sizes, last-style wake", () => {
   const last = {mini:false,view:"week",dayStyle:"timeline",date:"2026-09-09",handMode:"compact"};
   assert.deepEqual(wakeWorkspace("last",last,"2026-09-10",{}),last);
   assert.equal(wakeWorkspace("mini",last,"2026-09-10",{}).date,"2026-09-10");
-  assert.equal(wakeWorkspace("mini",last,"2026-09-10",{}).dayStyle,"clock");
+  assert.equal(wakeWorkspace("mini",last,"2026-09-10",{}).dayStyle,"tags");
+  assert.equal(wakeWorkspace("mini",last,"2026-09-10",{miniViewMode:"clock"}).dayStyle,"clock");
 });

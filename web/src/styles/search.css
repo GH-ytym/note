@@ -1,0 +1,62 @@
+.workspace-search { position: relative; display: flex; align-items: center; gap: 8px; width: min(460px, calc(100% - 32px)); margin: 10px auto 0; padding: 5px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--cell); -webkit-app-region: no-drag; z-index: 300; }
+.workspace-search > input { flex: 1; min-width: 0; height: 24px; color: var(--text); background: transparent; border: 0; outline: none; }
+.workspace-search:focus-within { border-color: var(--yellow); }
+.workspace-search button { color: var(--text); cursor: pointer; }
+.search-panel { position: fixed; z-index: 1000; max-height: calc(100vh - 70px); display: flex; flex-direction: column; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 48px #0008; overflow: hidden; -webkit-app-region: no-drag; }
+.search-panel.is-expanded { inset: 0; width: auto; max-height: none; border-radius: 0; }
+.search-panel > header, .search-panel > footer { display: flex; align-items: center; gap: 12px; padding: 10px 12px; flex-shrink: 0; }
+.search-panel > header { border-bottom: 1px solid var(--line); }
+.search-panel > header strong { margin-right: auto; }
+.search-panel > header label { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.search-panel > footer { border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.search-panel > footer .expand-search { margin-left: auto; }
+.search-panel > p { padding: 8px 14px; font-size: 13px; }
+.search-groups { overflow: auto; min-height: 0; flex: 1; }
+.is-compact .search-groups { display: grid; grid-template-rows: minmax(0, 1fr) 1px minmax(0, 1fr); overflow: hidden; }
+.is-compact .search-group { overflow: auto; }
+.search-groups.is-split { display: grid; grid-template-columns: minmax(0,1fr) 1px minmax(0,1fr); }
+.search-groups.is-split .search-group { overflow: auto; }
+.search-groups hr { border: 0; background: var(--line); height: 1px; margin: 0; }
+.search-groups.is-split hr { width: 1px; height: 100%; }
+.search-group { min-width: 0; padding: 6px; }
+.search-group h3 { display: flex; justify-content: space-between; padding: 5px 7px; margin: 0; font-size: 12px; color: var(--muted); }
+.search-result { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; padding: 9px 7px; border-radius: 5px; }
+.search-result:hover, .search-result:focus-visible { background: var(--cell-hover); outline: 1px solid var(--yellow); }
+.search-result > span:nth-child(2) { flex: 1; min-width: 0; }
+.search-result strong, .search-result small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.search-result strong { font-size: 13px; font-weight: 500; }
+.search-result small, .search-result time { font-size: 11px; color: var(--muted); }
+.search-empty { padding: 12px 7px; font-size: 12px; color: var(--muted); }
+@keyframes search-focus-pulse { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 7px var(--yellow)); background-color: rgb(var(--theme-rgb) / .4); outline: 2px solid var(--yellow); } }
+.search-focus-target { animation: search-focus-pulse 700ms ease-in-out 2; }
+.day-tags { flex: 1; min-height: 0; overflow: auto; padding: 10px 16px 18px; }
+.day-tags h3 { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 10px 0 6px; }
+.day-tag { display: flex; align-items: center; gap: 8px; padding: 8px; margin-bottom: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--cell); }
+.day-tag button { cursor: pointer; }
+.tag-detail { display: flex; flex: 1; min-width: 0; align-items: center; gap: 8px; color: var(--text); text-align: left; }
+.tag-detail strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+.tag-detail time { font-size: 11px; color: var(--muted); }
+.day-tag.is-done strong { text-decoration: line-through; color: var(--muted); }
+.day-tags-empty { text-align: center; color: var(--muted); margin-top: 40px; font-size: 13px; }
+.calendar-header .workspace-search { flex: 1; min-width: 140px; max-width: 460px; width: auto; margin: 0; padding: 2px 8px; }
+.workspace-search > input:focus, .workspace-search > input:focus-visible { outline: none; box-shadow: none; border: 0; }
+.multi-view-calendar .calendar-header { app-region: no-drag; -webkit-app-region: no-drag; touch-action: none; }
+.calendar-header h1 { cursor: grab; }
+.search-panel button { cursor: pointer; color: var(--text); }
+.search-panel > header > button { display: flex; align-items: center; gap: 5px; }
+.multi-view-calendar .day-cell { display: block; padding: 0; overflow: hidden; }
+.multi-view-calendar .day-cell .date-button { position: absolute; top: 3px; left: 3px; width: 28px; min-width: 0; min-height: 0; height: calc(50% - 6px); z-index: 2; justify-content: flex-start; }
+.multi-view-calendar .day-cell .date-mark { min-width: 0; padding: 0 2px; flex-shrink: 0; line-height: 16px; }
+.multi-view-calendar .day-cell .date-note { font-size: 8px; line-height: 9px; flex-shrink: 0; max-width: 28px; overflow: hidden; }
+.month-cell-items { position: absolute; inset: 0; display: grid; grid-template-rows: minmax(0,1fr) minmax(0,1fr); }
+.month-todo-half, .month-event-half { position: relative; min-height: 0; overflow: hidden; padding: 3px 5px; }
+.month-todo-half { padding-left: 34px; }
+.month-todo-clip { display: grid; grid-auto-rows: 16px; align-content: start; overflow: hidden; max-height: 100%; }
+.month-todo-dot { display: grid; place-items: center; width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
+.month-todo-dot span { display: block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.month-todo-dot.is-pending span { outline: 1px solid currentColor; outline-offset: 3px; }
+.month-event-clip { overflow: hidden; position: relative; max-height: 100%; }
+.month-event-bar { position: absolute; display: flex; align-items: center; height: 12px; padding: 0; cursor: pointer; max-width: 100%; }
+.month-event-bar span { display: block; width: 100%; height: 5px; background: currentColor; border-radius: 999px; }
+.month-event-bar:hover span { height: 7px; }
+.month-more { position: absolute; bottom: 0; right: 3px; font-size: 9px; line-height: 12px; color: var(--muted); background: var(--cell); cursor: pointer; }

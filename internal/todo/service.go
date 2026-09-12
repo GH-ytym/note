@@ -33,6 +33,9 @@ type TodoService interface {
 // service 负责执行业务规则，并通过 Repository 完成数据持久化。
 // 具体实现对 todo 包外隐藏。
 type service struct {
+	//这里的Repository是一个接口，service只依赖接口而不依赖具体实现
+	//坏处是不宜阅读者理解代码逻辑，优点是service不依赖具体实现，方便测试和替换
+	//在RegisterAPI的组装中，实际动态类型是*gormRepository
 	repo Repository
 }
 

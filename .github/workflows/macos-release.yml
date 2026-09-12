@@ -71,4 +71,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release view v0.5.0
-          gh release upload v0.5.0 packages/*.dmg packages/*.zip
+          gh release upload v0.5.0 packages/*.dmg packages/*.zip --clobber

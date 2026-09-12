@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { layoutEventTracks } from "./event-tracks.js";
+import { layoutEventTracks } from "./event-tracks.ts";
 
 const segment = (id, start, end) => ({ item: { id }, start, end });
 const lanes = result => result.segments.map(item => item.track);

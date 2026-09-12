@@ -295,7 +295,7 @@
 .timeline-todo {
   position: absolute;
   left: 0;
-  right: 0;
+  right: auto;
   height: 12px;
   border-top: 2px solid var(--event-color);
   cursor: pointer;
@@ -304,6 +304,8 @@
 .timeline-todo span {
   position: absolute;
   top: -15px;
+  left: 0;
+  max-width: 100%;
   padding: 0 3px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -481,3 +483,16 @@
     box-shadow: inset 0 0 0 2px var(--yellow);
   }
 }
+/* Shared time-axis editing: one pixel per minute in either orientation. */
+.timeline-event, .timeline-todo, .horizontal-event, .horizontal-todo { touch-action: none; user-select: none; cursor: grab; }
+.timeline-event:active, .timeline-todo:active, .horizontal-event:active, .horizontal-todo:active { cursor: grabbing; }
+.timeline-resize { position: absolute; z-index: 3; left: 0; right: 0; height: 8px; cursor: ns-resize; }
+.timeline-resize.is-start { top: 0; }
+.timeline-resize.is-end { bottom: 0; }
+.horizontal-event .timeline-resize { top: 0; bottom: 0; width: 8px; height: auto; cursor: ew-resize; }
+.horizontal-event .timeline-resize.is-start { left: 0; right: auto; }
+.horizontal-event .timeline-resize.is-end { right: 0; left: auto; }
+.timeline-resize:hover { background: var(--event-color); opacity: .7; }
+.timeline-drag-label { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 900; padding: 6px 12px; border: 1px solid var(--yellow); border-radius: 6px; background: var(--panel); color: var(--text); font-size: 12px; pointer-events: none; white-space: nowrap; }
+.horizontal-todo span { max-height: 100%; }
+.timeline-todo span, .horizontal-todo span { pointer-events: none; }

@@ -27,7 +27,7 @@ const {
 const PRIMARY_WINDOW_KEY = "calendar";
 const WORKSPACE_WINDOW_KEYS = new Set(["calendar"]);
 const WINDOW_PROFILES = {
-  calendar: { width: 680, height: 460, minWidth: 380, minHeight: 320 },
+  calendar: { width: 980, height: 700, minWidth: 680, minHeight: 460 },
   create: { width: 340, height: 650, minWidth: 260, minHeight: 240 },
   detail: { width: 360, height: 650, minWidth: 280, minHeight: 240 },
   reminder: { width: 390, height: 250, minWidth: 320, minHeight: 230 },
@@ -39,7 +39,10 @@ const DEFAULT_APPEARANCE = Object.freeze({
   themeColor: "#F3B51B",
   opacity: 95,
   defaultView: "month",
-  dayViewMode: "clock",
+  dayViewMode: "tags",
+  miniViewMode: "tags",
+  searchSplit: true,
+  searchLimit: 8,
   handMode: "full",
   weekOrientation: "vertical",
   dayOrientation: "vertical",
@@ -62,6 +65,7 @@ let calendarExpanded = true;
 let appearanceSettings = { ...DEFAULT_APPEARANCE };
 let reminderScheduler = null;
 let workspaceState = null;
+let miniWindowDrag = null;
 let lastWorkspaceState = null;
 let normalWorkspaceState = null;
 
@@ -190,7 +194,33 @@ function registerIPC() {
     if (BrowserWindow.fromWebContents(event.sender)?.noteWindowKey !== "calendar" || datePickerSession) return;
     workspaceState = normalizeWorkspace(payload, todayKey(), appearanceSettings);
   });
+  ipcMain.handle("note:claim-inline-panel", (event) => {
+    const source = BrowserWindow.fromWebContents(event.sender);
+    if (source?.noteWindowKey !== PRIMARY_WINDOW_KEY) return;
+    for (const other of [...windows.values()]) {
+      if (other !== source && !other.isDestroyed()) {
+        other.noteReplaced = true;
+        other.close();
+      }
+    }
+  });
+  ipcMain.handle("note:window-drag-start", (event, point = {}) => {
+    const target = BrowserWindow.fromWebContents(event.sender);
+    if (target?.noteWindowKey !== PRIMARY_WINDOW_KEY || target.isMaximized()) return;
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    miniWindowDrag = { target, cursor: point, bounds: target.getBounds() };
+  });
+  ipcMain.handle("note:window-drag-move", (event, cursor = {}) => {
+    const drag = miniWindowDrag;
+    if (!drag || drag.target.isDestroyed() || drag.target.webContents !== event.sender) return;
+    if (!Number.isFinite(cursor.x) || !Number.isFinite(cursor.y)) return;
+    drag.target.setBounds({ ...drag.bounds, x: Math.round(drag.bounds.x + cursor.x - drag.cursor.x), y: Math.round(drag.bounds.y + cursor.y - drag.cursor.y) }, false);
+  });
+  ipcMain.handle("note:window-drag-end", (event) => {
+    if (miniWindowDrag?.target.webContents === event.sender) miniWindowDrag = null;
+  });
   ipcMain.handle("note:mini-mode", (event, enabled) => {
+    miniWindowDrag = null;
     assertTrustedSender(event);
     if (BrowserWindow.fromWebContents(event.sender)?.noteWindowKey !== "calendar") return;
     if (enabled) normalWorkspaceState = { ...workspaceState, mini: false };
@@ -497,9 +527,12 @@ function normalizeAppearance(value = {}) {
     ),
     dayViewMode: choice(
       value.dayViewMode,
-      ["clock", "timeline"],
+      ["clock", "timeline", "tags"],
       DEFAULT_APPEARANCE.dayViewMode,
     ),
+    miniViewMode: choice(value.miniViewMode, ["clock", "timeline", "tags"], "tags"),
+    searchSplit: typeof value.searchSplit === "boolean" ? value.searchSplit : true,
+    searchLimit: Number.isFinite(Number(value.searchLimit)) ? clamp(Math.round(Number(value.searchLimit)), 1, 100) : 8,
     handMode: choice(
       value.handMode,
       ["full", "compact"],
@@ -838,6 +871,7 @@ function createWindow({
   maximizable = true,
 }) {
   if (key !== PRIMARY_WINDOW_KEY) {
+    sendToWindow(windows.get(PRIMARY_WINDOW_KEY), "note:auxiliary-opened", { role });
     for (const other of [...windows.values()]) {
       if (other.noteWindowKey !== PRIMARY_WINDOW_KEY && other.noteWindowKey !== key && !other.isDestroyed()) {
         other.noteReplaced = true;

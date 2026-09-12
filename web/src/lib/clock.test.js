@@ -7,7 +7,7 @@ import {
   clockArc,
   clockTrackRadius,
   layoutTodoTracks,
-} from "./clock.js";
+} from "./clock.ts";
 test('24h clock maps cardinal points and arbitrary times',()=>{
  for(const minute of [0,120,360,720,1080,1435]){const p=clockPoint(minute,140);assert.ok(Math.abs(clockMinute(p.x,p.y)-minute)<0.00001);}
 });

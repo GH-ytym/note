@@ -6,16 +6,17 @@ import (
 	"strings"
 
 	"note/internal/handler"
+	"note/internal/search"
 
 	"github.com/gin-gonic/gin"
 )
 
 // NewWithWeb creates the API router and optionally serves a built React app.
 // webDir is empty during normal API development and points to web/dist in Electron.
-func NewWithWeb(th *handler.TodoHandler, eh *handler.EventHandler, ch *handler.CalendarHandler, webDir string) *gin.Engine {
+func NewWithWeb(th *handler.TodoHandler, eh *handler.EventHandler, ch *handler.CalendarHandler, sh *search.SearchHandler, webDir string) *gin.Engine {
 	r := gin.Default()
-	registerAPI(r, th, eh, ch)
-	registerAPI(r.Group("/api"), th, eh, ch)
+	registerAPI(r, th, eh, ch, sh)
+	registerAPI(r.Group("/api"), th, eh, ch, sh)
 
 	if webDir != "" {
 		indexPath := filepath.Join(webDir, "index.html")
@@ -35,11 +36,14 @@ func NewWithWeb(th *handler.TodoHandler, eh *handler.EventHandler, ch *handler.C
 	return r
 }
 
-func registerAPI(r gin.IRouter, th *handler.TodoHandler, eh *handler.EventHandler, ch *handler.CalendarHandler) {
+func registerAPI(r gin.IRouter, th *handler.TodoHandler, eh *handler.EventHandler, ch *handler.CalendarHandler, sh *search.SearchHandler) {
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 	r.GET("/calendar", ch.GetCalendar)
+	r.GET("/search/todos", sh.SearchTodos)
+	r.GET("/search/events", sh.SearchEvents)
+	r.GET("/search/all", sh.SearchAll)
 
 	todos := r.Group("/todos")
 	{
@@ -60,4 +64,5 @@ func registerAPI(r gin.IRouter, th *handler.TodoHandler, eh *handler.EventHandle
 		events.GET("/:id", eh.GetEvent)
 		events.PATCH("/:id", eh.PatchEvent)
 	}
+
 }

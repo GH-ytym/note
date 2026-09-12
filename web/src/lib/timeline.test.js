@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { occursOnDay, layoutDay } from "./timeline.js";
+import { occursOnDay, layoutDay, assignEventTracks } from "./timeline.ts";
 
 const event = (id, date, time, endDate, endTime) => ({ id, kind: "event", date, time, endDate, endTime });
 test("cross-month events cover each intersected day but exclude the midnight end", () => {
@@ -32,4 +32,26 @@ test("adjacent intervals reuse tracks and todo stays on its own date", () => {
   const items = [event("a", "2026-09-09", "09:00", "2026-09-09", "10:00"), event("b", "2026-09-09", "10:00", "2026-09-09", "11:00")];
   assert.deepEqual(layoutDay(items, "2026-09-09", 7).segments.map(item => item.track), [0, 0]);
   assert.equal(occursOnDay({ kind: "todo", date: "2026-09-09" }, "2026-09-10"), false);
+});
+
+test("multi-day events keep lanes when earlier events disappear on subsequent days", () => {
+  const items = [event("early", "2026-09-09", "08:00", "2026-09-09", "12:00"), event("long", "2026-09-09", "09:00", "2026-09-12", "12:00")];
+  const memory = new Map();
+  const first = assignEventTracks(items, memory);
+  assert.equal(first.find(item => item.id === "long").track, 1);
+  for (const key of ["2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12"]) {
+    assert.equal(layoutDay(first, key).segments.find(segment => segment.item.id === "long").track, 1);
+  }
+  const nextPage = assignEventTracks([items[1]], memory);
+  assert.equal(layoutDay(nextPage, "2026-09-10").segments[0].track, 1);
+});
+
+test("new overlapping events do not displace an existing continuation", () => {
+  const long = event("long", "2026-09-09", "09:00", "2026-09-12", "12:00");
+  const memory = new Map();
+  assignEventTracks([long], memory);
+  const earlier = event("earlier", "2026-09-09", "08:00", "2026-09-10", "12:00");
+  const result = assignEventTracks([earlier, long], memory);
+  assert.equal(result.find(item => item.id === "long").track, 0);
+  assert.equal(result.find(item => item.id === "earlier").track, 1);
 });

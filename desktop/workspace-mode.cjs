@@ -5,7 +5,7 @@ function normalizeWorkspace(value = {}, today, settings = {}) {
   return {
     mini,
     view: mini ? "day" : ["year", "month", "week", "day"].includes(value.view) ? value.view : settings.defaultView || "month",
-    dayStyle: mini ? "clock" : ["clock", "timeline"].includes(value.dayStyle) ? value.dayStyle : settings.dayViewMode || "clock",
+    dayStyle: mini ? settings.miniViewMode || "tags" : ["clock", "timeline", "tags"].includes(value.dayStyle) ? value.dayStyle : settings.dayViewMode || "tags",
     handMode: ["full", "compact"].includes(value.handMode) ? value.handMode : settings.handMode || "full",
     date: mini ? today : /^\d{4}-\d{2}-\d{2}$/.test(value.date || "") ? value.date : today,
   };

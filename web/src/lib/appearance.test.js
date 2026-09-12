@@ -4,7 +4,7 @@ import {
   appearanceTokens,
   contrast,
   normalizeSettings,
-} from "./appearance.js";
+} from "./appearance.ts";
 
 test("text and accent ink remain readable across light, dark, and medium backgrounds", () => {
   for (const backgroundColor of ["#000000", "#FFFFFF", "#EEEADC", "#808080", "#777777", "#91A0A8", "#B065A0"]) {
@@ -27,7 +27,12 @@ test("settings migration fills preferences and clamps clock tracks", () => {
     opacity: 95,
   });
   assert.equal(migrated.defaultView, "month");
-  assert.equal(migrated.dayViewMode, "clock");
+  assert.equal(migrated.dayViewMode, "tags");
+  assert.equal(migrated.miniViewMode, "tags");
+  assert.equal(migrated.searchSplit, true);
+  assert.equal(normalizeSettings({ searchSplit: false }).searchSplit, false);
+  assert.equal(normalizeSettings({ searchLimit: 999 }).searchLimit, 100);
+  assert.equal(normalizeSettings({ searchLimit: -2 }).searchLimit, 1);
   assert.equal(migrated.clockTracks, 7);
 
   assert.equal(normalizeSettings({ clockTracks: 99 }).clockTracks, 10);

@@ -30,6 +30,7 @@ func (r *gormRepository) Get(ctx context.Context, id uint) (model.Event, error) 
 }
 
 func (r *gormRepository) Update(ctx context.Context, item *model.Event, version uint) error {
+	normalizeEventTimes(item)
 	result := r.db.WithContext(ctx).Model(&model.Event{}).Where("id = ? AND version = ?", item.ID, version).Updates(map[string]interface{}{
 		"title": item.Title, "content": item.Content, "starts_at": item.StartsAt, "ends_at": item.EndsAt, "version": version + 1,
 	})
@@ -56,11 +57,20 @@ func (r *gormRepository) Create(
 	ctx context.Context,
 	item *model.Event,
 ) error {
+	normalizeEventTimes(item)
 	if err := r.db.WithContext(ctx).Create(item).Error; err != nil {
 		return fmt.Errorf("create event: %w", err)
 	}
 
 	return nil
+}
+
+// SQLite compares these stored datetime strings in the range CHECK constraint.
+// Normalize both endpoints before every write, including patches sent in UTC.
+func normalizeEventTimes(item *model.Event) {
+	location := time.FixedZone("Asia/Shanghai", 8*60*60)
+	item.StartsAt = item.StartsAt.In(location)
+	item.EndsAt = item.EndsAt.In(location)
 }
 
 func (r *gormRepository) ListInRange(

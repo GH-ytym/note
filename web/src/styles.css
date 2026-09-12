@@ -1145,11 +1145,11 @@ textarea:focus-visible {
 }
 
 .time-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: relative;
+  justify-self: end;
   z-index: 220;
   width: 210px;
+  max-width: 100%;
   overscroll-behavior: contain;
   padding: 10px;
   border: 1px solid rgb(var(--theme-rgb) / 34%);
@@ -1232,7 +1232,7 @@ textarea:focus-visible {
 }
 
 .time-field.is-compact .time-popover {
-  top: calc(100% + 5px);
+  margin-top: 5px;
 }
 
 .completion-controls {

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"note/internal/calendar"
 	"note/internal/event"
+	"note/internal/search"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -97,6 +98,11 @@ func Run() (runErr error) {
 	calendarService := calendar.NewService(todoService, eventService)
 	calendarHandler := handler.NewCalendarHandler(calendarService)
 
+	//还有个search
+	searchRepository := search.NewGORMRepository(db)
+	searchService := search.NewService(searchRepository)
+	searchHandler := search.NewSearchHandler(searchService)
+
 	//启动服务+优雅关闭
 	serverAddress := os.Getenv("HTTP_ADDR")
 	if serverAddress == "" {
@@ -105,7 +111,7 @@ func Run() (runErr error) {
 
 	server := &http.Server{
 		Addr:              serverAddress,
-		Handler:           router.NewWithWeb(todoHandler, eventHandler, calendarHandler, os.Getenv("NOTE_WEB_DIR")),
+		Handler:           router.NewWithWeb(todoHandler, eventHandler, calendarHandler, searchHandler, os.Getenv("NOTE_WEB_DIR")),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	listener, err := net.Listen("tcp", server.Addr)

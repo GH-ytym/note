@@ -12,6 +12,11 @@ import (
 // final GORM schema. Each step is idempotent so an interrupted migration can be
 // continued on the next application start.
 func migrateDatabase(db *gorm.DB) error {
+	// User 没有关联旧日程表，可以单独同步，避免重建已有的 Todo/Event 表。
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		return fmt.Errorf("migrate users schema: %w", err)
+	}
+
 	if err := migrateTodoSchema(db); err != nil {
 		return err
 	}

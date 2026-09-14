@@ -45,6 +45,24 @@ func TestSQLiteDatabase(t *testing.T) {
 	if !db.Migrator().HasTable(&model.Event{}) {
 		t.Fatal("events table was not created")
 	}
+	user := model.User{Username: "migration-user", PasswordHash: "test-hash", Nickname: "迁移测试"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if err := migrateDatabase(db); err != nil {
+		t.Fatalf("repeat migration with existing user: %v", err)
+	}
+	var loadedUser model.User
+	if err := db.First(&loadedUser, user.ID).Error; err != nil {
+		t.Fatalf("load user after repeat migration: %v", err)
+	}
+	if loadedUser.Username != user.Username || loadedUser.PasswordHash != user.PasswordHash || loadedUser.Nickname != user.Nickname {
+		t.Fatal("repeat migration changed user data")
+	}
+	duplicateUser := model.User{Username: user.Username, PasswordHash: "other-hash", Nickname: "重复用户"}
+	if err := db.Create(&duplicateUser).Error; !errors.Is(err, gorm.ErrDuplicatedKey) {
+		t.Fatalf("duplicate username error = %v, want %v", err, gorm.ErrDuplicatedKey)
+	}
 	if !db.Migrator().HasTable(&model.EventDate{}) {
 		t.Fatal("event_dates table was not created")
 	}
@@ -252,6 +270,9 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 	}
 	if err := migrateDatabase(db); err != nil {
 		t.Fatalf("repeat legacy migration: %v", err)
+	}
+	if !db.Migrator().HasTable(&model.User{}) {
+		t.Fatal("users table was not added to the legacy database")
 	}
 	if !db.Migrator().HasTable(&model.Event{}) {
 		t.Fatal("events table was not added to the legacy database")

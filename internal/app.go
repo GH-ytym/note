@@ -121,9 +121,7 @@ func Run() (runErr error) {
 	server.Addr = listener.Addr().String()
 
 	// 使用容量为 1 的缓冲 channel。
-	// Shutdown 会使 ListenAndServe 返回 http.ErrServerClosed。
-	// 此时主 goroutine 可能已经离开 select；如果使用无缓冲 channel，
-	// 服务 goroutine 可能因为没有接收者而永久阻塞。
+
 	serverErr := make(chan error, 1)
 	go func() {
 		log.Printf("HTTP server listening on %s", server.Addr)
@@ -132,6 +130,7 @@ func Run() (runErr error) {
 	fmt.Printf("NOTE_SERVER_URL=http://%s\n", server.Addr)
 
 	//监听关闭信号
+	//收到取消信号(ctrl+c/sigterm)时，stopCtx.Done()返回的channel关闭，就不会阻塞了
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -148,25 +147,36 @@ func Run() (runErr error) {
 	}
 
 	select {
+	// 信号分支和 parentClosed 分支没有 return，执行后会继续走下面的关闭流程。
+	// serverErr 分支有 return，会直接退出当前函数。
 	case err := <-serverErr:
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 		return fmt.Errorf("serve HTTP: %w", err)
+		//ctrl+c/sigterm
+		//当Done()被关闭时，可以被立即接收到，不需要拿变量接收
+		//这是 Go channel 的规则：从一个已经关闭的 channel 接收，会立即返回，不会阻塞。
+		//关闭 channel，会让所有正在等它的人，立刻收到一个“零值”，并且从此以后永远收到零值。
 	case <-stopCtx.Done():
 		log.Print("shutdown signal received")
+		//elcetron退出
 	case <-parentClosed:
 		log.Print("desktop parent process closed")
 	}
 
 	//最多等待10秒
+	//新开一个context是因为如果上面的select走的是stopCtx.Done()分支，那么此时的context已经关闭了
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
 
-	// 尝试优雅关闭 HTTP 服务
+	// shutdown尝试关闭；这会使监听器返回错误信号
+	//此时监听器关闭导致返回 http.ErrServerClosed，但select已经过去，没有接收者来接收serverErr了
+	//如果没写缓冲区为1，就会造成goroutine泄漏
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		// 超时后强制关闭 HTTP 连接
+		// 10s超时后，强制关闭 HTTP 连接
 		_ = server.Close()
+
 		return fmt.Errorf("shutdown HTTP server: %w", err)
 	}
 

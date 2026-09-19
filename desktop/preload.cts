@@ -1,13 +1,15 @@
-const { contextBridge, ipcRenderer } = require("electron");
+import type { NoteDesktop } from "./contracts.cjs";
+import electron = require("electron");
+const { contextBridge, ipcRenderer } = electron;
 
-contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
+contextBridge.exposeInMainWorld("noteDesktop", Object.freeze<NoteDesktop>({
   isDesktop: true,
   startWindowDrag: (point) => ipcRenderer.invoke("note:window-drag-start", point),
   moveWindowDrag: (point) => ipcRenderer.invoke("note:window-drag-move", point),
   endWindowDrag: () => ipcRenderer.invoke("note:window-drag-end"),
   claimInlinePanel: () => ipcRenderer.invoke("note:claim-inline-panel"),
   onAuxiliaryOpened: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:auxiliary-opened", listener);
     return () => ipcRenderer.removeListener("note:auxiliary-opened", listener);
   },
@@ -41,42 +43,42 @@ contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
   cancelDatePicker: () => ipcRenderer.invoke("note:date-picker-cancel"),
   getDatePickerState: () => ipcRenderer.invoke("note:date-picker-state"),
   onDataChanged: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:data-changed", listener);
     return () => ipcRenderer.removeListener("note:data-changed", listener);
   },
   onContentEditorSaved: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:content-editor-saved", listener);
     return () => ipcRenderer.removeListener("note:content-editor-saved", listener);
   },
   onAppearanceChanged: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:appearance-changed", listener);
     return () => ipcRenderer.removeListener("note:appearance-changed", listener);
   },
   onDayDateChanged: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:day-date-changed", listener);
     return () => ipcRenderer.removeListener("note:day-date-changed", listener);
   },
   onWorkspaceViewChanged: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:workspace-view-changed", listener);
     return () => ipcRenderer.removeListener("note:workspace-view-changed", listener);
   },
   onCalendarVisibilityChanged: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:calendar-visibility-changed", listener);
     return () => ipcRenderer.removeListener("note:calendar-visibility-changed", listener);
   },
   onDatePickerStateChanged: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:date-picker-state-changed", listener);
     return () => ipcRenderer.removeListener("note:date-picker-state-changed", listener);
   },
   onDatePickerSelection: (callback) => {
-    const listener = (_event, payload) => callback(payload);
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
     ipcRenderer.on("note:date-picker-selection", listener);
     return () => ipcRenderer.removeListener("note:date-picker-selection", listener);
   },
@@ -86,7 +88,7 @@ contextBridge.exposeInMainWorld("noteDesktop", Object.freeze({
     return () => ipcRenderer.removeListener("note:date-picker-finished", listener);
   },
   onMaximizedChanged: (callback) => {
-    const listener = (_event, maximized) => callback(Boolean(maximized));
+    const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(Boolean(maximized));
     ipcRenderer.on("note:window-maximized-changed", listener);
     return () => ipcRenderer.removeListener("note:window-maximized-changed", listener);
   },

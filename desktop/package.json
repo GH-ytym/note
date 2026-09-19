@@ -3,18 +3,23 @@
   "version": "0.5.0",
   "private": true,
   "description": "Note 独立窗口桌面日历",
-  "main": "main.cjs",
+  "main": "dist/main.cjs",
   "scripts": {
-    "prepare:app": "node scripts/prepare.cjs",
-    "test": "node --test reminder-scheduler.test.cjs window-layout.test.cjs workspace-layout.test.cjs window-behavior.test.cjs",
+    "prepare:app": "npm run build && node dist/scripts/prepare.cjs",
+    "test": "npm run build && node --test dist/*.test.cjs",
     "start": "npm run prepare:app && electron .",
     "pack": "npm run prepare:app && electron-builder --dir --win --x64",
     "dist": "npm run prepare:app && electron-builder --win --x64",
-    "dist:mac": "npm run prepare:app && electron-builder --mac --publish never"
+    "dist:mac": "npm run prepare:app && electron-builder --mac --publish never",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke:mac": "node dist/scripts/smoke-mac.cjs"
   },
   "devDependencies": {
+    "@types/node": "24.13.6",
     "electron": "44.0.0",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "typescript": "5.9.3"
   },
   "build": {
     "appId": "cn.note.calendar",
@@ -24,12 +29,8 @@
       "output": "release"
     },
     "files": [
-      "main.cjs",
-      "preload.cjs",
-      "reminder-scheduler.cjs",
-      "window-layout.cjs",
-      "workspace-layout.cjs",
-      "workspace-mode.cjs",
+      "dist/*.cjs",
+      "!dist/*.test.cjs",
       "build/window-icon.png",
       "package.json"
     ],
@@ -40,7 +41,12 @@
       }
     ],
     "win": {
-      "extraResources": [{ "from": "resources/note-api.exe", "to": "backend/note-api.exe" }],
+      "extraResources": [
+        {
+          "from": "resources/note-api.exe",
+          "to": "backend/note-api.exe"
+        }
+      ],
       "icon": "build/icon.ico",
       "target": [
         {
@@ -60,11 +66,19 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "resources/icon.png",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "identity": "-",
       "hardenedRuntime": false,
-      "extraResources": [{ "from": "resources/note-api", "to": "backend/note-api" }]
+      "extraResources": [
+        {
+          "from": "resources/note-api",
+          "to": "backend/note-api"
+        }
+      ]
     },
     "nsis": {
       "artifactName": "${productName}-Setup-${version}.${ext}",

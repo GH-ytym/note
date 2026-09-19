@@ -1,14 +1,15 @@
-const { spawn } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
-const os = require("node:os");
-const assert = require("node:assert/strict");
+import childProcess = require("node:child_process");
+const { spawn } = childProcess;
+import fs = require("node:fs");
+import path = require("node:path");
+import os = require("node:os");
+import assert = require("node:assert/strict");
 
 async function main() {
   assert.equal(process.platform, "darwin");
   const folder = process.arch === "arm64" ? "mac-arm64" : "mac";
-  const bundle = path.resolve(__dirname, "..", "release", folder, "Note.app");
-  // __dirname is desktop/scripts, so the output is one level above scripts.
+  const bundle = path.resolve(__dirname, "..", "..", "release", folder, "Note.app");
+  // Compiled scripts live in desktop/dist/scripts; packages live in desktop/release.
   const backend = path.join(bundle, "Contents/Resources/backend/note-api");
   fs.accessSync(backend, fs.constants.X_OK);
   // macOS resolves the log directory from the application bundle name.
@@ -17,7 +18,7 @@ async function main() {
   let error;
   child.on("error", value => { error = value; });
   try {
-    let url;
+    let url: string | undefined;
     for (let attempt = 0; attempt < 60; attempt++) {
       if (error) throw error;
       assert.equal(child.exitCode, null, "Electron exited before startup");
@@ -35,7 +36,7 @@ async function main() {
     }
     assert.ok(url, "Packaged Electron did not start the bundled backend");
     for (const route of ["/api/ping", "/", "/api/calendar?from=2026-09-10&to=2026-09-11"]) {
-      const response = await fetch(url + route);
+      const response: Response = await fetch(url + route);
       assert.equal(response.status, 200, route);
       if (route === "/") assert.match(await response.text(), /<html/i);
     }

@@ -1,10 +1,13 @@
-const { DEFAULT_EDGE_MARGIN, DEFAULT_GAP } = require("./window-layout.cjs");
+import type { Rectangle } from "electron";
+type Size = Pick<Rectangle, "width" | "height">;
+import windowLayout = require("./window-layout.cjs");
+const { DEFAULT_EDGE_MARGIN, DEFAULT_GAP } = windowLayout;
 
-function clamp(value, minimum, maximum) {
+function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(value, maximum));
 }
 
-function workspacePairBounds(workArea, calendarSizing, daySizing, {
+function workspacePairBounds(workArea: Rectangle, calendarSizing: Size, daySizing: Size, {
   edgeMargin = DEFAULT_EDGE_MARGIN,
   gap = DEFAULT_GAP,
 } = {}) {
@@ -33,7 +36,7 @@ function workspacePairBounds(workArea, calendarSizing, daySizing, {
   };
 }
 
-function translatePeerBounds(sourceCurrent, sourceNext, peerCurrent) {
+function translatePeerBounds(sourceCurrent: Rectangle, sourceNext: Rectangle, peerCurrent: Rectangle) {
   return {
     ...peerCurrent,
     x: peerCurrent.x + sourceNext.x - sourceCurrent.x,
@@ -41,7 +44,7 @@ function translatePeerBounds(sourceCurrent, sourceNext, peerCurrent) {
   };
 }
 
-function resizePeerBounds(sourceRole, sourceNext, peerCurrent, gap = DEFAULT_GAP) {
+function resizePeerBounds(sourceRole: string, sourceNext: Rectangle, peerCurrent: Rectangle, gap = DEFAULT_GAP) {
   if (sourceRole === "calendar") {
     return {
       ...peerCurrent,
@@ -57,7 +60,7 @@ function resizePeerBounds(sourceRole, sourceNext, peerCurrent, gap = DEFAULT_GAP
   };
 }
 
-function shiftPairIntoWorkArea(workArea, leftBounds, rightBounds, edgeMargin = DEFAULT_EDGE_MARGIN) {
+function shiftPairIntoWorkArea(workArea: Rectangle, leftBounds: Rectangle, rightBounds: Rectangle, edgeMargin = DEFAULT_EDGE_MARGIN) {
   const group = {
     left: Math.min(leftBounds.x, rightBounds.x),
     top: Math.min(leftBounds.y, rightBounds.y),
@@ -82,7 +85,7 @@ function shiftPairIntoWorkArea(workArea, leftBounds, rightBounds, edgeMargin = D
   };
 }
 
-function dayViewPairBounds(workArea, calendarBounds, daySizing, {
+function dayViewPairBounds(workArea: Rectangle, calendarBounds: Rectangle, daySizing: Size, {
   edgeMargin = DEFAULT_EDGE_MARGIN,
   gap = DEFAULT_GAP,
 } = {}) {
@@ -96,7 +99,7 @@ function dayViewPairBounds(workArea, calendarBounds, daySizing, {
   return { calendar: shifted.left, day: shifted.right };
 }
 
-function calendarPairFromDayBounds(workArea, dayBounds, calendarSizing, {
+function calendarPairFromDayBounds(workArea: Rectangle, dayBounds: Rectangle, calendarSizing: Size, {
   edgeMargin = DEFAULT_EDGE_MARGIN,
   gap = DEFAULT_GAP,
 } = {}) {
@@ -110,7 +113,7 @@ function calendarPairFromDayBounds(workArea, dayBounds, calendarSizing, {
   return { calendar: shifted.left, day: shifted.right };
 }
 
-module.exports = {
+export {
   calendarPairFromDayBounds,
   dayViewPairBounds,
   resizePeerBounds,

@@ -322,6 +322,16 @@ npm run build
 
 cd ..\desktop
 npm test
-node --check main.cjs
+npm run typecheck
+npm test
 node --check preload.cjs
 ```
+
+### Desktop TypeScript
+
+`desktop/*.cts` 和 `desktop/scripts/*.cts` 是桌面端 TypeScript 源码，开启严格类型检查。
+`npm run build --prefix desktop` 编译到 `desktop/dist/`；Electron 从 `dist/main.cjs` 启动。
+沙箱 preload 仍编译为独立 CommonJS 文件，只在运行时加载 Electron 模块。
+`desktop/contracts.cts` 是前端与 preload 共用的接口声明。
+`start`、`pack`、`dist` 和 `dist:mac` 会先编译桌面源码，再构建前端与 Go 后端。
+`npm test --prefix desktop` 编译并运行桌面端测试。版本继续固定为 `0.5.0`。

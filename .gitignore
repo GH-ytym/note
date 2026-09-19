@@ -64,3 +64,5 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+/desktop/dist/

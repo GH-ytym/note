@@ -1,25 +1,27 @@
-const assert = require("node:assert/strict");
-const test = require("node:test");
+import assert = require("node:assert/strict");
+import test = require("node:test");
 
-const {
+import {
   ReminderScheduler,
   dateKeyAt,
   isReminderCandidate,
   nextDateKey,
   occurrenceKey,
-} = require("./reminder-scheduler.cjs");
+} from "./reminder-scheduler.cjs";
 
 function fakeTimers() {
-  const timers = [];
+  const timers: {handle: ReturnType<typeof setTimeout>; callback: () => void; delay: number; cleared: boolean}[] = [];
   return {
     timers,
-    setTimer(callback, delay) {
-      const timer = { callback, delay, cleared: false };
+    setTimer(callback: () => void, delay: number) {
+      const handle = setTimeout(() => {}, 0); clearTimeout(handle);
+      const timer = { handle, callback, delay, cleared: false };
       timers.push(timer);
-      return timer;
+      return handle;
     },
-    clearTimer(timer) {
-      timer.cleared = true;
+    clearTimer(handle: ReturnType<typeof setTimeout>) {
+      const timer = timers.find(timer => timer.handle === handle);
+      if (timer) timer.cleared = true;
     },
   };
 }
@@ -51,8 +53,8 @@ test("only future, incomplete occurrences with a reminder are candidates", () =>
 test("scheduler loads today, schedules future occurrences and fires each once", async () => {
   let now = Date.parse("2026-08-29T01:00:00Z");
   const clock = fakeTimers();
-  const fired = [];
-  const requestedRanges = [];
+  const fired: number[] = [];
+  const requestedRanges: string[][] = [];
   const future = {
     todo_id: 7,
     content: "喝水",
@@ -73,7 +75,7 @@ test("scheduler loads today, schedules future occurrences and fires each once", 
         { ...future, todo_id: 9, occurrence_done: true },
       ];
     },
-    onReminder: (item) => fired.push(item.todo_id),
+    onReminder: (item) => { fired.push(item.todo_id); },
   });
 
   await scheduler.start();

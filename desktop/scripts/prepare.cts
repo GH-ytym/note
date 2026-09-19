@@ -1,8 +1,9 @@
-const { spawnSync } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
+import childProcess = require("node:child_process");
+const { spawnSync } = childProcess;
+import fs = require("node:fs");
+import path = require("node:path");
 
-const projectRoot = path.resolve(__dirname, "..", "..");
+const projectRoot = path.resolve(__dirname, "..", "..", "..");
 const desktopRoot = path.join(projectRoot, "desktop");
 const webRoot = path.join(projectRoot, "web");
 const resourcesRoot = path.join(desktopRoot, "resources");
@@ -24,7 +25,7 @@ run(
   projectRoot,
 );
 
-function run(command, args, cwd) {
+function run(command: string, args: string[], cwd: string) {
   const result = spawnSync(command, args, {
     cwd,
     stdio: "inherit",

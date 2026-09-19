@@ -1,8 +1,19 @@
-const { spawn } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
-const { WAKE_STYLES, normalizeWorkspace, wakeWorkspace } = require("./workspace-mode.cjs");
-const { ReminderScheduler, dateKeyAt } = require("./reminder-scheduler.cjs");
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import type { BrowserWindow as NoteWindow, IpcMainInvokeEvent, Rectangle, Point, WebContents, MenuItemConstructorOptions } from "electron";
+import type { Settings, WorkspaceState, PickerState, ReminderState, View, RepeatMode } from "./contracts.cjs";
+import type { EditorSession, PickerSession, WindowOptions, WindowRole } from "./window-types.cjs";
+import type { ReminderOccurrence } from "./reminder-scheduler.cjs";
+type Input = Record<string, unknown>;
+type MaybeWindow = NoteWindow | null | undefined;
+import childProcess = require("node:child_process");
+const { spawn } = childProcess;
+import fs = require("node:fs");
+import path = require("node:path");
+import workspaceMode = require("./workspace-mode.cjs");
+const { WAKE_STYLES, normalizeWorkspace, wakeWorkspace } = workspaceMode;
+import reminders = require("./reminder-scheduler.cjs");
+const { ReminderScheduler, dateKeyAt } = reminders;
+import windowLayout = require("./window-layout.cjs");
 const {
   DEFAULT_EDGE_MARGIN,
   DEFAULT_GAP,
@@ -10,7 +21,8 @@ const {
   bottomRightBounds,
   centeredBounds,
   fitBounds,
-} = require("./window-layout.cjs");
+} = windowLayout;
+import electron = require("electron");
 const {
   app,
   BrowserWindow,
@@ -21,7 +33,7 @@ const {
   Notification,
   screen,
   Tray,
-} = require("electron");
+} = electron;
 
 // The calendar is the single primary surface; editors and reminders are auxiliary windows.
 const PRIMARY_WINDOW_KEY = "calendar";
@@ -34,7 +46,7 @@ const WINDOW_PROFILES = {
   settings: { width: 780, height: 600, minWidth: 560, minHeight: 460 },
   "content-editor": { width: 760, height: 560, minWidth: 500, minHeight: 360 },
 };
-const DEFAULT_APPEARANCE = Object.freeze({
+const DEFAULT_APPEARANCE: Readonly<Settings> = Object.freeze({
   backgroundColor: "#000000",
   themeColor: "#F3B51B",
   opacity: 95,
@@ -51,23 +63,23 @@ const DEFAULT_APPEARANCE = Object.freeze({
 });
 const TRAY_ICON_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACtSURBVFhH7c7RDQIhFETRbcJEY/8lWJkFaPjkCCw8XLOJ3OR+wZuZbVssBng+7q9evZ3Ggh7NCGFoRDO7MWhGs3cxQK+3S6bvJe1o4rEeOsDDkpEBSbs+8KBmdEDSzgw/1/yfARaNat65B/jx5wMSfjZwVPOGB9TsKappZ4afa64Bhw1IeFAyOsCuKh5qZIAdTTz+hnbsYsCMZndjUEQzQxjaoxnTWNDS28VpeQN+CwQ4E8tohAAAAABJRU5ErkJggg==";
 
-const windows = new Map();
-const activeNotifications = new Map();
-let backendProcess = null;
+const windows = new Map<string, NoteWindow>();
+const activeNotifications = new Map<string, Electron.Notification>();
+let backendProcess: ChildProcessWithoutNullStreams | null = null;
 let backendURL = "";
 let quitting = false;
 let focusPrimaryAfterReady = false;
-let datePickerSession = null;
+let datePickerSession: PickerSession | null = null;
 let datePickerSequence = 0;
-let tray = null;
+let tray: Electron.Tray | null = null;
 let hiddenToTray = false;
 let calendarExpanded = true;
-let appearanceSettings = { ...DEFAULT_APPEARANCE };
-let reminderScheduler = null;
-let workspaceState = null;
-let miniWindowDrag = null;
-let lastWorkspaceState = null;
-let normalWorkspaceState = null;
+let appearanceSettings: Settings = { ...DEFAULT_APPEARANCE };
+let reminderScheduler: InstanceType<typeof ReminderScheduler> | null = null;
+let workspaceState: WorkspaceState | null = null;
+let miniWindowDrag: { target: NoteWindow; cursor: Point; bounds: Rectangle } | null = null;
+let lastWorkspaceState: WorkspaceState | null = null;
+let normalWorkspaceState: WorkspaceState | null = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -128,12 +140,12 @@ function resolveRuntimePaths() {
   }
 
   return {
-    backend: path.join(__dirname, "resources", backendName),
-    web: path.resolve(__dirname, "..", "web", "dist"),
+    backend: path.join(__dirname, "..", "resources", backendName),
+    web: path.resolve(__dirname, "..", "..", "web", "dist"),
   };
 }
 
-function startBackend() {
+function startBackend(): Promise<string> {
   const runtime = resolveRuntimePaths();
   const appDataDirectory = path.join(app.getPath("userData"), "data");
   const databasePath = path.join(appDataDirectory, "note.db");
@@ -142,7 +154,7 @@ function startBackend() {
   fs.mkdirSync(appDataDirectory, { recursive: true });
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
 
-  return new Promise((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     let settled = false;
     const startupTimer = setTimeout(() => fail(new Error("Go 后端启动超时")), 30000);
 
@@ -160,7 +172,7 @@ function startBackend() {
       },
     });
 
-    const consumeOutput = (chunk) => {
+    const consumeOutput = (chunk: Buffer) => {
       const output = chunk.toString("utf8");
       fs.appendFileSync(logPath, output);
       const match = output.match(/NOTE_SERVER_URL=(http:\/\/[^\s]+)/);
@@ -170,7 +182,7 @@ function startBackend() {
       resolve(match[1]);
     };
 
-    const fail = (error) => {
+    const fail = (error: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(startupTimer);
@@ -189,7 +201,7 @@ function startBackend() {
 
 function registerIPC() {
   ipcMain.handle("note:workspace-state", (event) => { assertTrustedSender(event); return workspaceState; });
-  ipcMain.handle("note:workspace-save", (event, payload) => {
+  ipcMain.handle("note:workspace-save", (event, payload: Input) => {
     assertTrustedSender(event);
     if (BrowserWindow.fromWebContents(event.sender)?.noteWindowKey !== "calendar" || datePickerSession) return;
     workspaceState = normalizeWorkspace(payload, todayKey(), appearanceSettings);
@@ -204,16 +216,16 @@ function registerIPC() {
       }
     }
   });
-  ipcMain.handle("note:window-drag-start", (event, point = {}) => {
+  ipcMain.handle("note:window-drag-start", (event, point: Partial<Point> = {}) => {
     const target = BrowserWindow.fromWebContents(event.sender);
     if (target?.noteWindowKey !== PRIMARY_WINDOW_KEY || target.isMaximized()) return;
-    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
-    miniWindowDrag = { target, cursor: point, bounds: target.getBounds() };
+    if (typeof point.x !== "number" || typeof point.y !== "number" || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    miniWindowDrag = { target, cursor: { x: point.x, y: point.y }, bounds: target.getBounds() };
   });
-  ipcMain.handle("note:window-drag-move", (event, cursor = {}) => {
+  ipcMain.handle("note:window-drag-move", (event, cursor: Partial<Point> = {}) => {
     const drag = miniWindowDrag;
     if (!drag || drag.target.isDestroyed() || drag.target.webContents !== event.sender) return;
-    if (!Number.isFinite(cursor.x) || !Number.isFinite(cursor.y)) return;
+    if (typeof cursor.x !== "number" || typeof cursor.y !== "number" || !Number.isFinite(cursor.x) || !Number.isFinite(cursor.y)) return;
     drag.target.setBounds({ ...drag.bounds, x: Math.round(drag.bounds.x + cursor.x - drag.cursor.x), y: Math.round(drag.bounds.y + cursor.y - drag.cursor.y) }, false);
   });
   ipcMain.handle("note:window-drag-end", (event) => {
@@ -223,7 +235,7 @@ function registerIPC() {
     miniWindowDrag = null;
     assertTrustedSender(event);
     if (BrowserWindow.fromWebContents(event.sender)?.noteWindowKey !== "calendar") return;
-    if (enabled) normalWorkspaceState = { ...workspaceState, mini: false };
+    if (enabled && workspaceState) normalWorkspaceState = { ...workspaceState, mini: false };
     workspaceState = enabled
       ? normalizeWorkspace({ ...workspaceState, mini: true }, todayKey(), appearanceSettings)
       : normalizeWorkspace(normalWorkspaceState || { view: appearanceSettings.defaultView }, todayKey(), appearanceSettings);
@@ -231,7 +243,7 @@ function registerIPC() {
     applyWorkspaceSize(target);
     sendToWindow(target, "note:workspace-view-changed", workspaceState);
   });
-  ipcMain.handle("note:mini-fit", (event, payload = {}) => {
+  ipcMain.handle("note:mini-fit", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     const target = BrowserWindow.fromWebContents(event.sender);
     if (target?.noteWindowKey !== "calendar" || !workspaceState?.mini || datePickerSession) return;
@@ -247,7 +259,7 @@ function registerIPC() {
     return calendarVisibilityState();
   });
 
-  ipcMain.handle("note:open-compose", (event, payload = {}) => {
+  ipcMain.handle("note:open-compose", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     const date = normalizeDate(payload.date);
     const workspace = createWorkspace(date);
@@ -258,12 +270,12 @@ function registerIPC() {
     };
   });
 
-  ipcMain.handle("note:open-create", (event, payload = {}) => {
+  ipcMain.handle("note:open-create", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     return windowResult(createCreateWindow(normalizeDate(payload.date)));
   });
 
-  ipcMain.handle("note:open-detail", (event, payload = {}) => {
+  ipcMain.handle("note:open-detail", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     const id = normalizeTodoID(payload.eventId || payload.todoId);
     const date = normalizeDate(payload.date);
@@ -273,7 +285,7 @@ function registerIPC() {
     }) : createDetailWindow(id, date));
   });
 
-  ipcMain.handle("note:open-day", (event, payload = {}) => {
+  ipcMain.handle("note:open-day", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     return windowResult(showWorkspaceView("day", { date: normalizeDate(payload.date) }));
   });
@@ -283,7 +295,7 @@ function registerIPC() {
     return windowResult(createSettingsWindow());
   });
 
-  ipcMain.handle("note:open-content-editor", (event, payload = {}) => {
+  ipcMain.handle("note:open-content-editor", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     const sourceWindow = BrowserWindow.fromWebContents(event.sender);
     if (!sourceWindow || !["detail", "day"].includes(sourceWindow.noteWindowRole)) {
@@ -320,7 +332,7 @@ function registerIPC() {
     return target.noteReminderState || null;
   });
 
-  ipcMain.handle("note:content-editor-finish", (event, payload = {}) => {
+  ipcMain.handle("note:content-editor-finish", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     const target = BrowserWindow.fromWebContents(event.sender);
     const state = target?.noteContentEditorState;
@@ -345,7 +357,7 @@ function registerIPC() {
     return appearanceSettings;
   });
 
-  ipcMain.handle("note:update-appearance", (event, payload = {}) => {
+  ipcMain.handle("note:update-appearance", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     appearanceSettings = normalizeAppearance(payload);
     persistAppearanceSettings(appearanceSettings);
@@ -358,7 +370,7 @@ function registerIPC() {
     assertTrustedSender(event);
     const target = BrowserWindow.fromWebContents(event.sender);
     if (target?.noteWindowKey === "calendar") {
-      hideCalendarWindow({ focusDay: true });
+      hideCalendarWindow();
       return;
     }
     if (target?.noteWindowKey === PRIMARY_WINDOW_KEY) {
@@ -389,20 +401,19 @@ function registerIPC() {
     return { maximized: Boolean(target?.isMaximized()) };
   });
 
-  ipcMain.handle("note:fit-day-window", (event, payload = {}) => {
+  ipcMain.handle("note:fit-day-window", (event) => {
     assertTrustedSender(event);
-    const target = BrowserWindow.fromWebContents(event.sender);
-    if (!target || target.noteWindowRole !== "day") return null;
-    return target.getBounds();
+    // The day view now belongs to the primary calendar, not a separate window.
+    return null;
   });
 
-  ipcMain.handle("note:data-changed", (event, payload = {}) => {
+  ipcMain.handle("note:data-changed", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     broadcastDataChanged(payload, event.sender);
     void reminderScheduler?.refresh();
   });
 
-  ipcMain.handle("note:date-picker-start", (event, payload = {}) => {
+  ipcMain.handle("note:date-picker-start", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     const sourceWindow = requireDatePickerSource(event);
     const state = normalizeDatePickerState(payload);
@@ -424,7 +435,7 @@ function registerIPC() {
     return publicDatePickerState();
   });
 
-  ipcMain.handle("note:date-picker-update", (event, payload = {}) => {
+  ipcMain.handle("note:date-picker-update", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     const sourceWindow = requireDatePickerSource(event);
     if (!datePickerSession || datePickerSession.sourceWindow !== sourceWindow) return null;
@@ -434,7 +445,7 @@ function registerIPC() {
     return publicDatePickerState();
   });
 
-  ipcMain.handle("note:date-picker-select", (event, payload = {}) => {
+  ipcMain.handle("note:date-picker-select", (event, payload: Input = {}) => {
     assertTrustedSender(event);
     const senderWindow = BrowserWindow.fromWebContents(event.sender);
     if (senderWindow?.noteWindowKey !== "calendar") throw new Error("date selection must come from calendar");
@@ -469,51 +480,51 @@ function registerIPC() {
   });
 }
 
-function assertTrustedSender(event) {
-  const senderURL = new URL(event.senderFrame.url);
+function assertTrustedSender(event: IpcMainInvokeEvent) {
+  const senderURL = new URL(event.senderFrame?.url || "about:blank");
   if (senderURL.origin !== new URL(backendURL).origin) throw new Error("untrusted renderer");
 }
 
-function normalizeDate(value) {
+function normalizeDate(value: unknown) {
   const date = String(value || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("invalid date");
   return date;
 }
 
-function normalizeTodoID(value) {
+function normalizeTodoID(value: unknown) {
   const todoID = Number(value);
   if (!Number.isSafeInteger(todoID) || todoID < 1) throw new Error("invalid todo id");
   return todoID;
 }
 
-function normalizeTodoVersion(value) {
+function normalizeTodoVersion(value: unknown) {
   const version = Number(value);
   if (!Number.isSafeInteger(version) || version < 1) throw new Error("invalid todo version");
   return version;
 }
 
-function normalizeTodoContent(value, allowEmpty) {
+function normalizeTodoContent(value: unknown, allowEmpty: boolean) {
   const content = String(value ?? "");
   if (content.length > 500 || (!allowEmpty && !content.trim())) throw new Error("invalid todo content");
   return content;
 }
 
-function normalizeTodoTitle(value) {
+function normalizeTodoTitle(value: unknown) {
   const title = String(value ?? "").trim();
   if (!title || title.length > 50) throw new Error("invalid todo title");
   return title;
 }
 
-function normalizeHexColor(value, fallback) {
+function normalizeHexColor(value: unknown, fallback: string) {
   const color = String(value || "").trim().toUpperCase();
   return /^#[0-9A-F]{6}$/.test(color) ? color : fallback;
 }
 
-function normalizeAppearance(value = {}) {
+function normalizeAppearance(value: Input = {}): Settings {
   const rawOpacity = Number(value.opacity);
   const rawClockTracks = Number(value.clockTracks);
-  const choice = (candidate, allowed, fallback) =>
-    allowed.includes(candidate) ? candidate : fallback;
+  const choice = <T extends string>(candidate: unknown, allowed: readonly T[], fallback: T): T =>
+    typeof candidate === "string" && allowed.includes(candidate as T) ? candidate as T : fallback;
   return {
     backgroundColor: normalizeHexColor(value.backgroundColor, DEFAULT_APPEARANCE.backgroundColor),
     themeColor: normalizeHexColor(value.themeColor, DEFAULT_APPEARANCE.themeColor),
@@ -555,7 +566,7 @@ function normalizeAppearance(value = {}) {
   };
 }
 
-function normalizeReminderOccurrence(value = {}) {
+function normalizeReminderOccurrence(value: ReminderOccurrence): ReminderState {
   const occursAt = new Date(value.occurs_at);
   if (Number.isNaN(occursAt.getTime())) throw new Error("invalid reminder time");
 
@@ -573,13 +584,13 @@ function normalizeReminderOccurrence(value = {}) {
   };
 }
 
-async function loadReminderOccurrences(from, to) {
+async function loadReminderOccurrences(from: string, to: string): Promise<ReminderOccurrence[]> {
   const url = new URL("/api/calendar", backendURL);
   url.searchParams.set("from", from);
   url.searchParams.set("to", to);
 
   const response = await fetch(url);
-  const payload = await response.json().catch(() => ({}));
+  const payload = await response.json().catch(() => ({})) as { error?: string; data?: ReminderOccurrence[] | { todos?: ReminderOccurrence[] } };
   if (!response.ok) {
     throw new Error(payload.error || `calendar request failed with status ${response.status}`);
   }
@@ -597,7 +608,7 @@ function startReminderScheduler() {
   void reminderScheduler.start();
 }
 
-function deliverReminder(occurrence) {
+function deliverReminder(occurrence: ReminderOccurrence) {
   const reminder = normalizeReminderOccurrence(occurrence);
   if (reminder.notifyMode === "silent") {
     showNativeReminder(reminder);
@@ -606,7 +617,7 @@ function deliverReminder(occurrence) {
   createReminderWindow(reminder);
 }
 
-function showNativeReminder(reminder) {
+function showNativeReminder(reminder: ReminderState) {
   if (!Notification.isSupported()) {
     createReminderWindow(reminder);
     return;
@@ -647,13 +658,13 @@ function loadAppearanceSettings() {
   }
 }
 
-function persistAppearanceSettings(settings) {
+function persistAppearanceSettings(settings: Settings) {
   const settingsPath = appearanceSettingsPath();
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
   fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
 }
 
-function applyAppearanceToWindow(target) {
+function applyAppearanceToWindow(target: MaybeWindow) {
   if (!target || target.isDestroyed()) return;
   target.setBackgroundColor(appearanceSettings.backgroundColor);
   target.setOpacity(appearanceSettings.opacity / 100);
@@ -665,16 +676,16 @@ function broadcastAppearanceChanged() {
   }
 }
 
-function requireDatePickerSource(event) {
+function requireDatePickerSource(event: IpcMainInvokeEvent) {
   const sourceWindow = BrowserWindow.fromWebContents(event.sender);
   const key = sourceWindow?.noteWindowKey || "";
-  if (key !== PRIMARY_WINDOW_KEY && key !== "create" && !key.startsWith("detail:")) {
+  if (!sourceWindow || (key !== PRIMARY_WINDOW_KEY && key !== "create" && !key.startsWith("detail:"))) {
     throw new Error("date picker must be opened by the todo workspace");
   }
   return sourceWindow;
 }
 
-function normalizeDatePickerState(payload) {
+function normalizeDatePickerState(payload: Input): PickerState {
   const repeatMode = String(payload.repeatMode || "");
   if (!["once", "daily", "weekdays", "weekends", "weekly", "monthly", "custom"].includes(repeatMode)) {
     throw new Error("invalid repeat mode");
@@ -684,7 +695,7 @@ function normalizeDatePickerState(payload) {
   if (color && !/^#[0-9A-F]{6}$/.test(color)) throw new Error("invalid color");
 
   return {
-    repeatMode,
+    repeatMode: repeatMode as RepeatMode,
     field: payload.field === "endDate" ? "endDate" : "date",
     date: normalizeDate(payload.date),
     customDates: normalizeDateList(payload.customDates),
@@ -692,7 +703,7 @@ function normalizeDatePickerState(payload) {
   };
 }
 
-function normalizeDatePickerSelection(payload, currentState) {
+function normalizeDatePickerSelection(payload: Input, currentState: PickerState) {
   const date = normalizeDate(payload.date || currentState.date);
   const customDates = currentState.repeatMode === "custom"
     ? normalizeDateList(payload.customDates)
@@ -700,16 +711,16 @@ function normalizeDatePickerSelection(payload, currentState) {
   return { date, customDates };
 }
 
-function normalizeDateList(values) {
+function normalizeDateList(values: unknown) {
   if (!Array.isArray(values)) return [];
   return [...new Set(values.map(normalizeDate))].sort();
 }
 
-function windowResult(target) {
+function windowResult(target: NoteWindow) {
   return { key: target.noteWindowKey };
 }
 
-function broadcastDataChanged(payload, sourceWebContents = null) {
+function broadcastDataChanged(payload: Input, sourceWebContents: WebContents | null = null) {
   for (const target of windows.values()) {
     if (!target.isDestroyed() && target.webContents !== sourceWebContents) {
       target.webContents.send("note:data-changed", payload);
@@ -726,7 +737,7 @@ function publicDatePickerState() {
   };
 }
 
-function sendToWindow(target, channel, payload) {
+function sendToWindow(target: MaybeWindow, channel: string, payload?: unknown) {
   if (!target || target.isDestroyed()) return;
   const send = () => {
     if (!target.isDestroyed()) target.webContents.send(channel, payload);
@@ -738,11 +749,11 @@ function sendToWindow(target, channel, payload) {
   }
 }
 
-function sendDatePickerState(target = windows.get("calendar")) {
+function sendDatePickerState(target: MaybeWindow = windows.get("calendar")) {
   sendToWindow(target, "note:date-picker-state-changed", publicDatePickerState());
 }
 
-function finishDatePicker(focusSource) {
+function finishDatePicker(focusSource: boolean) {
   const session = datePickerSession;
   if (!session) return;
   datePickerSession = null;
@@ -797,17 +808,17 @@ function hideCalendarWindow() {
 
 function toggleCalendarWindow() {
   if (calendarVisibilityState().open) {
-    hideCalendarWindow({ focusDay: true });
+    hideCalendarWindow();
     return { open: false };
   }
   return { ...windowResult(showCalendarWindow({ focus: true })), open: true };
 }
 
-function createCreateWindow(date) {
+function createCreateWindow(date: string) {
   return createWindow({ key: "create", role: "create", title: "新建 · Note", query: { date } });
 }
 
-function createDetailWindow(todoID, date) {
+function createDetailWindow(todoID: number, date: string) {
   return createWindow({ key: `detail:${todoID}:${date}`, role: "detail", title: "待办详情 · Note", query: { todo_id: todoID, date } });
 }
 
@@ -815,7 +826,7 @@ function createSettingsWindow() {
   return createWindow({ key: "settings", role: "settings", title: "设置 · Note" });
 }
 
-function createContentEditorWindow(sourceWindow, state) {
+function createContentEditorWindow(sourceWindow: NoteWindow, state: EditorSession) {
   return createWindow({
     key: `content-editor:${sourceWindow.noteWindowKey}`,
     role: "content-editor",
@@ -824,7 +835,7 @@ function createContentEditorWindow(sourceWindow, state) {
   });
 }
 
-function createReminderWindow(state) {
+function createReminderWindow(state: ReminderState) {
   return createWindow({
     key: `reminder:${state.todoId}:${state.occursAt}`,
     role: "reminder",
@@ -835,7 +846,7 @@ function createReminderWindow(state) {
   });
 }
 
-function createDayWindow(date) { return showWorkspaceView("day", { date }); }
+function createDayWindow(date: string) { return showWorkspaceView("day", { date }); }
 
 function currentWorkspaceDate() {
   const target = windows.get(PRIMARY_WINDOW_KEY);
@@ -848,7 +859,7 @@ function createWorkspace(date = todayKey()) {
   return { calendar };
 }
 
-function showWorkspaceView(view, payload = {}) {
+function showWorkspaceView(view: View, payload: { date?: string } = {}) {
   const date = normalizeDate(payload.date || todayKey());
   const calendar = showCalendarWindow();
   calendar.noteDate = date;
@@ -869,7 +880,7 @@ function createWindow({
   reminderState = null,
   alwaysOnTop = false,
   maximizable = true,
-}) {
+}: WindowOptions) {
   if (key !== PRIMARY_WINDOW_KEY) {
     sendToWindow(windows.get(PRIMARY_WINDOW_KEY), "note:auxiliary-opened", { role });
     for (const other of [...windows.values()]) {
@@ -907,7 +918,7 @@ function createWindow({
     autoHideMenuBar: true,
     backgroundColor: appearanceSettings.backgroundColor,
     opacity: appearanceSettings.opacity / 100,
-    icon: path.join(__dirname, "build", "window-icon.png"),
+    icon: path.join(__dirname, "..", "build", "window-icon.png"),
     title,
     ...(parent ? { parent, modal } : {}),
     webPreferences: {
@@ -952,7 +963,7 @@ function createWindow({
     if (quitting) return;
     if (key === "calendar") {
       event.preventDefault();
-      hideCalendarWindow({ focusDay: true });
+      hideCalendarWindow();
       return;
     }
     if (key !== PRIMARY_WINDOW_KEY) return;
@@ -971,7 +982,7 @@ function createWindow({
   return target;
 }
 
-function windowSizing(role) {
+function windowSizing(role: WindowRole) {
   const profile = WINDOW_PROFILES[role] || WINDOW_PROFILES.calendar;
   const primary = windows.get(PRIMARY_WINDOW_KEY);
   const area = (primary && !primary.isDestroyed() ? screen.getDisplayMatching(primary.getBounds()) : screen.getPrimaryDisplay()).workArea;
@@ -981,7 +992,7 @@ function windowSizing(role) {
   };
 }
 
-function initialWindowBounds(role, sizing, parent = null) {
+function initialWindowBounds(role: WindowRole, sizing: Pick<Rectangle, "width" | "height">, parent: NoteWindow | null = null) {
   const primary = windows.get(PRIMARY_WINDOW_KEY);
   const primaryBounds = primary && !primary.isDestroyed() ? primary.getBounds() : null;
   const parentBounds = parent && !parent.isDestroyed() ? parent.getBounds() : null;
@@ -1018,7 +1029,7 @@ function initialWindowBounds(role, sizing, parent = null) {
   return centeredBounds(area, sizing);
 }
 
-function isWorkspaceWindow(target) {
+function isWorkspaceWindow(target: MaybeWindow) {
   return Boolean(target && !target.isDestroyed() && WORKSPACE_WINDOW_KEYS.has(target.noteWindowKey));
 }
 
@@ -1040,7 +1051,7 @@ function isWorkspaceWindow(target) {
 
 
 
-function placeWindowAtDefault(target, role, parent = null) {
+function placeWindowAtDefault(target: MaybeWindow, role: WindowRole, parent: NoteWindow | null = null) {
   if (!target || target.isDestroyed() || target.isMaximized()) return;
   const current = target.getBounds();
   target.setBounds(initialWindowBounds(role, {
@@ -1049,7 +1060,7 @@ function placeWindowAtDefault(target, role, parent = null) {
   }, parent), false);
 }
 
-function clamp(value, minimum, maximum) {
+function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(value, maximum));
 }
 
@@ -1086,7 +1097,7 @@ function restoreApplicationWindows() {
   calendar.focus();
 }
 
-function applyWorkspaceSize(target, miniSize = 360) {
+function applyWorkspaceSize(target: MaybeWindow, miniSize = 360) {
   if (!target || target.isDestroyed()) return;
   const mini = workspaceState?.mini && !datePickerSession;
   if (target.isMaximized()) target.unmaximize();
@@ -1108,8 +1119,8 @@ function applyWorkspaceSize(target, miniSize = 360) {
 }
 
 function installApplicationMenu() {
-  const template = [
-    ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
+  const template: MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
     {
       label: "日程",
       submenu: [
@@ -1163,7 +1174,7 @@ function todayKey() {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date());
-  const value = (type) => parts.find((part) => part.type === type)?.value;
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
@@ -1171,7 +1182,7 @@ function stopBackend() {
   const child = backendProcess;
   if (!child || child.exitCode !== null) return Promise.resolve();
 
-  return new Promise((resolve) => {
+  return new Promise<void>((resolve) => {
     let finished = false;
     const finish = () => {
       if (finished) return;

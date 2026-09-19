@@ -1,12 +1,12 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const {
+import test = require("node:test");
+import assert = require("node:assert/strict");
+import {
   calendarPairFromDayBounds,
   dayViewPairBounds,
   resizePeerBounds,
   translatePeerBounds,
   workspacePairBounds,
-} = require("./workspace-layout.cjs");
+} from "./workspace-layout.cjs";
 
 const area = { x: 0, y: 0, width: 1920, height: 1040 };
 

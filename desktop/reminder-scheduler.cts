@@ -1,8 +1,20 @@
+export interface ReminderOccurrence {
+  todo_id: number; occurs_at: string; notify_mode: string;
+  all_done?: boolean; occurrence_done?: boolean;
+  title?: string; content?: string | null; color?: string;
+}
+interface SchedulerOptions {
+  loadOccurrences: (from: string, to: string) => Promise<ReminderOccurrence[]>;
+  onReminder: (item: ReminderOccurrence) => void | Promise<void>;
+  onError?: (error: Error) => void; now?: () => number;
+  setTimer?: (callback: () => void, delay: number) => ReturnType<typeof setTimeout>;
+  clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
+}
 const SHANGHAI_TIME_ZONE = "Asia/Shanghai";
 const SHANGHAI_OFFSET = "+08:00";
 const RETRY_DELAY_MS = 60_000;
 
-function dateKeyAt(timestamp, timeZone = SHANGHAI_TIME_ZONE) {
+function dateKeyAt(timestamp: string | number | Date, timeZone = SHANGHAI_TIME_ZONE) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "";
 
@@ -12,11 +24,11 @@ function dateKeyAt(timestamp, timeZone = SHANGHAI_TIME_ZONE) {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-  const value = (type) => parts.find((part) => part.type === type)?.value;
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
-function nextDateKey(dateKey) {
+function nextDateKey(dateKey: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateKey || ""));
   if (!match) throw new Error("invalid date key");
 
@@ -28,14 +40,14 @@ function nextDateKey(dateKey) {
   return next.toISOString().slice(0, 10);
 }
 
-function occurrenceKey(item) {
+function occurrenceKey(item: ReminderOccurrence) {
   const todoID = Number(item?.todo_id);
   const occursAt = Date.parse(item?.occurs_at);
   if (!Number.isSafeInteger(todoID) || todoID < 1 || !Number.isFinite(occursAt)) return "";
   return `${todoID}:${new Date(occursAt).toISOString()}`;
 }
 
-function isReminderCandidate(item, now) {
+function isReminderCandidate(item: ReminderOccurrence, now: number) {
   const occursAt = Date.parse(item?.occurs_at);
   return Number.isFinite(occursAt)
     && occursAt > now
@@ -44,12 +56,24 @@ function isReminderCandidate(item, now) {
     && !item?.occurrence_done;
 }
 
-function delayUntilNextShanghaiDay(now, dateKey) {
+function delayUntilNextShanghaiDay(now: number, dateKey: string) {
   const nextMidnight = Date.parse(`${nextDateKey(dateKey)}T00:00:01${SHANGHAI_OFFSET}`);
   return Math.max(1_000, nextMidnight - now);
 }
 
 class ReminderScheduler {
+  loadOccurrences: SchedulerOptions["loadOccurrences"];
+  onReminder: SchedulerOptions["onReminder"];
+  onError: NonNullable<SchedulerOptions["onError"]>;
+  now: NonNullable<SchedulerOptions["now"]>;
+  setTimer: NonNullable<SchedulerOptions["setTimer"]>;
+  clearTimer: NonNullable<SchedulerOptions["clearTimer"]>;
+  occurrenceTimers: Map<string, ReturnType<typeof setTimeout>>;
+  fired: Set<string>;
+  refreshTimer: ReturnType<typeof setTimeout> | null;
+  revision: number;
+  activeDate: string;
+  stopped: boolean;
   constructor({
     loadOccurrences,
     onReminder,
@@ -57,7 +81,7 @@ class ReminderScheduler {
     now = () => Date.now(),
     setTimer = setTimeout,
     clearTimer = clearTimeout,
-  }) {
+  }: SchedulerOptions) {
     if (typeof loadOccurrences !== "function") throw new TypeError("loadOccurrences is required");
     if (typeof onReminder !== "function") throw new TypeError("onReminder is required");
 
@@ -157,7 +181,7 @@ class ReminderScheduler {
     this.refreshTimer = null;
   }
 
-  scheduleRefresh(delay) {
+  scheduleRefresh(delay: number) {
     this.clearRefreshTimer();
     this.refreshTimer = this.setTimer(() => {
       this.refreshTimer = null;
@@ -165,7 +189,7 @@ class ReminderScheduler {
     }, delay);
   }
 
-  reportError(error) {
+  reportError(error: unknown) {
     try {
       this.onError(error instanceof Error ? error : new Error(String(error)));
     } catch {
@@ -174,7 +198,7 @@ class ReminderScheduler {
   }
 }
 
-module.exports = {
+export {
   ReminderScheduler,
   dateKeyAt,
   delayUntilNextShanghaiDay,

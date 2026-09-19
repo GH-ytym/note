@@ -1,12 +1,12 @@
-const assert = require("node:assert/strict");
-const test = require("node:test");
+import assert = require("node:assert/strict");
+import test = require("node:test");
 
-const {
+import {
   aboveAnchorBounds,
   bottomRightBounds,
   centeredBounds,
   leftOfBounds,
-} = require("./window-layout.cjs");
+} from "./window-layout.cjs";
 
 const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
 

@@ -13,8 +13,13 @@ import (
 // continued on the next application start.
 func migrateDatabase(db *gorm.DB) error {
 	// User 没有关联旧日程表，可以单独同步，避免重建已有的 Todo/Event 表。
-	if err := db.AutoMigrate(&model.User{}); err != nil {
+	if err := migrateAuthSchema(db); err != nil {
 		return fmt.Errorf("migrate users schema: %w", err)
+	}
+
+	// 群组依赖已存在的用户表；成员关系独立保存，支持一个用户加入多个群。
+	if err := db.AutoMigrate(&model.Group{}, &model.GroupMember{}); err != nil {
+		return fmt.Errorf("migrate group schema: %w", err)
 	}
 
 	if err := migrateTodoSchema(db); err != nil {

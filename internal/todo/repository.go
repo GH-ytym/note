@@ -47,6 +47,10 @@ type gormRepository struct {
 	db *gorm.DB
 }
 
+func NewGORMRepository(db *gorm.DB) Repository {
+	return &gormRepository{db: db}
+}
+
 func (r *gormRepository) CalendarCandidates(
 	ctx context.Context,
 	from time.Time,
@@ -118,10 +122,6 @@ func (r *gormRepository) CalendarCandidates(
 	return items, nil
 }
 
-func NewGORMRepository(db *gorm.DB) Repository {
-	return &gormRepository{db: db}
-}
-
 func (r *gormRepository) Create(ctx context.Context, item *model.Todo) error {
 	err := r.db.WithContext(ctx).Create(item).Error
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
@@ -135,23 +135,33 @@ func (r *gormRepository) Create(ctx context.Context, item *model.Todo) error {
 }
 
 func (r *gormRepository) List(ctx context.Context, query ListQuery) ([]model.Todo, int64, error) {
-	db := r.db.WithContext(ctx)
-
-	var total int64
-	if err := db.Model(&model.Todo{}).Count(&total).Error; err != nil {
-		return nil, 0, fmt.Errorf("count todos: %w", err)
-	}
-
 	items := make([]model.Todo, 0)
-	offset := (query.Page - 1) * query.PageSize
-	if err := db.
-		Order("id DESC").
-		Limit(query.PageSize).
-		Offset(offset).
-		Find(&items).Error; err != nil {
-		return nil, 0, fmt.Errorf("list todos: %w", err)
-	}
+	var total int64
 
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.
+			Model(&model.Todo{}).
+			Count(&total).
+			Error; err != nil {
+			return fmt.Errorf("count todos: %w", err)
+		}
+
+		offset := (query.Page - 1) * query.PageSize
+
+		if err := tx.
+			Order("id DESC").
+			Limit(query.PageSize).
+			Offset(offset).
+			Find(&items).
+			Error; err != nil {
+			return fmt.Errorf("list todos: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
 	return items, total, nil
 }
 
@@ -318,22 +328,76 @@ func (r *gormRepository) SetOccurrenceDone(
 	occursOn time.Time,
 	done bool,
 ) error {
-	db := r.db.WithContext(ctx)
-	//未完成-完成：写入todocompletion
-	if done {
-		completion := model.TodoCompletion{
-			TodoID:      todoID,
-			OccursOn:    occursOn,
-			CompletedAt: time.Now(),
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 必须在事务内确认存在。
+		// service 中先查过，也不能代替这里的检查。
+		var item model.Todo
+
+		err := tx.
+			Select("id").
+			First(&item, todoID).
+			Error
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.ErrTodoNotFound
 		}
-		return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&completion).Error
-	}
-	//完成-未完成：删除todocompletion对应记录
-	return db.Where(
-		"todo_id = ? AND occurs_on = ?",
-		todoID,
-		occursOn,
-	).Delete(&model.TodoCompletion{}).Error
+		if err != nil {
+			return fmt.Errorf(
+				"find todo %d before updating occurrence: %w",
+				todoID,
+				err,
+			)
+		}
+
+		if done {
+			completion := model.TodoCompletion{
+				TodoID:      todoID,
+				OccursOn:    occursOn,
+				CompletedAt: time.Now(),
+			}
+
+			// 同一个 Todo、同一天重复标记完成，视为成功。
+			// 只忽略这个联合唯一索引的冲突。
+			err := tx.
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "todo_id"},
+						{Name: "occurs_on"},
+					},
+					DoNothing: true,
+				}).
+				Create(&completion).
+				Error
+			if err != nil {
+				return fmt.Errorf(
+					"mark todo %d occurrence done: %w",
+					todoID,
+					err,
+				)
+			}
+
+			return nil
+		}
+
+		// 没有完成记录时，取消完成也视为成功。
+		err = tx.
+			Where(
+				"todo_id = ? AND occurs_on = ?",
+				todoID,
+				occursOn,
+			).
+			Delete(&model.TodoCompletion{}).
+			Error
+		if err != nil {
+			return fmt.Errorf(
+				"mark todo %d occurrence undone: %w",
+				todoID,
+				err,
+			)
+		}
+
+		return nil
+	})
 }
 
 // 一次性查询当前范围的完成记录

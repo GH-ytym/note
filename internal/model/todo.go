@@ -15,8 +15,9 @@ const (
 )
 
 type Todo struct {
-	ID         uint       `gorm:"primaryKey" json:"id"`
-	Title      string     `gorm:"size:50;not null;default:'';uniqueIndex" json:"title"`
+	ID uint `gorm:"primaryKey" json:"id"`
+	// 标题不再全局唯一，不同 Todo 可以同名。
+	Title      string     `gorm:"size:50;not null;default:''" json:"title"`
 	Content    *string    `gorm:"size:500;not null" json:"content"`
 	Color      string     `gorm:"size:7;not null;default:#F3B51B" json:"color"`
 	StartsAt   *time.Time `gorm:"not null" json:"starts_at"`
@@ -30,4 +31,8 @@ type Todo struct {
 
 	//仅当RepeatMode为custom时才有这个
 	CustomDates []TodoDate `gorm:"constraint:OnDelete:CASCADE" json:"custom_dates,omitempty"`
+
+	// 单独授权：为本群指定成员授予 viewer 或 editor 权限。
+	// 成员资格及权限判断需要由业务层执行，关联本身不提供访问控制。
+	Members []TodoMember `gorm:"foreignKey:TodoID;constraint:OnDelete:CASCADE" json:"-"`
 }

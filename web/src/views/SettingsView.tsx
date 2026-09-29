@@ -11,12 +11,14 @@ import {
   PreferenceSettingsForm,
 } from "../appearance";
 import WindowFrame from "../windows/WindowFrame";
+import { AccountSettings } from "../components/AuthGate";
 import { closeCurrentWindow } from "../windows/window-utils";
 
 export default function SettingsView({ onDone }: { onDone?: () => void }) {
   const [section, setSection] = useState("appearance");
   const finish = onDone || closeCurrentWindow;
   const sections: [string, string, Icon][] = [
+    ["account", "账号", GearSix],
     ["appearance", "外观", Palette],
     ["preferences", "首选项", SlidersHorizontal],
     ["configuration", "配置项", GearSix],
@@ -43,6 +45,7 @@ export default function SettingsView({ onDone }: { onDone?: () => void }) {
             {sections.find(([value]) => value === section)?.[1]}
           </h2>
           {section === "appearance" && <AppearanceSettingsForm onDone={finish} />}
+          {section === "account" && <AccountSettings />}
           {section === "preferences" && <PreferenceSettingsForm onDone={finish} />}
           {section === "configuration" && (
             <ConfigurationSettingsForm onDone={finish} />

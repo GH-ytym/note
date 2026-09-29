@@ -1,35 +1,7 @@
 import type { Todo, CalendarEvent, CreateTodo, CreateEvent, TodoChanges, EventChanges, CalendarResponse, SearchPage } from "./types";
-const API_BASE = "/api";
-
-export class APIError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "APIError";
-    this.status = status;
-  }
-}
-
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new APIError(body.error || "请求失败，请稍后再试", response.status);
-  }
-
-  if (response.status === 204) {
-    return null as T;
-  }
-
-  return response.json();
-}
+import { auth } from './auth';
+export { APIError } from './auth';
+const request = <T>(path: string, options: RequestInit = {}): Promise<T> => auth.request<T>(path, options);
 
 export function listTodos(page: number, pageSize: number) {
   const params = new URLSearchParams({

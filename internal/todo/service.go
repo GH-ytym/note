@@ -10,8 +10,8 @@ import (
 	"note/internal/utils"
 )
 
-// TodoService 声明 Todo 对外提供的业务操作。
-type TodoService interface {
+// Service 声明 Todo 对外提供的业务操作。
+type Service interface {
 	Create(ctx context.Context, command CreateCommand) (model.Todo, error)
 	List(ctx context.Context, query ListQuery) (Page, error)
 	Get(ctx context.Context, id uint) (model.Todo, error)
@@ -39,7 +39,7 @@ type service struct {
 	repo Repository
 }
 
-func NewService(repo Repository) TodoService {
+func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
@@ -282,11 +282,7 @@ func (s *service) SetOccurrenceDone(
 	occursOn time.Time,
 	done bool,
 ) error {
-	//先保证todo存在
-	if _, err := s.repo.ByID(ctx, todoID); err != nil {
-		return err
-	}
-	// 只插入或删除一条 todo_completions。
+	// 存在性检查与完成记录写入由 repository 在同一事务中完成。
 	return s.repo.SetOccurrenceDone(
 		ctx,
 		todoID,

@@ -12,12 +12,21 @@ import (
 	"gorm.io/gorm"
 )
 
-// EventRepository 声明 Event Service 需要的数据库操作。
-type EventRepository interface {
+// Repository 声明 Event Service 需要的数据库操作。
+type Repository interface {
 	Create(ctx context.Context, item *model.Event) error
 	ListInRange(ctx context.Context, from, to time.Time) ([]model.Event, error)
 	Get(ctx context.Context, id uint) (model.Event, error)
 	Update(ctx context.Context, item *model.Event, version uint) error
+}
+
+// gormRepository 是 Repository 的 GORM 实现，对 event 包外隐藏。
+type gormRepository struct {
+	db *gorm.DB
+}
+
+func NewGORMRepository(db *gorm.DB) Repository {
+	return &gormRepository{db: db}
 }
 
 func (r *gormRepository) Get(ctx context.Context, id uint) (model.Event, error) {
@@ -31,9 +40,16 @@ func (r *gormRepository) Get(ctx context.Context, id uint) (model.Event, error) 
 
 func (r *gormRepository) Update(ctx context.Context, item *model.Event, version uint) error {
 	normalizeEventTimes(item)
-	result := r.db.WithContext(ctx).Model(&model.Event{}).Where("id = ? AND version = ?", item.ID, version).Updates(map[string]interface{}{
-		"title": item.Title, "content": item.Content, "starts_at": item.StartsAt, "ends_at": item.EndsAt, "version": version + 1,
-	})
+	result := r.db.WithContext(ctx).
+		Model(&model.Event{}).
+		Where("id = ? AND version = ?", item.ID, version).
+		Updates(map[string]any{
+			"title":     item.Title,
+			"content":   item.Content,
+			"starts_at": item.StartsAt,
+			"ends_at":   item.EndsAt,
+			"version":   version + 1,
+		})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -42,15 +58,6 @@ func (r *gormRepository) Update(ctx context.Context, item *model.Event, version 
 	}
 	item.Version = version + 1
 	return nil
-}
-
-// gormRepository 是 EventRepository 的 GORM 实现。
-type gormRepository struct {
-	db *gorm.DB
-}
-
-func NewGORMRepository(db *gorm.DB) EventRepository {
-	return &gormRepository{db: db}
 }
 
 func (r *gormRepository) Create(

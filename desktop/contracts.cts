@@ -1,4 +1,7 @@
 export type View = "year" | "month" | "week" | "day";
+export interface AuthUser { id: number; name: string; suffix: number; account: string; access_token: string; token_type: string }
+export interface AuthCommand { action: "restore" | "refresh" | "login" | "logout"; body?: Record<string, string>; token?: string }
+export interface AuthResult { user: AuthUser | null; status: number; error?: string }
 export type DayStyle = "clock" | "timeline" | "tags";
 export type RepeatMode = "once" | "daily" | "weekdays" | "weekends" | "weekly" | "monthly" | "custom";
 export interface Settings {
@@ -17,6 +20,8 @@ export interface DataChange { type: string; todoId?: number; eventId?: number; d
 export interface WindowResult { key: string }
 type Listener<T> = (callback: (value: T) => void) => () => void;
 export interface NoteDesktop {
+	 auth(command: AuthCommand): Promise<AuthResult>;
+	 onAuthChanged: Listener<AuthUser | null>;
   isDesktop: boolean;
   openCompose(payload: { date: string }): Promise<{ calendar: WindowResult | null; create: WindowResult }>;
   openDay(payload: { date: string }): Promise<WindowResult>;

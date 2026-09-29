@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func testService(t *testing.T) TodoService {
+func testService(t *testing.T) Service {
 	t.Helper()
 
 	query := url.Values{}
@@ -39,7 +39,7 @@ func testService(t *testing.T) TodoService {
 	return NewService(NewGORMRepository(db))
 }
 
-func createTestTodo(t *testing.T, service TodoService, title string, content *string) model.Todo {
+func createTestTodo(t *testing.T, service Service, title string, content *string) model.Todo {
 	t.Helper()
 	startsAt := time.Date(2026, time.August, 30, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	item, err := service.Create(context.Background(), CreateCommand{

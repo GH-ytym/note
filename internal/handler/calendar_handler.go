@@ -11,11 +11,11 @@ import (
 )
 
 type CalendarHandler struct {
-	service calendar.CalendarService
+	service calendar.Service
 }
 
 func NewCalendarHandler(
-	service calendar.CalendarService,
+	service calendar.Service,
 ) *CalendarHandler {
 	return &CalendarHandler{service: service}
 }

@@ -12,6 +12,7 @@ import (
 
 // CreateTodo creates a Todo and sends the error via gin
 func (h *TodoHandler) CreateTodo(c *gin.Context) {
+
 	var req CreateTodoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})

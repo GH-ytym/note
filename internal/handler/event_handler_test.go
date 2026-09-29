@@ -258,7 +258,7 @@ func TestCreateEventHandlerMapsServiceErrors(t *testing.T) {
 }
 
 func performCreateEventRequest(
-	service event.EventService,
+	service event.Service,
 	body string,
 ) *httptest.ResponseRecorder {
 	eventHandler := NewEventHandler(service)

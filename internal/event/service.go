@@ -14,15 +14,26 @@ import (
 	"github.com/teambition/rrule-go"
 )
 
-// Service declares the Event operations available to the HTTP layer.
-type EventService interface {
+// Service 声明 Event 对外提供的业务操作。
+type Service interface {
 	Create(ctx context.Context, command CreateCommand) (model.Event, error)
 	ListInRange(ctx context.Context, from, to time.Time) ([]CalendarOccurrence, error)
 	Get(ctx context.Context, id uint) (model.Event, error)
 	Patch(ctx context.Context, id uint, command PatchCommand) (model.Event, error)
 }
 
-func (s *service) Get(ctx context.Context, id uint) (model.Event, error) { return s.repo.Get(ctx, id) }
+// service 负责执行业务规则，并通过 Repository 完成数据持久化。
+type service struct {
+	repo Repository
+}
+
+func NewService(repo Repository) Service {
+	return &service{repo: repo}
+}
+
+func (s *service) Get(ctx context.Context, id uint) (model.Event, error) {
+	return s.repo.Get(ctx, id)
+}
 
 func (s *service) Patch(ctx context.Context, id uint, command PatchCommand) (model.Event, error) {
 	if command.Version == 0 {
@@ -64,14 +75,6 @@ func (s *service) Patch(ctx context.Context, id uint, command PatchCommand) (mod
 		return model.Event{}, err
 	}
 	return item, nil
-}
-
-type service struct {
-	repo EventRepository
-}
-
-func NewService(repo EventRepository) EventService {
-	return &service{repo: repo}
 }
 
 func (s *service) Create(ctx context.Context, command CreateCommand) (model.Event, error) {
@@ -202,6 +205,7 @@ func (s *service) ListInRange(
 					Version:    item.Version,
 				})
 			}
+			//当前类型已经判断出来了，对于这个event就不往下判断了
 			continue
 		}
 
@@ -234,6 +238,7 @@ func (s *service) ListInRange(
 					Version:    item.Version,
 				})
 			}
+			//同理，直接跳过剩下的
 			continue
 		}
 		// 3. 普通周期

@@ -3,6 +3,12 @@ import electron = require("electron");
 const { contextBridge, ipcRenderer } = electron;
 
 contextBridge.exposeInMainWorld("noteDesktop", Object.freeze<NoteDesktop>({
+  auth: command => ipcRenderer.invoke("note:auth", command),
+  onAuthChanged: callback => {
+    const listener = (_event: Electron.IpcRendererEvent, user: Parameters<typeof callback>[0]) => callback(user);
+    ipcRenderer.on("note:auth-changed", listener);
+    return () => ipcRenderer.removeListener("note:auth-changed", listener);
+  },
   isDesktop: true,
   startWindowDrag: (point) => ipcRenderer.invoke("note:window-drag-start", point),
   moveWindowDrag: (point) => ipcRenderer.invoke("note:window-drag-move", point),

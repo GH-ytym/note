@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./views/CalendarWindow";
 import StandaloneWindow from "./windows/StandaloneWindow";
 import { AppearanceProvider } from "./appearance";
+import AuthGate from "./components/AuthGate";
 import "./styles.css";
 
 const searchParams = new URLSearchParams(window.location.search);
@@ -24,7 +25,7 @@ const content = ["create", "detail", "reminder", "day", "settings", "content-edi
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppearanceProvider>
-      {content}
+      <AuthGate>{content}</AuthGate>
     </AppearanceProvider>
   </StrictMode>,
 );

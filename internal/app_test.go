@@ -45,7 +45,7 @@ func TestSQLiteDatabase(t *testing.T) {
 	if !db.Migrator().HasTable(&model.Event{}) {
 		t.Fatal("events table was not created")
 	}
-	user := model.User{Username: "migration-user", PasswordHash: "test-hash", Nickname: "迁移测试"}
+	user := model.User{Username: "migration_user", Suffix: 12345, Email: "migration@example.com", PasswordHash: "test-hash", Nickname: "迁移测试"}
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestSQLiteDatabase(t *testing.T) {
 	if loadedUser.Username != user.Username || loadedUser.PasswordHash != user.PasswordHash || loadedUser.Nickname != user.Nickname {
 		t.Fatal("repeat migration changed user data")
 	}
-	duplicateUser := model.User{Username: user.Username, PasswordHash: "other-hash", Nickname: "重复用户"}
+	duplicateUser := model.User{Username: user.Username, Suffix: user.Suffix, Email: "other@example.com", PasswordHash: "other-hash", Nickname: "重复用户"}
 	if err := db.Create(&duplicateUser).Error; !errors.Is(err, gorm.ErrDuplicatedKey) {
 		t.Fatalf("duplicate username error = %v, want %v", err, gorm.ErrDuplicatedKey)
 	}

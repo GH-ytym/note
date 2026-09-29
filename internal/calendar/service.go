@@ -35,8 +35,8 @@ type Result struct {
 	Events []event.CalendarOccurrence `json:"events"`
 }
 
-// CalendarService 声明 Calendar 对 Handler 提供的能力。
-type CalendarService interface {
+// Service 声明 Calendar 对 Handler 提供的能力。
+type Service interface {
 	//聚合todo和event的函数
 	Get(
 		ctx context.Context,
@@ -53,7 +53,7 @@ type service struct {
 func NewService(
 	todos TodoSource,
 	events EventSource,
-) CalendarService {
+) Service {
 	return &service{
 		todos:  todos,
 		events: events,

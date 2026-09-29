@@ -8,14 +8,16 @@ import (
 )
 
 // The repository owns scoring, stable ordering and pagination for every search.
-type SearchRepository interface {
+type Repository interface {
 	SearchTodos(context.Context, string, int, int) ([]Item, int64, error)
 	SearchEvents(context.Context, string, int, int) ([]Item, int64, error)
 	SearchAll(context.Context, string, int, int) ([]Item, int64, error)
 }
-type gormRepository struct{ db *gorm.DB }
+type gormRepository struct {
+	db *gorm.DB
+}
 
-func NewGORMRepository(db *gorm.DB) SearchRepository { return &gormRepository{db: db} }
+func NewGORMRepository(db *gorm.DB) Repository { return &gormRepository{db: db} }
 
 const todoMatchesSQL = `SELECT 'todo' AS kind, id, title, content, color, starts_at,
  NULL AS ends_at, updated_at FROM todos

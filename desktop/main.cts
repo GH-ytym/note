@@ -23,6 +23,9 @@ const {
   fitBounds,
 } = windowLayout;
 import electron = require("electron");
+import { AuthSession } from "./auth-session.cjs";
+import type { AuthCommand, AuthUser } from "./contracts.cjs";
+import crypto = require("node:crypto");
 const {
   app,
   BrowserWindow,
@@ -80,6 +83,40 @@ let workspaceState: WorkspaceState | null = null;
 let miniWindowDrag: { target: NoteWindow; cursor: Point; bounds: Rectangle } | null = null;
 let lastWorkspaceState: WorkspaceState | null = null;
 let normalWorkspaceState: WorkspaceState | null = null;
+let reminderAccountID: number | null = null;
+const authSession = new AuthSession(async (action, body) => {
+  const response = await electron.session.defaultSession.fetch(new URL(`/api/auth/${action}`, backendURL).toString(), {
+    method: "POST", credentials: "include",
+    headers: { "Content-Type": "application/json", "X-Note-Request": "1" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = response.status === 204 ? null : await response.json();
+  if (!response.ok) return { user: null, status: response.status, error: data?.error || "认证失败" };
+  // 登录和轮换后的持久 Cookie 尽早落盘，应用关闭后仍可恢复。
+  await electron.session.defaultSession.cookies.flushStore().catch(error => console.error("Cookie persistence:", error));
+  return { user: data as AuthUser | null, status: response.status };
+}, user => {
+  for (const target of windows.values()) sendToWindow(target, "note:auth-changed", user);
+  if (!user) {
+	if (workspaceState) workspaceState = { ...workspaceState, mini: false };
+	applyWorkspaceSize(windows.get(PRIMARY_WINDOW_KEY));
+    reminderScheduler?.stop();
+    for (const notification of activeNotifications.values()) notification.close();
+    activeNotifications.clear();
+    // 清除会携带上一账号业务内容的主进程窗口状态。
+    for (const target of [...windows.values()]) {
+      if (target.noteWindowKey !== PRIMARY_WINDOW_KEY) {
+        target.noteReplaced = true;
+        target.destroy();
+      }
+    }
+    datePickerSession = null;
+  } else if (reminderAccountID !== user.id || reminderScheduler?.stopped) {
+    reminderScheduler?.stop();
+    void reminderScheduler?.start();
+  }
+  reminderAccountID = user?.id ?? null;
+});
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -154,6 +191,14 @@ function startBackend(): Promise<string> {
   fs.mkdirSync(appDataDirectory, { recursive: true });
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
 
+  // 桌面端重启时沿用签名密钥，不把随机密钥写进源码。
+  const secretPath = path.join(appDataDirectory, "jwt-secret");
+  let jwtSecret = process.env.NOTE_JWT_SECRET;
+  if (!jwtSecret) {
+    if (!fs.existsSync(secretPath)) fs.writeFileSync(secretPath, crypto.randomBytes(48).toString("base64url"), { mode: 0o600, flag: "wx" });
+    jwtSecret = fs.readFileSync(secretPath, "utf8").trim();
+  }
+
   return new Promise<string>((resolve, reject) => {
     let settled = false;
     const startupTimer = setTimeout(() => fail(new Error("Go 后端启动超时")), 30000);
@@ -169,6 +214,7 @@ function startBackend(): Promise<string> {
         NOTE_DB_PATH: databasePath,
         NOTE_STOP_ON_STDIN_CLOSE: "1",
         NOTE_WEB_DIR: runtime.web,
+        NOTE_JWT_SECRET: jwtSecret,
       },
     });
 
@@ -200,6 +246,12 @@ function startBackend(): Promise<string> {
 }
 
 function registerIPC() {
+  ipcMain.handle("note:auth", (event, command: AuthCommand) => {
+    assertTrustedSender(event);
+    if (!command || !["restore", "refresh", "login", "logout"].includes(command.action)) throw new Error("invalid auth action");
+    if (command.action === "login" && (typeof command.body?.account !== "string" || typeof command.body?.password !== "string")) throw new Error("invalid credentials");
+    return authSession.run(command);
+  });
   ipcMain.handle("note:workspace-state", (event) => { assertTrustedSender(event); return workspaceState; });
   ipcMain.handle("note:workspace-save", (event, payload: Input) => {
     assertTrustedSender(event);
@@ -589,7 +641,17 @@ async function loadReminderOccurrences(from: string, to: string): Promise<Remind
   url.searchParams.set("from", from);
   url.searchParams.set("to", to);
 
-  const response = await fetch(url);
+  if (!authSession.user) return [];
+  const accountID = authSession.user.id;
+  const token = authSession.user.access_token;
+  const send = (accessToken: string) => fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  let response = await send(token);
+  if (response.status === 401) {
+    const renewed = await authSession.run({ action: "refresh", token });
+    if (!renewed.user || renewed.error || renewed.user.id !== accountID) return [];
+    response = await send(renewed.user.access_token);
+  }
+  if (authSession.user?.id !== accountID) return [];
   const payload = await response.json().catch(() => ({})) as { error?: string; data?: ReminderOccurrence[] | { todos?: ReminderOccurrence[] } };
   if (!response.ok) {
     throw new Error(payload.error || `calendar request failed with status ${response.status}`);
@@ -1206,6 +1268,7 @@ async function requestQuit() {
   reminderScheduler = null;
   for (const notification of activeNotifications.values()) notification.close();
   activeNotifications.clear();
+  await electron.session.defaultSession.cookies.flushStore().catch(() => {});
   await stopBackend();
   app.quit();
 }

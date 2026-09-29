@@ -1,0 +1,15 @@
+.authenticated-app { height: 100%; }
+.auth-window .utility-panel { max-width: none; overflow-y: auto; }
+.auth-card { width: min(360px, calc(100% - 32px)); margin: auto; padding: 24px 0; }
+.auth-card h2 { font-size: 24px; margin: 0 0 12px; }
+.auth-card p, .auth-card small { color: var(--muted); line-height: 1.6; }
+.auth-card form { display: grid; gap: 18px; margin-top: 24px; }
+.auth-card label { display: grid; gap: 8px; font-size: 14px; }
+.auth-card input { width: 100%; padding: 12px; border: 1px solid var(--line); background: var(--cell); border-radius: 8px; color: var(--text); }
+.auth-card input:focus { outline: 2px solid var(--yellow); outline-offset: 2px; }
+.auth-card button, .account-settings button { padding: 10px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--cell); color: var(--text); cursor: pointer; }
+.auth-card .auth-primary { background: var(--yellow); color: var(--on-theme); font-weight: 600; }
+.auth-card .auth-switch { width: 100%; margin-top: 18px; background: transparent; }
+.auth-card button:disabled, .account-settings button:disabled { opacity: .55; cursor: wait; }
+.auth-card .auth-error, .account-settings .auth-error { color: var(--danger); }
+.account-settings { display: grid; gap: 16px; justify-items: start; align-content: start; padding: 16px 22px; overflow-y: auto; }

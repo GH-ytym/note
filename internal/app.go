@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"note/internal/auth"
 	"note/internal/calendar"
 	"note/internal/event"
+	"note/internal/group"
 	"note/internal/search"
 	"os"
 	"os/signal"
@@ -24,6 +26,7 @@ import (
 	"note/internal/todo"
 
 	"github.com/ncruces/go-sqlite3/gormlite"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -78,15 +81,70 @@ func Run() (runErr error) {
 	}
 	log.Printf("SQLite database: %s", databasePath)
 
-	//组装todo链
+	//组装repo-service-handler链
+	//auth链
+	tokenManager, err := auth.NewTokenManager(
+		os.Getenv("NOTE_JWT_SECRET"),
+		60*time.Minute,
+	)
+	if err != nil {
+		return fmt.Errorf("initialize JWT: %w", err)
+	}
+
+	redisAddr := os.Getenv("NOTE_REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "127.0.0.1:6379"
+	}
+
+	//创建redis客户端
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:                  redisAddr,
+		Password:              os.Getenv("NOTE_REDIS_PASSWORD"),
+		DialTimeout:           3 * time.Second,
+		ReadTimeout:           2 * time.Second,
+		WriteTimeout:          2 * time.Second,
+		MaxRetries:            -1, // 轮换成功但响应丢失时，不自动重放有副作用的命令。
+		ContextTimeoutEnabled: true,
+	})
+	defer redisClient.Close()
+
+	// NewClient 只是创建客户端，Ping 才确认能否连接 Redis。
+	redisCtx, cancelRedis := context.WithTimeout(
+		context.Background(),
+		3*time.Second,
+	)
+	redisErr := redisClient.Ping(redisCtx).Err()
+	cancelRedis()
+
+	if redisErr != nil {
+		return fmt.Errorf("连接 Redis 失败: %w", redisErr)
+	}
+
+	refreshStore := auth.NewRefreshStore(redisClient)
+
+	authRepository := auth.NewGORMRepository(db)
+	authService := auth.NewService(authRepository)
+	authHandler := handler.NewAuthHandler(
+		authService,
+		tokenManager,
+		refreshStore,
+		os.Getenv("NOTE_COOKIE_SECURE") == "true",
+	)
+
+	// 群组链
+	groupRepository := group.NewGORMRepository(db)
+	groupService := group.NewService(groupRepository)
+	groupHandler := handler.NewGroupHandler(groupService)
+
+	//todo链
 	// 静态类型是 todo.Repository；实际值是隐藏的 *todo.gormRepository。
 	todoRepository := todo.NewGORMRepository(db)
 
-	// 静态类型是 todo.TodoService；实际值是隐藏的 *todo.service。
+	// 静态类型是 todo.Service；实际值是隐藏的 *todo.service。
 	todoService := todo.NewService(todoRepository)
 
 	// 静态类型是 *handler.TodoHandler。
-	// Handler 只保存 todo.TodoService，不接触具体的 service 实现。
+	// Handler 只保存 todo.Service，不接触具体的 service 实现。
 	todoHandler := handler.NewTodoHandler(todoService)
 
 	//event也是同理
@@ -110,8 +168,17 @@ func Run() (runErr error) {
 	}
 
 	server := &http.Server{
-		Addr:              serverAddress,
-		Handler:           router.NewWithWeb(todoHandler, eventHandler, calendarHandler, searchHandler, os.Getenv("NOTE_WEB_DIR")),
+		Addr: serverAddress,
+		Handler: router.NewWithWeb(
+			todoHandler,
+			eventHandler,
+			calendarHandler,
+			searchHandler,
+			authHandler,
+			groupHandler,
+			tokenManager,
+			os.Getenv("NOTE_WEB_DIR"),
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	listener, err := net.Listen("tcp", server.Addr)

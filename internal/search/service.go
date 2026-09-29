@@ -6,14 +6,16 @@ import (
 	"strings"
 )
 
-type SearchService interface {
+type Service interface {
 	SearchTodos(context.Context, ListQuery) (Result, error)
 	SearchEvents(context.Context, ListQuery) (Result, error)
 	SearchAll(context.Context, ListQuery) (Result, error)
 }
-type service struct{ repo SearchRepository }
+type service struct {
+	repo Repository
+}
 
-func NewService(repo SearchRepository) SearchService { return &service{repo: repo} }
+func NewService(repo Repository) Service { return &service{repo: repo} }
 func (s *service) SearchTodos(ctx context.Context, q ListQuery) (Result, error) {
 	return searchPage(ctx, q, s.repo.SearchTodos)
 }

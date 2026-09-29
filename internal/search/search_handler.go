@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type SearchHandler struct{ service SearchService }
+type SearchHandler struct{ service Service }
 
-func NewSearchHandler(service SearchService) *SearchHandler {
+func NewSearchHandler(service Service) *SearchHandler {
 	return &SearchHandler{service: service}
 }
 

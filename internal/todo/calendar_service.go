@@ -3,10 +3,11 @@ package todo
 import (
 	"context"
 	"fmt"
-	apperrors "note/internal/errors"
-	"note/internal/model"
 	"sort"
 	"time"
+
+	apperrors "note/internal/errors"
+	"note/internal/model"
 
 	"github.com/teambition/rrule-go"
 )

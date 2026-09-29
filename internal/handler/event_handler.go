@@ -14,7 +14,7 @@ import (
 
 // EventHandler translates Event HTTP requests into Event service calls.
 type EventHandler struct {
-	service event.EventService
+	service event.Service
 }
 
 func (h *EventHandler) GetEvent(c *gin.Context) {
@@ -75,7 +75,7 @@ func eventResponseError(c *gin.Context, err error) bool {
 	return true
 }
 
-func NewEventHandler(service event.EventService) *EventHandler {
+func NewEventHandler(service event.Service) *EventHandler {
 	return &EventHandler{service: service}
 }
 

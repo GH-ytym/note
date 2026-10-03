@@ -24,10 +24,107 @@ type Repository interface {
 		code string,
 	) error
 	Join(ctx context.Context, groupID uint, userID uint, code string) error
+	Quit(ctx context.Context, groupID uint, userID uint, target *uint) error
+	ListMembers(ctx context.Context, groupID, userID uint) ([]model.GroupMember, error)
+	Dismiss(ctx context.Context, groupID, userID uint) error
 }
 
 type gormRepository struct {
 	db *gorm.DB
+}
+
+func (r *gormRepository) ListMembers(ctx context.Context, groupID, userID uint) ([]model.GroupMember, error) {
+	members := make([]model.GroupMember, 0)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item model.Group
+		err := tx.Select("id").First(&item, groupID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.ErrGroupNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("find group before listing members: %w", err)
+		}
+
+		// 成员列表也受当前群成员边界限制。
+		var count int64
+		if err := tx.Model(&model.GroupMember{}).
+			Where("group_id = ? AND user_id = ?", groupID, userID).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("check group membership: %w", err)
+		}
+		if count == 0 {
+			return apperrors.ErrGroupAccessDenied
+		}
+
+		// Preload 使用模型的 User 字段；保留 id 供 GORM 匹配关联。
+		if err := tx.Where("group_id = ?", groupID).
+			Preload("User", func(db *gorm.DB) *gorm.DB {
+				return db.Select("id", "username", "suffix", "nickname", "avatar")
+			}).
+			Order("joined_at ASC").Order("user_id ASC").
+			Find(&members).Error; err != nil {
+			return fmt.Errorf("list group members: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
+func (r *gormRepository) Dismiss(ctx context.Context, groupID, userID uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item model.Group
+		err := tx.Select("id", "owner_id").First(&item, groupID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.ErrGroupNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("find group before dismissing: %w", err)
+		}
+
+		var count int64
+		if err := tx.Model(&model.GroupMember{}).
+			Where("group_id = ? AND user_id = ?", groupID, userID).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("check dismissing membership: %w", err)
+		}
+		if count == 0 {
+			return apperrors.ErrGroupAccessDenied
+		}
+		if item.OwnerID != userID {
+			return apperrors.ErrGroupDismissDenied
+		}
+
+		// 先删本群 Todo 的子记录，再删 Todo，最后删群。
+		// todos.group_id 使用 RESTRICT，不能直接删除仍有 Todo 的群。
+		todoIDs := tx.Model(&model.Todo{}).Select("id").Where("group_id = ?", groupID)
+		if err := tx.Where("todo_id IN (?)", todoIDs).
+			Delete(&model.TodoCompletion{}).Error; err != nil {
+			return fmt.Errorf("delete dismissed group completions: %w", err)
+		}
+		if err := tx.Where("todo_id IN (?)", todoIDs).
+			Delete(&model.TodoDate{}).Error; err != nil {
+			return fmt.Errorf("delete dismissed group todo dates: %w", err)
+		}
+		if err := tx.Where("todo_id IN (?)", todoIDs).
+			Delete(&model.TodoMember{}).Error; err != nil {
+			return fmt.Errorf("delete dismissed group todo roles: %w", err)
+		}
+		if err := tx.Where("group_id = ?", groupID).
+			Delete(&model.Todo{}).Error; err != nil {
+			return fmt.Errorf("delete dismissed group todos: %w", err)
+		}
+		if err := tx.Where("group_id = ?", groupID).
+			Delete(&model.GroupMember{}).Error; err != nil {
+			return fmt.Errorf("delete dismissed group memberships: %w", err)
+		}
+		if err := tx.Delete(&model.Group{}, groupID).Error; err != nil {
+			return fmt.Errorf("delete dismissed group: %w", err)
+		}
+		return nil
+	})
 }
 
 func (r *gormRepository) Join(ctx context.Context, groupID uint, userID uint, code string) error {
@@ -69,7 +166,15 @@ func (r *gormRepository) Join(ctx context.Context, groupID uint, userID uint, co
 			return nil
 		}
 
-		//不在群里就加入
+		// 先写入成员关系；即使本群没有 Todo，也必须完成入群。
+		member := model.GroupMember{
+			GroupID: groupID,
+			UserID:  userID,
+		}
+		if err := tx.Omit("User").Create(&member).Error; err != nil {
+			return fmt.Errorf("create group membership: %w", err)
+		}
+
 		// 查询本群已有 Todo
 		var todos []model.Todo
 		if err := tx.Select("id", "creator_id").
@@ -101,13 +206,10 @@ func (r *gormRepository) Join(ctx context.Context, groupID uint, userID uint, co
 			return nil
 		}
 
-		//插入member
-		member := model.GroupMember{
-			GroupID: groupID,
-			UserID:  userID,
-		}
-		if err := tx.Omit("User").Create(&member).Error; err != nil {
-			return fmt.Errorf("create group membership: %w", err)
+		// 权限与成员关系一起提交，权限写入失败时成员关系也会回滚。
+		if err := tx.Omit("User").
+			CreateInBatches(&permissions, 200).Error; err != nil {
+			return fmt.Errorf("initialize todo roles: %w", err)
 		}
 
 		return nil
@@ -268,6 +370,101 @@ func (r *gormRepository) ReplaceInviteCode(
 		}
 		if result.RowsAffected == 0 {
 			return apperrors.ErrGroupNotFound
+		}
+
+		return nil
+	})
+}
+
+// 查询群组和当前群主
+// ↓
+// 确认退出者仍是群成员
+// ↓
+// 核对当前身份与 target 是否匹配
+// ↓
+// 如果是群主：校验接任者，更新 OwnerID
+// ↓
+// 删除退出者在本群的 TodoMember
+// ↓
+// 删除退出者的 GroupMember
+// ↓
+// 提交事务
+func (r *gormRepository) Quit(ctx context.Context, groupID uint, userID uint, target *uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var group model.Group
+		err := tx.Select("id", "owner_id").First(&group, groupID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.ErrGroupNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("find group before quitting: %w", err)
+		}
+
+		var count int64
+		if err := tx.Model(&model.GroupMember{}).
+			Where("group_id = ? AND user_id = ?", groupID, userID).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("check departing membership: %w", err)
+		}
+		if count == 0 {
+			return apperrors.ErrGroupAccessDenied
+		}
+
+		isOwner := (group.OwnerID == userID)
+		//群主退群却没指定下一任群主，以及成员退群却指定下一任群主，都是不行的
+		if isOwner && target == nil {
+			return apperrors.ErrGroupQuitConflict
+		}
+		if !isOwner && target != nil {
+			return apperrors.ErrGroupQuitConflict
+		}
+
+		//群主退群，先转让群主给target
+		if isOwner {
+			//转让给自己没意义
+			if *target == 0 || *target == userID {
+				return apperrors.ErrGroupTransferTargetInvalid
+			}
+
+			//转让给滚木也不行
+			var targetCount int64
+			if err := tx.Model(&model.GroupMember{}).
+				Where("group_id = ? AND user_id = ?", groupID, *target).
+				Count(&targetCount).Error; err != nil {
+				return fmt.Errorf("check successor membership: %w", err)
+			}
+			if targetCount == 0 {
+				return apperrors.ErrGroupTransferTargetInvalid
+			}
+
+			//更新
+			if err := tx.Model(&model.Group{}).
+				Where("id = ?", groupID).
+				Update("owner_id", *target).Error; err != nil {
+				return fmt.Errorf("transfer group ownership: %w", err)
+			}
+		}
+
+		// 删除退出者在本群的 Todo 权限
+		//不会删除ta对todo的完成记录
+		groupTodoIDs := tx.Model(&model.Todo{}).
+			Select("id").
+			Where("group_id = ?", groupID)
+		if err := tx.
+			Where(
+				"user_id = ? AND todo_id IN (?)",
+				userID,
+				groupTodoIDs,
+			).
+			Delete(&model.TodoMember{}).Error; err != nil {
+			return fmt.Errorf("delete departing todo roles: %w", err)
+		}
+
+		// 删除退出者的group-user关系
+		if err := tx.
+			Where("group_id = ? AND user_id = ?", groupID, userID).
+			Delete(&model.GroupMember{}).Error; err != nil {
+			return fmt.Errorf("delete departing membership: %w", err)
 		}
 
 		return nil

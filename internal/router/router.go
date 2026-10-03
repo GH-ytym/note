@@ -81,6 +81,7 @@ func registerAPI(
 	{
 		groups.POST("", gh.CreateGroup)
 		groups.GET("", gh.MyGroups)
+		groups.GET("/:groupID/members", gh.ListMembers)
 		groups.GET("/:groupID/todos", th.ListTodos)
 		//群成员获取邀请码，只有群主可以刷新。
 		groups.GET("/:groupID/invite", gh.GetInviteCode)
@@ -89,6 +90,7 @@ func registerAPI(
 		//加群和退群
 		groups.POST("/:groupID/join", gh.JoinGroup)
 		groups.POST("/:groupID/quit", gh.QuitGroup)
+		groups.POST("/:groupID/dismiss", gh.DismissGroup)
 	}
 
 	todos := protected.Group("/todos")

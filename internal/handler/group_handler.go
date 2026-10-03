@@ -19,6 +19,78 @@ func NewGroupHandler(service group.Service) *GroupHandler {
 	return &GroupHandler{service: service}
 }
 
+func (h *GroupHandler) ListMembers(c *gin.Context) {
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+	var uri GroupURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "群组 ID 不合法"})
+		return
+	}
+
+	items, err := h.service.ListMembers(c.Request.Context(), uri.GroupID, userID)
+	switch {
+	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请重新登录"})
+		return
+	case errors.Is(err, apperrors.ErrGroupNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	case errors.Is(err, apperrors.ErrGroupAccessDenied):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询群成员失败"})
+		return
+	}
+
+	response := make([]GroupMemberResponse, 0, len(items))
+	for _, item := range items {
+		if item.User == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "群成员资料缺失"})
+			return
+		}
+		response = append(response, GroupMemberResponse{
+			UserSummaryResponse: UserSummaryResponse{
+				ID: item.User.ID, Username: item.User.Username, Suffix: item.User.Suffix,
+				Nickname: item.User.Nickname, Avatar: item.User.Avatar,
+			},
+			JoinedAt: item.JoinedAt,
+		})
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+func (h *GroupHandler) DismissGroup(c *gin.Context) {
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+	var uri GroupURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "群组 ID 不合法"})
+		return
+	}
+
+	err := h.service.DismissGroup(c.Request.Context(), uri.GroupID, userID)
+	switch {
+	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请重新登录"})
+	case errors.Is(err, apperrors.ErrGroupNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, apperrors.ErrGroupAccessDenied), errors.Is(err, apperrors.ErrGroupDismissDenied):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解散群组失败"})
+	default:
+		c.Status(http.StatusNoContent)
+	}
+}
+
 func (h *GroupHandler) CreateGroup(c *gin.Context) {
 	// 身份来自认证中间件，不能由请求体指定。
 
@@ -261,10 +333,19 @@ func (h *GroupHandler) QuitGroup(c *gin.Context) {
 		return
 	}
 
+	var req QuitGroupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "请求格式错误，target 必须是正整数",
+		})
+		return
+	}
+
 	err := h.service.QuitGroup(
 		c.Request.Context(),
 		uri.GroupID,
 		userID,
+		req.Target,
 	)
 
 	switch {
@@ -276,6 +357,11 @@ func (h *GroupHandler) QuitGroup(c *gin.Context) {
 
 	case errors.Is(err, apperrors.ErrGroupAccessDenied):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, apperrors.ErrGroupQuitConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+
+	case errors.Is(err, apperrors.ErrGroupTransferTargetInvalid):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "退出群组失败"})

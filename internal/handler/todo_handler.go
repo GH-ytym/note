@@ -127,6 +127,10 @@ func (h *TodoHandler) ListTodos(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query"})
 		return
 	}
+	if errors.Is(err, apperrors.ErrGroupAccessDenied) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该群组的 Todo"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to list todos",

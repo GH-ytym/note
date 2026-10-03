@@ -41,7 +41,10 @@ type Service interface {
 		ctx context.Context,
 		groupID uint,
 		userID uint,
+		target *uint,
 	) error
+	ListMembers(ctx context.Context, groupID, userID uint) ([]model.GroupMember, error)
+	DismissGroup(ctx context.Context, groupID, userID uint) error
 }
 type service struct {
 	repo Repository
@@ -49,6 +52,26 @@ type service struct {
 
 func NewService(repo Repository) Service {
 	return &service{repo: repo}
+}
+
+func (s *service) ListMembers(ctx context.Context, groupID, userID uint) ([]model.GroupMember, error) {
+	if userID == 0 {
+		return nil, apperrors.ErrGroupUnauthenticated
+	}
+	if groupID == 0 {
+		return nil, apperrors.ErrGroupNotFound
+	}
+	return s.repo.ListMembers(ctx, groupID, userID)
+}
+
+func (s *service) DismissGroup(ctx context.Context, groupID, userID uint) error {
+	if userID == 0 {
+		return apperrors.ErrGroupUnauthenticated
+	}
+	if groupID == 0 {
+		return apperrors.ErrGroupNotFound
+	}
+	return s.repo.Dismiss(ctx, groupID, userID)
 }
 
 func (s *service) Create(
@@ -95,7 +118,6 @@ func (s *service) MyGroups(
 }
 
 func (s *service) GetInviteCode(ctx context.Context, groupID uint, userID uint) (string, error) {
-	//TODO implement me
 	if groupID == 0 {
 		return "", apperrors.ErrGroupNotFound
 	}
@@ -181,6 +203,7 @@ func (s *service) QuitGroup(
 	ctx context.Context,
 	groupID uint,
 	userID uint,
+	target *uint,
 ) error {
 	if userID == 0 {
 		return apperrors.ErrGroupUnauthenticated
@@ -188,6 +211,9 @@ func (s *service) QuitGroup(
 	if groupID == 0 {
 		return apperrors.ErrGroupNotFound
 	}
+	if target != nil && *target == 0 {
+		return apperrors.ErrGroupTransferTargetInvalid
+	}
 
-	return s.repo.Quit(ctx, groupID, userID)
+	return s.repo.Quit(ctx, groupID, userID, target)
 }

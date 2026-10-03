@@ -2,6 +2,7 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -37,7 +38,15 @@ func TestAuthLogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&model.User{Username: "alice", Suffix: 12345, Email: "alice@example.com", PasswordHash: string(hash), Nickname: "Alice"}).Error; err != nil {
+	user := model.User{Username: "alice", Suffix: 12345, Email: "alice@example.com", PasswordHash: string(hash), Nickname: "Alice"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	group := model.Group{Name: "登录测试群", OwnerID: user.ID}
+	if err := db.Create(&group).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.GroupMember{GroupID: group.ID, UserID: user.ID}).Error; err != nil {
 		t.Fatal(err)
 	}
 	tokens, err := auth.NewTokenManager("test-only-secret-0123456789abcdef", 15*time.Minute)
@@ -87,7 +96,7 @@ func TestAuthLogin(t *testing.T) {
 				if err != nil || claims.UserID != login.ID || login.ID == 0 {
 					t.Fatalf("token does not identify logged-in user: claims=%+v, err=%v", claims, err)
 				}
-				for _, path := range []string{"/todos", "/api/todos"} {
+				for _, path := range []string{fmt.Sprintf("/groups/%d/todos", group.ID), fmt.Sprintf("/api/groups/%d/todos", group.ID)} {
 					request := httptest.NewRequest(http.MethodGet, path+"?page=1&page_size=10", nil)
 					request.Header.Set("Authorization", "Bearer "+login.AccessToken)
 					response := httptest.NewRecorder()

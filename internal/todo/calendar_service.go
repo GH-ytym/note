@@ -19,15 +19,19 @@ type occurrenceKey struct {
 
 func (s *service) CalendarOccurrences(
 	ctx context.Context,
+	userID uint,
 	from time.Time,
 	to time.Time,
 ) ([]CalendarOccurrence, error) {
+	if userID == 0 {
+		return nil, apperrors.ErrGroupUnauthenticated
+	}
 	if from.IsZero() || to.IsZero() || !from.Before(to) {
 		return nil, apperrors.ErrInvalidCalendarRange
 	}
 
 	//找到所有的todo候选
-	items, err := s.repo.CalendarCandidates(ctx, from, to)
+	items, err := s.repo.CalendarCandidates(ctx, userID, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +72,6 @@ func (s *service) CalendarOccurrences(
 				RepeatMode: item.RepeatMode,
 				NotifyMode: item.NotifyMode,
 				Version:    item.Version,
-				AllDone:    item.AllDone,
 			})
 			continue
 		}
@@ -100,7 +103,6 @@ func (s *service) CalendarOccurrences(
 					RepeatMode: item.RepeatMode,
 					NotifyMode: item.NotifyMode,
 					Version:    item.Version,
-					AllDone:    item.AllDone,
 				})
 			}
 			continue
@@ -151,7 +153,6 @@ func (s *service) CalendarOccurrences(
 				RepeatMode: item.RepeatMode,
 				NotifyMode: item.NotifyMode,
 				Version:    item.Version,
-				AllDone:    item.AllDone,
 			})
 		}
 	}
@@ -162,6 +163,7 @@ func (s *service) CalendarOccurrences(
 		return nil, err
 	}
 
+	//这里只有todoid+date，没有user
 	completionSet := make(map[occurrenceKey]struct{}, len(completions))
 	//先把所有已完成的todo+date放进map里面
 	for _, completion := range completions {
@@ -169,8 +171,14 @@ func (s *service) CalendarOccurrences(
 			TodoID: completion.TodoID,
 			Date:   completion.OccursOn.Format(time.DateOnly),
 		}
-		//value设为空即可
-		completionSet[key] = struct{}{}
+		// 每个人有独立状态，其他人的完成不影响当前用户。
+		for _, record := range completion.Records {
+			//只跟自己比较，因为前端只需要自己的完成状态
+			if record.UserID == userID {
+				completionSet[key] = struct{}{}
+				break
+			}
+		}
 	}
 
 	//对于每个occurrence检查是否完成（key在map里面就是完成了，不在就没完成）

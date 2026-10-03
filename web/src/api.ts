@@ -1,4 +1,4 @@
-import type { Todo, CalendarEvent, CreateTodo, CreateEvent, TodoChanges, EventChanges, CalendarResponse, SearchPage } from "./types";
+import type { Todo, TodoDetail, OccurrenceCompletions, CalendarEvent, CreateTodo, CreateEvent, TodoChanges, EventChanges, CalendarResponse, SearchPage } from "./types";
 import { auth } from './auth';
 export { APIError } from './auth';
 const request = <T>(path: string, options: RequestInit = {}): Promise<T> => auth.request<T>(path, options);
@@ -29,7 +29,7 @@ export function getEvent(id: number) { return request<CalendarEvent>(`/events/${
 export function patchEvent(id: number, changes: EventChanges) { return request<CalendarEvent>(`/events/${id}`, { method: "PATCH", body: JSON.stringify(changes) }); }
 
 export function getTodo(id: number) {
-  return request<Todo>(`/todos/${id}`);
+  return request<TodoDetail>(`/todos/${id}`);
 }
 
 export function getCalendar(from: string, to: string) {
@@ -45,10 +45,14 @@ export function patchTodo(id: number, changes: TodoChanges) {
 }
 
 export function patchOccurrence(todoId: number, date: string, done: boolean) {
-  return request<{ todo_id: number; occurs_on: string; occurrence_done: boolean }>(`/todos/${todoId}/occurrences/${encodeURIComponent(date)}`, {
+  return request<null>(`/todos/${todoId}/occurrences/${encodeURIComponent(date)}`, {
     method: "PATCH",
     body: JSON.stringify({ done }),
   });
+}
+
+export function getOccurrenceCompletions(todoId: number, date: string) {
+  return request<OccurrenceCompletions>(`/todos/${todoId}/occurrences/${encodeURIComponent(date)}/completions`);
 }
 
 export function deleteTodo(id: number) {

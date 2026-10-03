@@ -14,6 +14,7 @@ type TodoSource interface {
 	//实际上就是service那个CalendarOccurrences
 	CalendarOccurrences(
 		ctx context.Context,
+		userID uint,
 		from time.Time,
 		to time.Time,
 	) ([]todo.CalendarOccurrence, error)
@@ -40,6 +41,7 @@ type Service interface {
 	//聚合todo和event的函数
 	Get(
 		ctx context.Context,
+		userID uint,
 		from time.Time,
 		to time.Time,
 	) (Result, error)
@@ -62,16 +64,20 @@ func NewService(
 
 func (s *service) Get(
 	ctx context.Context,
+	userID uint,
 	from time.Time,
 	to time.Time,
 ) (Result, error) {
+	if userID == 0 {
+		return Result{}, apperrors.ErrGroupUnauthenticated
+	}
 	if from.IsZero() ||
 		to.IsZero() ||
 		!from.Before(to) {
 		return Result{}, apperrors.ErrInvalidCalendarRange
 	}
 
-	todos, err := s.todos.CalendarOccurrences(ctx, from, to)
+	todos, err := s.todos.CalendarOccurrences(ctx, userID, from, to)
 	if err != nil {
 		return Result{}, err
 	}

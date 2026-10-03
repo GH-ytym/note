@@ -76,8 +76,14 @@ func TestSQLiteDatabase(t *testing.T) {
 	}
 
 	startsAt := time.Date(2026, time.August, 30, 9, 30, 0, 0, time.FixedZone("CST", 8*60*60))
+	group := model.Group{Name: "迁移测试群", OwnerID: user.ID}
+	if err := db.Create(&group).Error; err != nil {
+		t.Fatal(err)
+	}
 	content := "SQLite integration test content"
 	item := model.Todo{
+		GroupID:    group.ID,
+		CreatorID:  user.ID,
 		Title:      "SQLite integration test",
 		Content:    &content,
 		Color:      "#5B8DEF",
@@ -147,6 +153,8 @@ func TestSQLiteDatabase(t *testing.T) {
 	}
 
 	sameContent := model.Todo{
+		GroupID:    group.ID,
+		CreatorID:  user.ID,
 		Title:      "Same content, different title",
 		Content:    item.Content,
 		Color:      "#F3B51B",
@@ -160,6 +168,8 @@ func TestSQLiteDatabase(t *testing.T) {
 
 	differentContent := "Different content"
 	duplicate := model.Todo{
+		GroupID:    group.ID,
+		CreatorID:  user.ID,
 		Title:      item.Title,
 		Content:    &differentContent,
 		Color:      "#F3B51B",
@@ -167,14 +177,14 @@ func TestSQLiteDatabase(t *testing.T) {
 		RepeatMode: model.RepeatOnce,
 		NotifyMode: model.NotifyNone,
 	}
-	if err := db.Create(&duplicate).Error; !errors.Is(err, gorm.ErrDuplicatedKey) {
-		t.Fatalf("duplicate title error = %v, want %v", err, gorm.ErrDuplicatedKey)
+	if err := db.Create(&duplicate).Error; err != nil {
+		t.Fatalf("duplicate titles should be allowed: %v", err)
 	}
 
 	completion := model.TodoCompletion{
-		TodoID:      item.ID,
-		OccursOn:    time.Date(2026, time.August, 30, 0, 0, 0, 0, time.UTC),
-		CompletedAt: time.Now(),
+		TodoID:   item.ID,
+		OccursOn: time.Date(2026, time.August, 30, 0, 0, 0, 0, time.UTC),
+		Records:  []model.CompletionEntry{{UserID: user.ID, CompletedAt: time.Now()}},
 	}
 	if err := db.Create(&completion).Error; err != nil {
 		t.Fatalf("create completion: %v", err)
@@ -265,8 +275,31 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 		t.Fatalf("insert legacy event: %v", err)
 	}
 
+	if err := migrateDatabase(db); err == nil || !strings.Contains(err.Error(), "回填") {
+		t.Fatalf("legacy todo without ownership must wait for backfill: %v", err)
+	}
+	// 模拟用户明确指定归属后的迁移，不能由程序自行猜测创建者。
+	owner := model.User{Username: "legacy_owner", Suffix: 12345, Email: "legacy@example.com", PasswordHash: "test-hash"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	group := model.Group{Name: "指定的旧数据归属群", OwnerID: owner.ID}
+	if err := db.Create(&group).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.GroupMember{GroupID: group.ID, UserID: owner.ID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{"ALTER TABLE todos ADD COLUMN group_id integer", "ALTER TABLE todos ADD COLUMN creator_id integer"} {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Exec("UPDATE todos SET group_id = ?, creator_id = ?", group.ID, owner.ID).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := migrateDatabase(db); err != nil {
-		t.Fatalf("migrate legacy database: %v", err)
+		t.Fatalf("migrate after explicit ownership backfill: %v", err)
 	}
 	if err := migrateDatabase(db); err != nil {
 		t.Fatalf("repeat legacy migration: %v", err)
@@ -306,20 +339,18 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 	if err := db.Raw("PRAGMA index_list('todos')").Scan(&indexes).Error; err != nil {
 		t.Fatalf("list migrated indexes: %v", err)
 	}
-	foundTitleIndex := false
 	for _, index := range indexes {
 		if index.Name == "idx_todos_content" {
 			t.Fatal("legacy content index still exists")
 		}
 		if index.Name == "idx_todos_title" && index.Unique == 1 {
-			foundTitleIndex = true
+			t.Fatal("legacy unique title index still exists")
 		}
-	}
-	if !foundTitleIndex {
-		t.Fatal("unique title index was not created")
 	}
 
 	sameContent := model.Todo{
+		GroupID:    group.ID,
+		CreatorID:  owner.ID,
 		Title:      "different title",
 		Content:    loaded.Content,
 		Color:      "#F3B51B",
@@ -333,6 +364,8 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 
 	differentContent := "different content"
 	duplicateTitle := model.Todo{
+		GroupID:    group.ID,
+		CreatorID:  owner.ID,
 		Title:      loaded.Title,
 		Content:    &differentContent,
 		Color:      "#F3B51B",
@@ -340,7 +373,7 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 		RepeatMode: model.RepeatOnce,
 		NotifyMode: model.NotifyNone,
 	}
-	if err := db.Create(&duplicateTitle).Error; !errors.Is(err, gorm.ErrDuplicatedKey) {
-		t.Fatalf("duplicate title error = %v, want %v", err, gorm.ErrDuplicatedKey)
+	if err := db.Create(&duplicateTitle).Error; err != nil {
+		t.Fatalf("duplicate titles should be allowed: %v", err)
 	}
 }

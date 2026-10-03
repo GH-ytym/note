@@ -1,7 +1,8 @@
-import type { Todo, ScheduleForm } from "../types";
+import type { Todo, ScheduleForm, CompletedUser } from "../types";
 import { useEffect, useState } from "react";
 import { ArrowsOutSimple, Trash } from "@phosphor-icons/react";
-import { deleteTodo, getCalendar, getTodo, patchOccurrence, patchTodo } from "../api";
+import { deleteTodo, getOccurrenceCompletions, getTodo, patchOccurrence, patchTodo } from "../api";
+import { auth } from "../auth";
 import { ColorField, SelectField, TimeField } from "../components/FormFields";
 import {
   REMINDER_LABELS,
@@ -10,7 +11,6 @@ import {
   REPEAT_VALUES,
   colorWithAlpha,
   dateTimeAt,
-  nextDateKey,
   preciseDateLabel,
   shanghaiDateTimeParts,
   todoDateKeys,
@@ -25,7 +25,7 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
   const params = windowParams();
   const todoID = Number(todoId ?? params.get("todo_id"));
   const occurrenceDate = validDate(date ?? params.get("date"));
-  const [record, setRecord] = useState<{todo: Todo; occurrenceDone: boolean; allDone: boolean} | null>(null);
+  const [record, setRecord] = useState<{todo: Todo; occurrenceDone: boolean; users: CompletedUser[]} | null>(null);
   const [form, setForm] = useState<ScheduleForm | null>(null);
   const [customDates, setCustomDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,19 +38,15 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
   const finish = onDone || closeCurrentWindow;
 
   async function load() {
-    const [todo, calendar] = await Promise.all([
+    const [todo, completions] = await Promise.all([
       getTodo(todoID),
-      getCalendar(occurrenceDate, nextDateKey(occurrenceDate)),
+      getOccurrenceCompletions(todoID, occurrenceDate),
     ]);
-		const todoOccurrences = Array.isArray(calendar.data)
-			? calendar.data
-			: calendar.data?.todos || [];
-		const occurrence = todoOccurrences.find((item) => item.todo_id === todoID);
     const startsAt = shanghaiDateTimeParts(todo.starts_at);
     setRecord({
       todo,
-      occurrenceDone: Boolean(occurrence?.occurrence_done),
-      allDone: Boolean(todo.all_done),
+      occurrenceDone: completions.users.some(user => user.id === auth.user?.id),
+      users: completions.users,
     });
     setForm({
       title: todo.title,
@@ -155,28 +151,18 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
   }
 
   async function setOccurrenceDone(done: boolean) {
-    if (!record || record.allDone) return;
+    if (!record) return;
     setCompletionSaving("occurrence");
     setError("");
     try {
-      const result = await patchOccurrence(todoID, occurrenceDate, done);
-      setRecord((current) => current ? ({ ...current, occurrenceDone: Boolean(result.occurrence_done) }) : current);
+      await patchOccurrence(todoID, occurrenceDate, done);
+      setRecord((current) => current ? ({ ...current, occurrenceDone: done }) : current);
       await notifyDataChanged({ type: "completion", todoId: todoID, date: occurrenceDate });
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "操作失败");
-    } finally {
-      setCompletionSaving(null);
-    }
-  }
-
-  async function setAllDone(allDone: boolean) {
-    if (!record) return;
-    setCompletionSaving("all");
-    setError("");
-    try {
-      const updated = await patchTodo(todoID, { all_done: allDone, version: record.todo.version });
-      setRecord((current) => current ? ({ ...current, todo: updated, allDone: Boolean(updated.all_done) }) : current);
-      await notifyDataChanged({ type: "all-done", todoId: todoID });
+      const completions = await getOccurrenceCompletions(todoID, occurrenceDate);
+      setRecord((current) => current ? ({ ...current,
+        occurrenceDone: completions.users.some(user => user.id === auth.user?.id),
+        users: completions.users,
+      }) : current);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "操作失败");
     } finally {
@@ -258,25 +244,28 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
         }}
       >
         <div className="completion-controls" aria-label="完成状态">
-          <label className={`completion-toggle ${record.allDone ? "is-overridden" : ""}`}>
+          <label className="completion-toggle">
             <input
               type="checkbox"
               checked={record.occurrenceDone}
-              disabled={Boolean(completionSaving) || record.allDone}
+              disabled={Boolean(completionSaving)}
               onChange={(event) => void setOccurrenceDone(event.target.checked)}
             />
-            <span>{record.allDone ? "本次状态已保留" : record.occurrenceDone ? "本次已完成" : "本次未完成"}</span>
-          </label>
-          <label className={`completion-toggle completion-toggle-all ${record.allDone ? "is-active" : ""}`}>
-            <input
-              type="checkbox"
-              checked={record.allDone}
-              disabled={Boolean(completionSaving)}
-              onChange={(event) => void setAllDone(event.target.checked)}
-            />
-            <span>{record.allDone ? "已全部完成" : "全部完成"}</span>
+            <span>{record.occurrenceDone ? "我已完成本次 Todo" : "我尚未完成本次 Todo"}</span>
           </label>
         </div>
+        <section aria-label="本次完成名单">
+          <p>已完成：{record.users.length} 人</p>
+          {record.users.length === 0 ? <p>还没有人完成</p> : (
+            <ul>
+              {record.users.map(user => (
+                <li key={user.id}>
+                  {user.nickname || user.username || `用户 ${user.id}`} · {new Date(user.completed_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         <label>
           <span>标题</span>

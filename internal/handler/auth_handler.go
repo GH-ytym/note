@@ -76,7 +76,7 @@ func (h *AuthHandler) setRefreshCookie(
 	)
 }
 
-// 这里包括第一次登录和重新登录，不论refreshtoken是否过期
+// 这里包括第一次登录和重新登录，不论refreshtoken是否过期都会生成新的
 func (h *AuthHandler) Login(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	var req LoginRequest
@@ -95,7 +95,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	//生成JWT token，而不是校验
+	//生成JWT token
 	//后续访问受保护的接口时才会校验token的有效性
 	tokenStr, err := h.tokens.Generate(user.ID)
 	if err != nil {
@@ -104,7 +104,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// 原子替换 Redis 会话，成功后才覆盖浏览器 Cookie。
+	// 原子替换 Redis 会话，成功后才覆盖浏览器 Cookie（一定是先写redis再写cookie）
 	//这里忽略错误，因为第一次登录不会创建cookie，oldraw这个时候是""
 	//cookie过期了这里也是""
 	oldRaw, _ := c.Cookie("note_refresh")

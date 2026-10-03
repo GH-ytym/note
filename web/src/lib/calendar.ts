@@ -273,7 +273,6 @@ export function calendarTodoFromOccurrence(item: TodoOccurrence): CalendarItem {
     reminder: REMINDER_LABELS[item.notify_mode] || "弹窗提醒",
     repeat: REPEAT_LABELS[item.repeat_mode] || item.repeat_mode,
     occurrenceDone: Boolean(item.occurrence_done),
-    allDone: Boolean(item.all_done),
     version: item.version,
   };
 }
@@ -317,7 +316,7 @@ export function calendarItemsFromResponse(result: CalendarResponse): CalendarIte
 }
 
 export function isEventDone(item: CalendarItem) {
-  return Boolean(item?.allDone || item?.occurrenceDone);
+  return Boolean(item?.occurrenceDone);
 }
 
 export function colorWithAlpha(color: string, alpha: number) {

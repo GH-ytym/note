@@ -23,16 +23,19 @@ type Todo struct {
 	StartsAt   *time.Time `gorm:"not null" json:"starts_at"`
 	RepeatMode RepeatMode `gorm:"size:20;not null;default:once" json:"repeat_mode"`
 	NotifyMode NotifyMode `gorm:"size:20;not null;default:none" json:"notify_mode"`
-	//todocompletion不会受到alldone的影响，alldone只会影响前端状态
-	AllDone   bool      `gorm:"not null;default:false" json:"all_done"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Version   uint      `gorm:"not null;default:1" json:"version"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	Version    uint       `gorm:"not null;default:1" json:"version"`
 
 	//仅当RepeatMode为custom时才有这个
 	CustomDates []TodoDate `gorm:"constraint:OnDelete:CASCADE" json:"custom_dates,omitempty"`
 
-	// 单独授权：为本群指定成员授予 viewer 或 editor 权限。
-	// 成员资格及权限判断需要由业务层执行，关联本身不提供访问控制。
+	// 本群成员对这条 Todo 的最终权限，每人一条记录。
 	Members []TodoMember `gorm:"foreignKey:TodoID;constraint:OnDelete:CASCADE" json:"-"`
+
+	GroupID uint   `gorm:"not null;index" json:"group_id"`
+	Group   *Group `gorm:"foreignKey:GroupID;constraint:OnDelete:RESTRICT" json:"-"`
+
+	CreatorID uint  `gorm:"not null;index" json:"creator_id"`
+	Creator   *User `gorm:"foreignKey:CreatorID;constraint:OnDelete:RESTRICT" json:"-"`
 }

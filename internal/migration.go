@@ -18,12 +18,20 @@ func migrateDatabase(db *gorm.DB) error {
 	}
 
 	// 群组依赖已存在的用户表；成员关系独立保存，支持一个用户加入多个群。
-	if err := db.AutoMigrate(&model.Group{}, &model.GroupMember{}); err != nil {
+	if err := migrateGroupSchema(db); err != nil {
 		return fmt.Errorf("migrate group schema: %w", err)
 	}
 
 	if err := migrateTodoSchema(db); err != nil {
 		return err
+	}
+	if err := migrateTodoCompletionSchema(db); err != nil {
+		return fmt.Errorf("migrate todo completions: %w", err)
+	}
+	if db.Migrator().HasColumn("todos", "all_done") {
+		if err := db.Exec("ALTER TABLE todos DROP COLUMN all_done").Error; err != nil {
+			return fmt.Errorf("remove todos.all_done: %w", err)
+		}
 	}
 
 	if err := migrateEventSchema(db); err != nil {
@@ -73,16 +81,66 @@ func migrateEventSchema(db *gorm.DB) error {
 }
 
 func migrateTodoSchema(db *gorm.DB) error {
-	if !db.Migrator().HasTable(&model.Todo{}) {
-		if err := db.AutoMigrate(
-			&model.Todo{},
-			&model.TodoDate{},
-			&model.TodoCompletion{},
-		); err != nil {
-			return fmt.Errorf("auto migrate fresh schema: %w", err)
+	// 旧单机 Todo 没有所属群组和创建者，不能自动编造归属。
+	// 空表可以同步完整结构；有数据时必须先具备明确的归属。
+	var count int64
+	if db.Migrator().HasTable(&model.Todo{}) {
+		if err := db.Model(&model.Todo{}).Count(&count).Error; err != nil {
+			return fmt.Errorf("count todos before migration: %w", err)
 		}
+		if count > 0 {
+			if !db.Migrator().HasColumn(&model.Todo{}, "GroupID") || !db.Migrator().HasColumn(&model.Todo{}, "CreatorID") {
+				return fmt.Errorf("todos 表有 %d 条旧数据，需要先明确并回填 group_id 和 creator_id", count)
+			}
+			var unassigned int64
+			if err := db.Raw(`SELECT COUNT(*) FROM todos t
+				LEFT JOIN groups g ON g.id = t.group_id
+				LEFT JOIN users u ON u.id = t.creator_id
+				WHERE g.id IS NULL OR u.id IS NULL`).Scan(&unassigned).Error; err != nil {
+				return fmt.Errorf("check todo ownership: %w", err)
+			}
+			if unassigned > 0 {
+				return fmt.Errorf("todos 表有 %d 条数据的群组或创建者无效，需要先回填归属", unassigned)
+			}
+		}
+	}
 
-		return nil
+	if count == 0 {
+		return db.Transaction(func(tx *gorm.DB) error {
+			// CreateTable 只建指定表，不像 AutoMigrate 那样回头升级关联的 groups。
+			if !tx.Migrator().HasTable(&model.Todo{}) {
+				if err := tx.Migrator().CreateTable(&model.Todo{}); err != nil {
+					return fmt.Errorf("create todo schema: %w", err)
+				}
+			} else {
+				// 空的旧单机表可以直接补列，不需要编造历史数据归属。
+				for _, column := range []struct{ name, definition string }{
+					{"group_id", "integer NOT NULL REFERENCES groups(id) ON DELETE RESTRICT"},
+					{"creator_id", "integer NOT NULL REFERENCES users(id) ON DELETE RESTRICT"},
+					{"title", "text NOT NULL DEFAULT ''"},
+				} {
+					if !tx.Migrator().HasColumn("todos", column.name) {
+						if err := tx.Exec("ALTER TABLE todos ADD COLUMN " + column.name + " " + column.definition).Error; err != nil {
+							return fmt.Errorf("add todos.%s: %w", column.name, err)
+						}
+					}
+				}
+			}
+			for _, child := range []any{&model.TodoDate{}, &model.TodoMember{}} {
+				if !tx.Migrator().HasTable(child) {
+					if err := tx.Migrator().CreateTable(child); err != nil {
+						return fmt.Errorf("create todo child schema: %w", err)
+					}
+				}
+			}
+			if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_todos_group_id ON todos(group_id)").Error; err != nil {
+				return err
+			}
+			if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_todos_creator_id ON todos(creator_id)").Error; err != nil {
+				return err
+			}
+			return dropLegacyTodoUniqueIndexes(tx)
+		})
 	}
 
 	if !db.Migrator().HasColumn(&model.Todo{}, "Title") {
@@ -101,20 +159,50 @@ func migrateTodoSchema(db *gorm.DB) error {
 		return fmt.Errorf("backfill todos.title: %w", err)
 	}
 
-	if db.Migrator().HasIndex(&model.Todo{}, "idx_todos_content") {
-		if err := db.Migrator().DropIndex(&model.Todo{}, "idx_todos_content"); err != nil {
-			return fmt.Errorf("drop legacy content index: %w", err)
-		}
-	}
-
-	if !db.Migrator().HasIndex(&model.Todo{}, "idx_todos_title") {
-		if err := db.Exec("CREATE UNIQUE INDEX `idx_todos_title` ON `todos` (`title`)").Error; err != nil {
-			return fmt.Errorf("create unique title index: %w", err)
-		}
-	}
-
 	// Do not AutoMigrate models related to a legacy todos table here. This
 	// SQLite migrator follows the relation back to Todo, rebuilds the parent
 	// table and can omit pointer-backed fields while copying legacy rows.
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := dropLegacyTodoUniqueIndexes(tx); err != nil {
+			return err
+		}
+		// 显式建权限表，避免递归 AutoMigrate 重建有数据的 todos。
+		if err := tx.Exec(`CREATE TABLE IF NOT EXISTS todo_members (
+			todo_id integer NOT NULL,
+			user_id integer NOT NULL,
+			role text NOT NULL CHECK (role IN ('viewer','editor')),
+			created_at datetime,
+			updated_at datetime,
+			PRIMARY KEY (todo_id, user_id),
+			FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)`).Error; err != nil {
+			return fmt.Errorf("create todo member schema: %w", err)
+		}
+		if err := tx.Exec("CREATE INDEX IF NOT EXISTS idx_todo_members_user_id ON todo_members(user_id)").Error; err != nil {
+			return err
+		}
+		// 只补缺失记录，不覆盖已由创建者设置的 viewer/editor。
+		if err := tx.Exec(`INSERT INTO todo_members (todo_id, user_id, role, created_at, updated_at)
+			SELECT t.id, gm.user_id,
+				CASE WHEN gm.user_id = t.creator_id THEN 'editor' ELSE 'viewer' END,
+				CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+			FROM todos t JOIN group_members gm ON gm.group_id = t.group_id
+			WHERE NOT EXISTS (SELECT 1 FROM todo_members tm
+				WHERE tm.todo_id = t.id AND tm.user_id = gm.user_id)`).Error; err != nil {
+			return fmt.Errorf("initialize missing todo permissions: %w", err)
+		}
+		return nil
+	})
+}
+
+func dropLegacyTodoUniqueIndexes(db *gorm.DB) error {
+	for _, name := range []string{"idx_todos_content", "idx_todos_title"} {
+		if db.Migrator().HasIndex(&model.Todo{}, name) {
+			if err := db.Migrator().DropIndex(&model.Todo{}, name); err != nil {
+				return fmt.Errorf("drop legacy todo index %s: %w", name, err)
+			}
+		}
+	}
 	return nil
 }

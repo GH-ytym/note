@@ -206,7 +206,7 @@ export default function DayClock({
             return (
               <g
                 key={item.id}
-                className={`clock-todo ${item.allDone || item.occurrenceDone ? "is-done" : ""}`}
+                className={`clock-todo ${item.occurrenceDone ? "is-done" : ""}`}
                 data-search-key={`todo-${item.todoId}`}
                 style={{ "--clock-item": item.color }}
                 {...interaction(item, "start")}

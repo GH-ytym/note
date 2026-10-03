@@ -15,7 +15,25 @@ export interface ScheduleRecord {
   created_at: string;
   updated_at: string;
 }
-export interface Todo extends ScheduleRecord { notify_mode: NotifyMode; all_done: boolean }
+export interface Todo extends ScheduleRecord { notify_mode: NotifyMode }
+export interface UserSummary {
+  id: number;
+  username: string;
+  suffix: number;
+  nickname: string;
+  avatar: string;
+}
+export interface TodoDetail extends Todo {
+  group_id: number;
+  creator_id: number;
+  creator: UserSummary | null;
+}
+export interface CompletedUser extends UserSummary { completed_at: string }
+export interface OccurrenceCompletions {
+  todo_id: number;
+  completed_count: number;
+  users: CompletedUser[];
+}
 export interface CalendarEvent extends ScheduleRecord { ends_at: string }
 export interface CreateSchedule {
   title: string;
@@ -27,7 +45,7 @@ export interface CreateSchedule {
 }
 export interface CreateTodo extends CreateSchedule { notify_mode?: NotifyMode }
 export interface CreateEvent extends CreateSchedule { ends_at: string }
-export type TodoChanges = Partial<CreateTodo & { all_done: boolean }> & { version: number };
+export type TodoChanges = Partial<CreateTodo> & { version: number };
 export type EventChanges = Partial<CreateEvent> & { version: number };
 
 export interface SearchItem {
@@ -49,7 +67,7 @@ interface Occurrence {
 }
 export interface TodoOccurrence extends Occurrence {
   todo_id: number; occurs_at: string; notify_mode: NotifyMode;
-  occurrence_done: boolean; all_done: boolean;
+  occurrence_done: boolean;
 }
 export interface EventOccurrence extends Occurrence { event_id: number; ends_at: string }
 export interface CalendarResponse {
@@ -63,7 +81,7 @@ export interface CalendarItem {
   date: string; time: string; version: number; repeat: string;
   todoId?: number; eventId?: number; startsAt?: string; endsAt?: string;
   startDate?: string; startTime?: string; endDate?: string; endTime?: string;
-  occurrenceDone?: boolean; allDone?: boolean; reminder?: string;
+  occurrenceDone?: boolean; reminder?: string;
 }
 export interface ScheduleForm {
   title: string; content: string; repeat: string; date: string; time: string;

@@ -13,6 +13,8 @@ type User struct {
 	Email        string `gorm:"size:254;not null;uniqueIndex:idx_users_email" json:"-"`
 	PasswordHash string `gorm:"not null" json:"-"`
 	Nickname     string `gorm:"size:80;not null"`
+	// 暂不处理头像上传；没有头像时保存空字符串。
+	Avatar string `gorm:"not null;default:''" json:"avatar"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

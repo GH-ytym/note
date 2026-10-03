@@ -66,6 +66,7 @@ func (m *TokenManager) Generate(userID uint) (string, error) {
 // Redis 管理刷新会话；撤销刷新会话不会立即使已签发的 JWT 失效。
 func (m *TokenManager) Parse(tokenStr string) (*Claims, error) {
 	claims := &Claims{}
+	//这里会检查是否过期：payload携带了过期信息
 	token, err := jwt.ParseWithClaims(
 		tokenStr,
 		claims,

@@ -134,7 +134,7 @@ function MonthCellItems({ items, date, size, picking, onOpen, onMore }: {
  return <div className="month-cell-items" aria-hidden={picking || undefined} inert={picking || undefined}>
    <div className="month-todo-half" aria-label={date + "待办"}>
      <div className="month-todo-clip" style={{height: visibleTodoRows * 16, gridTemplateColumns: 'repeat(' + columns + ', 16px)'}}>
-       {todos.map(item => <button key={item.id} type="button" data-search-key={'todo-' + item.todoId} className={'month-todo-dot ' + (item.allDone || item.occurrenceDone ? 'is-done' : 'is-pending')} style={{color: item.color}} title={item.title + ' ' + item.time} aria-label={item.title + (item.allDone || item.occurrenceDone ? '，已完成' : '，未完成')} onClick={() => onOpen(item)}><span /></button>)}
+       {todos.map(item => <button key={item.id} type="button" data-search-key={'todo-' + item.todoId} className={'month-todo-dot ' + (item.occurrenceDone ? 'is-done' : 'is-pending')} style={{color: item.color}} title={item.title + ' ' + item.time} aria-label={item.title + (item.occurrenceDone ? '，已完成' : '，未完成')} onClick={() => onOpen(item)}><span /></button>)}
      </div>
      {hiddenTodos > 0 && <button className="month-more" aria-label={date + '还有' + hiddenTodos + '条待办，查看当天'} onClick={onMore}>+{hiddenTodos}</button>}
    </div>

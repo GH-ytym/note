@@ -17,4 +17,7 @@ type Group struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// 邀请通过 GroupID + Code 验证，不同群可以使用相同的邀请码。
+	Code string `gorm:"size:6;not null" json:"-"`
 }

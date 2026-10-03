@@ -15,6 +15,14 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestGetRejectsMissingIdentity(t *testing.T) {
+	// 身份无效时不应触发数据库查询。
+	item, err := NewService(nil).Get(context.Background(), 1, 0)
+	if !errors.Is(err, apperrors.ErrGroupUnauthenticated) || item.ID != 0 {
+		t.Fatalf("get without identity: %#v %v", item, err)
+	}
+}
+
 func testService(t *testing.T) Service {
 	t.Helper()
 
@@ -32,8 +40,15 @@ func testService(t *testing.T) Service {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	if err := db.AutoMigrate(&model.Todo{}, &model.TodoDate{}, &model.TodoCompletion{}); err != nil {
+	if err := db.AutoMigrate(&model.Todo{}, &model.TodoDate{}, &model.TodoCompletion{}, &model.TodoMember{}, &model.GroupMember{}); err != nil {
 		t.Fatalf("migrate test database: %v", err)
+	}
+	owner := model.User{ID: 1, Username: "test_owner", Suffix: 12345, Email: "owner@example.com", PasswordHash: "test-hash"}
+	group := model.Group{ID: 1, Name: "测试群", OwnerID: owner.ID}
+	for _, item := range []any{&owner, &group, &model.GroupMember{GroupID: group.ID, UserID: owner.ID}} {
+		if err := db.Create(item).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	return NewService(NewGORMRepository(db))
@@ -43,6 +58,8 @@ func createTestTodo(t *testing.T, service Service, title string, content *string
 	t.Helper()
 	startsAt := time.Date(2026, time.August, 30, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	item, err := service.Create(context.Background(), CreateCommand{
+		GroupID:    1,
+		CreatorID:  1,
 		Title:      title,
 		Content:    content,
 		StartsAt:   &startsAt,
@@ -73,7 +90,7 @@ func TestCreateUsesTitleWhenContentIsMissingOrBlank(t *testing.T) {
 	}
 }
 
-func TestTitleIsUniqueAndContentCanRepeat(t *testing.T) {
+func TestTitleAndContentCanRepeat(t *testing.T) {
 	service := testService(t)
 	sharedContent := "相同内容"
 
@@ -81,13 +98,15 @@ func TestTitleIsUniqueAndContentCanRepeat(t *testing.T) {
 	createTestTodo(t, service, "标题二", &sharedContent)
 
 	_, err := service.Create(context.Background(), CreateCommand{
+		GroupID:    1,
+		CreatorID:  1,
 		Title:      "标题一",
 		Content:    stringPointer("不同内容"),
 		StartsAt:   func() *time.Time { value := time.Now(); return &value }(),
 		RepeatMode: model.RepeatOnce,
 	})
-	if !errors.Is(err, apperrors.ErrTodoTitleConflict) {
-		t.Fatalf("duplicate title error = %v, want %v", err, apperrors.ErrTodoTitleConflict)
+	if err != nil {
+		t.Fatalf("duplicate title should be allowed: %v", err)
 	}
 }
 
@@ -96,7 +115,7 @@ func TestPatchBlankContentUsesEffectiveTitle(t *testing.T) {
 	item := createTestTodo(t, service, "旧标题", stringPointer("旧内容"))
 	blank := "  "
 
-	updated, err := service.Patch(context.Background(), item.ID, PatchCommand{
+	updated, err := service.Patch(context.Background(), item.ID, 1, PatchCommand{
 		Content: &blank,
 		Version: item.Version,
 	})
@@ -108,7 +127,7 @@ func TestPatchBlankContentUsesEffectiveTitle(t *testing.T) {
 	}
 
 	newTitle := "新标题"
-	updated, err = service.Patch(context.Background(), item.ID, PatchCommand{
+	updated, err = service.Patch(context.Background(), item.ID, 1, PatchCommand{
 		Title:   &newTitle,
 		Content: &blank,
 		Version: updated.Version,

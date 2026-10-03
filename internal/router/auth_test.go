@@ -21,8 +21,9 @@ func TestAuthenticationRouteCoverage(t *testing.T) {
 		for _, route := range []struct{ method, path string }{
 			{"POST", "/groups"},
 			{"GET", "/calendar"}, {"GET", "/search/todos"}, {"GET", "/search/events"}, {"GET", "/search/all"},
-			{"POST", "/todos"}, {"GET", "/todos"}, {"GET", "/todos/1"}, {"PATCH", "/todos/1"},
+			{"POST", "/todos"}, {"GET", "/groups/1/todos"}, {"GET", "/todos/1"}, {"PATCH", "/todos/1"},
 			{"PATCH", "/todos/1/occurrences/2026-09-26"}, {"DELETE", "/todos/1"},
+			{"GET", "/todos/1/occurrences/2026-09-26/completions"},
 			{"POST", "/events"}, {"GET", "/events/1"}, {"PATCH", "/events/1"},
 		} {
 			t.Run(route.method+prefix+route.path, func(t *testing.T) {

@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,4 +18,18 @@ func parseTodoID(c *gin.Context) (uint, bool) {
 	}
 
 	return uint(value), true
+}
+
+func parseOccurrenceDate(c *gin.Context) (time.Time, bool) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load timezone"})
+		return time.Time{}, false
+	}
+	date, err := time.ParseInLocation(time.DateOnly, c.Param("date"), location)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid occurrence date"})
+		return time.Time{}, false
+	}
+	return date, true
 }

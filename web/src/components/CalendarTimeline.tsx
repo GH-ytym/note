@@ -130,7 +130,7 @@ export default function CalendarTimeline({
                 })}
                 {todos.map(({item, track, minute}) => (
                   <button type="button" key={item.id}
-                    className={`timeline-todo ${item.occurrenceDone || item.allDone ? "is-done" : ""}`}
+                    className={`timeline-todo ${item.occurrenceDone ? "is-done" : ""}`}
                     data-search-key={`todo-${item.todoId}`} data-track={track}
                     title={`${item.time} ${item.title}`} aria-label={`${item.time} ${item.title}`}
                     {...drag.interaction(item)}
@@ -247,7 +247,7 @@ function HorizontalTimeline({
                 })}
                 {todos.map(({item, track, minute}) => (
                   <button type="button" key={item.id}
-                    className={`horizontal-todo ${item.occurrenceDone || item.allDone ? "is-done" : ""}`}
+                    className={`horizontal-todo ${item.occurrenceDone ? "is-done" : ""}`}
                     data-search-key={`todo-${item.todoId}`} data-track={track}
                     title={`${item.time} ${item.title}`} aria-label={`${item.time} ${item.title}`}
                     {...drag.interaction(item)}

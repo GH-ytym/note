@@ -81,17 +81,31 @@ func registerAPI(
 	{
 		groups.POST("", gh.CreateGroup)
 		groups.GET("", gh.MyGroups)
+		groups.GET("/:groupID/todos", th.ListTodos)
+		//群成员获取邀请码，只有群主可以刷新。
+		groups.GET("/:groupID/invite", gh.GetInviteCode)
+		groups.POST("/:groupID/refresh", gh.RefreshInviteCode)
+
+		//加群和退群
+		groups.POST("/:groupID/join", gh.JoinGroup)
+		groups.POST("/:groupID/quit", gh.QuitGroup)
 	}
 
 	todos := protected.Group("/todos")
 	{
 		todos.POST("", th.CreateTodo)
-		todos.GET("", th.ListTodos)
+
 		todos.GET("/:id", th.GetTodo)
 		todos.PATCH("/:id", th.PatchTodo)
+		//将某一条todo的某一天设置为完成或未完成
 		todos.PATCH(
 			"/:id/occurrences/:date",
 			th.PatchOccurrenceDone,
+		)
+		//查看某一条todo某一天有谁完成了
+		todos.GET(
+			"/:id/occurrences/:date/completions",
+			th.GetOccurrenceCompletions,
 		)
 		todos.DELETE("/:id", th.DeleteTodo)
 	}

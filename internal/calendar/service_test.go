@@ -19,6 +19,7 @@ type todoSourceStub struct {
 
 func (s *todoSourceStub) CalendarOccurrences(
 	_ context.Context,
+	_ uint,
 	_, _ time.Time,
 ) ([]todo.CalendarOccurrence, error) {
 	s.calls++
@@ -45,7 +46,7 @@ func TestGetCombinesTodosAndEvents(t *testing.T) {
 	events := &eventSourceStub{result: []event.CalendarOccurrence{{EventID: 2}}}
 	service := NewService(todos, events)
 
-	result, err := service.Get(context.Background(), from, from.AddDate(0, 0, 1))
+	result, err := service.Get(context.Background(), 1, from, from.AddDate(0, 0, 1))
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -67,7 +68,7 @@ func TestGetStopsWhenTodoSourceFails(t *testing.T) {
 	events := &eventSourceStub{}
 	service := NewService(todos, events)
 
-	_, err := service.Get(context.Background(), from, from.AddDate(0, 0, 1))
+	_, err := service.Get(context.Background(), 1, from, from.AddDate(0, 0, 1))
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Get() error = %v, want %v", err, wantErr)
 	}
@@ -80,7 +81,7 @@ func TestGetRejectsInvalidRange(t *testing.T) {
 	start := time.Date(2026, time.September, 9, 0, 0, 0, 0, time.Local)
 	service := NewService(&todoSourceStub{}, &eventSourceStub{})
 
-	_, err := service.Get(context.Background(), start, start)
+	_, err := service.Get(context.Background(), 1, start, start)
 	if !errors.Is(err, apperrors.ErrInvalidCalendarRange) {
 		t.Fatalf("Get() error = %v, want %v", err, apperrors.ErrInvalidCalendarRange)
 	}

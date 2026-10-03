@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	apperrors "note/internal/errors"
+	"note/internal/middleware"
 	todoapp "note/internal/todo"
 	"time"
 
@@ -12,7 +13,14 @@ import (
 
 // CreateTodo creates a Todo and sends the error via gin
 func (h *TodoHandler) CreateTodo(c *gin.Context) {
-
+	//先验证userID
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "请先登录",
+		})
+		return
+	}
 	var req CreateTodoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -36,6 +44,9 @@ func (h *TodoHandler) CreateTodo(c *gin.Context) {
 		RepeatMode:  req.RepeatMode,
 		NotifyMode:  req.NotifyMode,
 		CustomDates: customDates,
+
+		GroupID:   req.GroupID,
+		CreatorID: userID,
 	}
 	//进入service，传递command
 	item, err := h.service.Create(
@@ -57,6 +68,24 @@ func (h *TodoHandler) CreateTodo(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "title already exists"})
 		return
 	}
+	if errors.Is(err, apperrors.ErrGroupUnauthenticated) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "请先登录",
+		})
+		return
+	}
+	if errors.Is(err, apperrors.ErrGroupAccessDenied) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "无权在该群组创建 Todo",
+		})
+		return
+	}
+	if errors.Is(err, apperrors.ErrTodoInvalidGroup) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create"})
 		return
@@ -66,6 +95,22 @@ func (h *TodoHandler) CreateTodo(c *gin.Context) {
 
 // ListTodos returns a list of Todos
 func (h *TodoHandler) ListTodos(c *gin.Context) {
+	//检查user
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "请先登录",
+		})
+		return
+	}
+
+	//拿到group
+	var uri GroupTodosURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
 	var q ListTodosQuery
 	if err := c.ShouldBindQuery(&q); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query"})
@@ -75,6 +120,8 @@ func (h *TodoHandler) ListTodos(c *gin.Context) {
 	page, err := h.service.List(c.Request.Context(), todoapp.ListQuery{
 		Page:     q.Page,
 		PageSize: q.PageSize,
+		UserID:   userID,
+		GroupID:  uri.GroupID,
 	})
 	if errors.Is(err, apperrors.ErrInvalidPagination) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query"})
@@ -96,12 +143,28 @@ func (h *TodoHandler) ListTodos(c *gin.Context) {
 
 // GetTodo returns a Todo by ID.
 func (h *TodoHandler) GetTodo(c *gin.Context) {
+	// UserIDKey 中的值由 RequireLogin 验证 JWT 后写入，不从请求参数读取。
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+
 	id, ok := parseTodoID(c)
 	if !ok {
 		return
 	}
 
-	item, err := h.service.Get(c.Request.Context(), id)
+	item, err := h.service.Get(c.Request.Context(), id, userID)
+
+	if errors.Is(err, apperrors.ErrGroupUnauthenticated) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+	if errors.Is(err, apperrors.ErrGroupAccessDenied) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该 Todo 所属群组"})
+		return
+	}
 
 	if errors.Is(err, apperrors.ErrTodoNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -117,11 +180,17 @@ func (h *TodoHandler) GetTodo(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, item)
+	c.JSON(http.StatusOK, newTodoDetailResponse(item))
 }
 
 // PatchTodo updates a Todo with optimistic locking
 func (h *TodoHandler) PatchTodo(c *gin.Context) {
+	//依旧先登录
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
 	//调整id
 	id, ok := parseTodoID(c)
 	if !ok {
@@ -140,7 +209,6 @@ func (h *TodoHandler) PatchTodo(c *gin.Context) {
 		StartsAt:   req.StartsAt,
 		RepeatMode: req.RepeatMode,
 		NotifyMode: req.NotifyMode,
-		AllDone:    req.AllDone,
 		Version:    req.Version,
 	}
 
@@ -152,7 +220,12 @@ func (h *TodoHandler) PatchTodo(c *gin.Context) {
 		}
 		command.CustomDates = &customDates
 	}
-	item, err := h.service.Patch(c.Request.Context(), id, command)
+	item, err := h.service.Patch(
+		c.Request.Context(),
+		id,
+		userID,
+		command,
+	)
 
 	if errors.Is(err, apperrors.ErrTitleRequired) ||
 		errors.Is(err, apperrors.ErrTodoInvalidContent) ||
@@ -181,6 +254,16 @@ func (h *TodoHandler) PatchTodo(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "version conflict"})
 		return
 	}
+	if errors.Is(err, apperrors.ErrGroupUnauthenticated) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+
+	if errors.Is(err, apperrors.ErrGroupAccessDenied) ||
+		errors.Is(err, apperrors.ErrTodoEditDenied) {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to update todo",
@@ -193,29 +276,46 @@ func (h *TodoHandler) PatchTodo(c *gin.Context) {
 
 // DeleteTodo deletes a Todo by ID.
 func (h *TodoHandler) DeleteTodo(c *gin.Context) {
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+
 	id, ok := parseTodoID(c)
 	if !ok {
 		return
 	}
 
-	err := h.service.Delete(c.Request.Context(), id)
-	if errors.Is(err, apperrors.ErrTodoNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "todo not found",
-		})
-		return
-	}
-	if err != nil {
+	err := h.service.Delete(c.Request.Context(), id, userID)
+
+	switch {
+	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+
+	case errors.Is(err, apperrors.ErrTodoNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "todo not found"})
+
+	case errors.Is(err, apperrors.ErrGroupAccessDenied),
+		errors.Is(err, apperrors.ErrTodoDeleteDenied):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+
+	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to delete todo",
 		})
-		return
-	}
 
-	c.Status(http.StatusNoContent)
+	default:
+		c.Status(http.StatusNoContent)
+	}
 }
 
 func (h *TodoHandler) PatchOccurrenceDone(c *gin.Context) {
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
 	id, ok := parseTodoID(c)
 	if !ok {
 		return
@@ -252,13 +352,22 @@ func (h *TodoHandler) PatchOccurrenceDone(c *gin.Context) {
 	err = h.service.SetOccurrenceDone(
 		c.Request.Context(),
 		id,
+		userID,
 		occursOn,
 		*req.Done,
 	)
 
-	if errors.Is(err, apperrors.ErrTodoNotFound) {
+	if errors.Is(err, apperrors.ErrGroupUnauthenticated) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+	if errors.Is(err, apperrors.ErrGroupAccessDenied) {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
+	if errors.Is(err, apperrors.ErrTodoNotFound) || errors.Is(err, apperrors.ErrTodoOccurrenceNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "todo not found",
+			"error": err.Error(),
 		})
 		return
 	}
@@ -270,11 +379,53 @@ func (h *TodoHandler) PatchOccurrenceDone(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"todo_id":         id,
-		"occurs_on":       occursOn.Format(time.DateOnly),
-		"occurrence_done": *req.Done,
-	})
+	c.Status(http.StatusNoContent)
+}
+
+func (h *TodoHandler) GetOccurrenceCompletions(c *gin.Context) {
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+	todoID, ok := parseTodoID(c)
+	if !ok {
+		return
+	}
+	occursOn, ok := parseOccurrenceDate(c)
+	if !ok {
+		return
+	}
+	items, err := h.service.GetOccurrenceCompletions(c.Request.Context(), todoID, userID, occursOn)
+	switch {
+	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	case errors.Is(err, apperrors.ErrGroupAccessDenied):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	case errors.Is(err, apperrors.ErrTodoNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list completions"})
+		return
+	}
+	response := OccurrenceCompletionsResponse{
+		TodoID: todoID,
+		Users:  make([]CompletedUserResponse, 0, len(items)),
+	}
+	for _, item := range items {
+		response.Users = append(response.Users, CompletedUserResponse{
+			UserSummaryResponse: UserSummaryResponse{
+				ID: item.User.ID, Username: item.User.Username, Suffix: item.User.Suffix,
+				Nickname: item.User.Nickname, Avatar: item.User.Avatar,
+			},
+			CompletedAt: item.CompletedAt,
+		})
+	}
+	response.CompletedCount = len(response.Users)
+	c.JSON(http.StatusOK, response)
 }
 
 // 解析从前端返回的string时间数组

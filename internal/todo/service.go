@@ -14,20 +14,31 @@ import (
 type Service interface {
 	Create(ctx context.Context, command CreateCommand) (model.Todo, error)
 	List(ctx context.Context, query ListQuery) (Page, error)
-	Get(ctx context.Context, id uint) (model.Todo, error)
-	Patch(ctx context.Context, id uint, command PatchCommand) (model.Todo, error)
-	Delete(ctx context.Context, id uint) error
+	Get(ctx context.Context, id uint, userID uint) (model.Todo, error)
+	Patch(ctx context.Context, id uint, userID uint, command PatchCommand) (model.Todo, error)
+	Delete(ctx context.Context, id uint, userID uint) error
 	CalendarOccurrences(
 		ctx context.Context,
+		userID uint,
 		from time.Time,
 		to time.Time,
 	) ([]CalendarOccurrence, error)
+	//把某一条todo的某一天设置为完成或未完成
 	SetOccurrenceDone(
 		ctx context.Context,
 		todoID uint,
+		userID uint,
 		occursOn time.Time,
 		done bool,
 	) error
+
+	//查看某一条todo某一天有谁完成了
+	GetOccurrenceCompletions(
+		ctx context.Context,
+		todoID uint,
+		userID uint,
+		occursOn time.Time,
+	) ([]CompletionUser, error)
 }
 
 // service 负责执行业务规则，并通过 Repository 完成数据持久化。
@@ -45,6 +56,12 @@ func NewService(repo Repository) Service {
 
 func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo, error) {
 	//处理在handler组装的command
+	if command.CreatorID == 0 {
+		return model.Todo{}, apperrors.ErrGroupUnauthenticated
+	}
+	if command.GroupID == 0 {
+		return model.Todo{}, apperrors.ErrTodoInvalidGroup
+	}
 	title := strings.TrimSpace(command.Title)
 	if title == "" {
 		return model.Todo{}, apperrors.ErrTitleRequired
@@ -119,6 +136,9 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Todo
 		RepeatMode:  command.RepeatMode,
 		NotifyMode:  notifyMode,
 		CustomDates: dates,
+
+		GroupID:   command.GroupID,
+		CreatorID: command.CreatorID,
 	}
 
 	//进入Repository的Create
@@ -140,6 +160,12 @@ func (s *service) List(ctx context.Context, query ListQuery) (Page, error) {
 		return Page{}, apperrors.ErrInvalidPagination
 	}
 
+	if query.UserID == 0 {
+		return Page{}, apperrors.ErrGroupUnauthenticated
+	}
+	if query.GroupID == 0 {
+		return Page{}, apperrors.ErrTodoInvalidGroup
+	}
 	items, total, err := s.repo.List(ctx, query)
 	if err != nil {
 		return Page{}, err
@@ -153,15 +179,22 @@ func (s *service) List(ctx context.Context, query ListQuery) (Page, error) {
 	}, nil
 }
 
-func (s *service) Get(ctx context.Context, id uint) (model.Todo, error) {
-	return s.repo.ByID(ctx, id)
+func (s *service) Get(ctx context.Context, id uint, userID uint) (model.Todo, error) {
+	if userID == 0 {
+		return model.Todo{}, apperrors.ErrGroupUnauthenticated
+	}
+	return s.repo.ByIDForUser(ctx, id, userID)
 }
 
 func (s *service) Patch(
 	ctx context.Context,
 	id uint,
+	userID uint,
 	command PatchCommand,
 ) (model.Todo, error) {
+	if userID == 0 {
+		return model.Todo{}, apperrors.ErrGroupUnauthenticated
+	}
 	// 乐观锁必须携带版本号。
 	if command.Version == 0 {
 		return model.Todo{}, apperrors.ErrTodoInvalidVersion
@@ -174,7 +207,6 @@ func (s *service) Patch(
 		command.NotifyMode == nil &&
 		command.StartsAt == nil &&
 		command.RepeatMode == nil &&
-		command.AllDone == nil &&
 		command.CustomDates == nil {
 		return model.Todo{}, apperrors.ErrNothingToUpdate
 	}
@@ -213,7 +245,8 @@ func (s *service) Patch(
 	}
 
 	//先找到改之前的这条todo
-	current, err := s.repo.ByID(ctx, id)
+	current, err := s.repo.ByIDForUser(ctx, id, userID)
+
 	if err != nil {
 		return model.Todo{}, err
 	}
@@ -269,25 +302,54 @@ func (s *service) Patch(
 		}
 	}
 
-	return s.repo.Patch(ctx, id, command)
+	return s.repo.Patch(ctx, id, userID, command)
 }
 
-func (s *service) Delete(ctx context.Context, id uint) error {
-	return s.repo.Delete(ctx, id)
+func (s *service) Delete(ctx context.Context, id uint, userID uint) error {
+	return s.repo.Delete(ctx, id, userID)
 }
 
 func (s *service) SetOccurrenceDone(
 	ctx context.Context,
 	todoID uint,
+	userID uint,
 	occursOn time.Time,
 	done bool,
 ) error {
-	// 存在性检查与完成记录写入由 repository 在同一事务中完成。
+	if userID == 0 {
+		return apperrors.ErrGroupUnauthenticated
+	}
+	if todoID == 0 {
+		return apperrors.ErrTodoNotFound
+	}
+
 	return s.repo.SetOccurrenceDone(
 		ctx,
 		todoID,
+		userID,
 		occursOn,
 		done,
+	)
+}
+
+func (s *service) GetOccurrenceCompletions(
+	ctx context.Context,
+	todoID uint,
+	userID uint,
+	occursOn time.Time,
+) ([]CompletionUser, error) {
+	if userID == 0 {
+		return nil, apperrors.ErrGroupUnauthenticated
+	}
+	if todoID == 0 {
+		return nil, apperrors.ErrTodoNotFound
+	}
+
+	return s.repo.GetOccurrenceCompletions(
+		ctx,
+		todoID,
+		userID,
+		occursOn,
 	)
 }
 

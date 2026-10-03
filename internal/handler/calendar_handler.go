@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"note/internal/calendar"
 	apperrors "note/internal/errors"
+	"note/internal/middleware"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,11 @@ func NewCalendarHandler(
 
 // GetCalendar returns
 func (h *CalendarHandler) GetCalendar(c *gin.Context) {
+	userID := c.GetUint(middleware.UserIDKey)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
 	var query CalendarQuery
 	if err := c.ShouldBindQuery(&query); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -65,7 +71,7 @@ func (h *CalendarHandler) GetCalendar(c *gin.Context) {
 	}
 
 	//查所有todo和event的出现情况
-	result, err := h.service.Get(c.Request.Context(), from, to)
+	result, err := h.service.Get(c.Request.Context(), userID, from, to)
 	if errors.Is(err, apperrors.ErrInvalidCalendarRange) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),

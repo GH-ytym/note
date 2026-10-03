@@ -13,7 +13,10 @@ import (
 )
 
 func TestTodoCompletionDeleteRace(t *testing.T) {
-	db := authTestDB(t)
+	db, owner, _, group := groupSchemaFixture(t)
+	if err := db.Create(&model.GroupMember{GroupID: group.ID, UserID: owner.ID}).Error; err != nil {
+		t.Fatal(err)
+	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatal(err)
@@ -29,21 +32,21 @@ func TestTodoCompletionDeleteRace(t *testing.T) {
 	date := time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 20; i++ {
 		content := "race"
-		item := model.Todo{Title: fmt.Sprintf("race%d", i), Content: &content, StartsAt: &date}
+		item := model.Todo{GroupID: group.ID, CreatorID: owner.ID, Title: fmt.Sprintf("race%d", i), Content: &content, StartsAt: &date}
 		if err := repo.Create(ctx, &item); err != nil {
 			t.Fatal(err)
 		}
 		// 重复完成和重复取消均幂等。
 		for _, done := range []bool{true, true, false, false} {
-			if err := service.SetOccurrenceDone(ctx, item.ID, date, done); err != nil {
+			if err := service.SetOccurrenceDone(ctx, item.ID, owner.ID, date, done); err != nil {
 				t.Fatal(err)
 			}
 		}
 		start := make(chan struct{})
 		completion := make(chan error, 1)
 		deletion := make(chan error, 1)
-		go func() { <-start; completion <- service.SetOccurrenceDone(ctx, item.ID, date, true) }()
-		go func() { <-start; deletion <- service.Delete(ctx, item.ID) }()
+		go func() { <-start; completion <- service.SetOccurrenceDone(ctx, item.ID, owner.ID, date, true) }()
+		go func() { <-start; deletion <- service.Delete(ctx, item.ID, owner.ID) }()
 		close(start)
 		if err := <-completion; err != nil && !errors.Is(err, apperrors.ErrTodoNotFound) {
 			t.Fatalf("completion: %v", err)
@@ -56,7 +59,7 @@ func TestTodoCompletionDeleteRace(t *testing.T) {
 			t.Fatalf("orphan count=%d err=%v", count, err)
 		}
 		for _, done := range []bool{true, false} {
-			if err := service.SetOccurrenceDone(ctx, item.ID, date, done); !errors.Is(err, apperrors.ErrTodoNotFound) {
+			if err := service.SetOccurrenceDone(ctx, item.ID, owner.ID, date, done); !errors.Is(err, apperrors.ErrTodoNotFound) {
 				t.Fatalf("deleted todo: %v", err)
 			}
 		}
@@ -64,7 +67,10 @@ func TestTodoCompletionDeleteRace(t *testing.T) {
 }
 
 func TestTodoListConcurrentWrites(t *testing.T) {
-	db := authTestDB(t)
+	db, owner, _, group := groupSchemaFixture(t)
+	if err := db.Create(&model.GroupMember{GroupID: group.ID, UserID: owner.ID}).Error; err != nil {
+		t.Fatal(err)
+	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatal(err)
@@ -83,13 +89,13 @@ func TestTodoListConcurrentWrites(t *testing.T) {
 		date := time.Now()
 		for i := 0; i < 50; i++ {
 			content := "list"
-			item := model.Todo{Title: fmt.Sprintf("list%d", i), Content: &content, StartsAt: &date}
+			item := model.Todo{GroupID: group.ID, CreatorID: owner.ID, Title: fmt.Sprintf("list%d", i), Content: &content, StartsAt: &date}
 			if err := repo.Create(ctx, &item); err != nil {
 				writes <- err
 				return
 			}
 			if i%2 == 0 {
-				if err := repo.Delete(ctx, item.ID); err != nil {
+				if err := repo.Delete(ctx, item.ID, owner.ID); err != nil {
 					writes <- err
 					return
 				}
@@ -100,7 +106,7 @@ func TestTodoListConcurrentWrites(t *testing.T) {
 	close(start)
 	for i := 0; i < 100; i++ {
 		// 总数据量小于页面大小，所以同一快照中 total 必须等于返回条数。
-		items, total, err := repo.List(ctx, todo.ListQuery{Page: 1, PageSize: 100})
+		items, total, err := repo.List(ctx, todo.ListQuery{GroupID: group.ID, UserID: owner.ID, Page: 1, PageSize: 100})
 		if err != nil {
 			t.Error(err)
 			break

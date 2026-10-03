@@ -17,11 +17,17 @@ type CreateCommand struct {
 	NotifyMode model.NotifyMode
 
 	CustomDates []time.Time
+
+	GroupID   uint
+	CreatorID uint
 }
 
 type ListQuery struct {
 	Page     int
 	PageSize int
+
+	GroupID uint
+	UserID  uint
 }
 
 type Page struct {
@@ -38,7 +44,6 @@ type PatchCommand struct {
 	StartsAt   *time.Time
 	RepeatMode *model.RepeatMode
 	NotifyMode *model.NotifyMode
-	AllDone    *bool
 	Version    uint
 
 	CustomDates *[]time.Time
@@ -55,8 +60,13 @@ type CalendarOccurrence struct {
 	NotifyMode model.NotifyMode `json:"notify_mode"`
 	Version    uint             `json:"version"`
 
-	//表示todoID这个todo是否在当天完成了
+	// 当前登录用户是否完成了这一天的 Todo。
 	OccurrenceDone bool `json:"occurrence_done"`
-	//当前todo是否有全部完成的标记
-	AllDone bool `json:"all_done"`
+}
+
+// 完成名单的一项，供 Handler 组装响应。
+// 这是查询结果，不是数据库表。
+type CompletionUser struct {
+	User        model.User
+	CompletedAt time.Time
 }

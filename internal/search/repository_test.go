@@ -35,6 +35,7 @@ func TestSearchAll(t *testing.T) {
 	if err := db.AutoMigrate(&model.Todo{}, &model.Event{}); err != nil {
 		t.Fatalf("数据库迁移失败:%v", err)
 	}
+	owner, group := seedSearchTodoOwnership(t, db)
 
 	//4.构造测试数据
 	start := time.Date(2026, 9, 11, 9, 0, 0, 0, time.UTC)
@@ -42,6 +43,8 @@ func TestSearchAll(t *testing.T) {
 
 	todos := []model.Todo{
 		{
+			GroupID:    group.ID,
+			CreatorID:  owner.ID,
 			Title:      "开会",
 			Content:    &content,
 			StartsAt:   &start,
@@ -49,6 +52,8 @@ func TestSearchAll(t *testing.T) {
 			NotifyMode: model.NotifyNone,
 		},
 		{
+			GroupID:    group.ID,
+			CreatorID:  owner.ID,
 			Title:      "下午开会",
 			Content:    &content,
 			StartsAt:   &start,
@@ -56,6 +61,8 @@ func TestSearchAll(t *testing.T) {
 			NotifyMode: model.NotifyNone,
 		},
 		{
+			GroupID:    group.ID,
+			CreatorID:  owner.ID,
 			Title:      "买菜",
 			Content:    &content,
 			StartsAt:   &start,
@@ -135,6 +142,7 @@ func TestCategoryRanking(t *testing.T) {
 	if err := db.AutoMigrate(&model.Todo{}, &model.Event{}); err != nil {
 		t.Fatal(err)
 	}
+	owner, group := seedSearchTodoOwnership(t, db)
 	start := time.Date(2026, 9, 11, 9, 0, 0, 0, time.UTC)
 	keyword := "100%_!"
 	content := "正文包含 " + keyword
@@ -142,7 +150,7 @@ func TestCategoryRanking(t *testing.T) {
 	titles := []string{keyword, keyword + "计划", "完成" + keyword, "正文命中"}
 	for i, title := range titles {
 		updated := start.Add(time.Duration(i) * time.Hour)
-		if err := db.Create(&model.Todo{Title: title, Content: &content, StartsAt: &start, UpdatedAt: updated}).Error; err != nil {
+		if err := db.Create(&model.Todo{GroupID: group.ID, CreatorID: owner.ID, Title: title, Content: &content, StartsAt: &start, UpdatedAt: updated}).Error; err != nil {
 			t.Fatal(err)
 		}
 		if err := db.Create(&model.Event{Title: title, Content: &content, StartsAt: start, EndsAt: start.Add(time.Hour), UpdatedAt: updated}).Error; err != nil {
@@ -150,7 +158,7 @@ func TestCategoryRanking(t *testing.T) {
 		}
 	}
 	other := "100abc"
-	if err := db.Create(&model.Todo{Title: other, Content: &other, StartsAt: &start}).Error; err != nil {
+	if err := db.Create(&model.Todo{GroupID: group.ID, CreatorID: owner.ID, Title: other, Content: &other, StartsAt: &start}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&model.Event{Title: other, Content: &other, StartsAt: start, EndsAt: start.Add(time.Hour)}).Error; err != nil {
@@ -181,4 +189,17 @@ func TestCategoryRanking(t *testing.T) {
 			t.Fatalf("merged order disagrees at %d: %+v", i, item)
 		}
 	}
+}
+
+func seedSearchTodoOwnership(t *testing.T, db *gorm.DB) (model.User, model.Group) {
+	t.Helper()
+	owner := model.User{Username: "search_owner", Suffix: 12345, Email: "owner@example.com", PasswordHash: "test-hash"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	group := model.Group{Name: "搜索测试群", OwnerID: owner.ID}
+	if err := db.Create(&group).Error; err != nil {
+		t.Fatal(err)
+	}
+	return owner, group
 }

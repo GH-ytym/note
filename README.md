@@ -1,374 +1,330 @@
 # Note
 
-一个本地优先的 Windows / macOS 日历待办应用。Todo（待办）用于记录需要完成的事项，Event（日程）用于安排具有开始和结束时间的日程；所有数据都保存在本机。
+一个支持账号和群组协作的日历待办应用，提供 Windows / macOS 桌面端与浏览器开发模式。Todo（待办）记录需要完成的事项，Event（日程）安排有开始和结束时间的活动；日历可以按年、月、周、日查看，也可以用 24 小时时钟和桌面小窗展示。
 
 <p align="center">
   <img src="desktop/build/icon.svg" alt="Note 图标" width="88">
 </p>
 
 <p align="center">
-  <a href="https://github.com/GH-ytym/note/releases/latest">下载最新版</a>
+  <a href="https://github.com/GH-ytym/note/releases/tag/v0.5.0">下载已发布的 v0.5.0</a>
 </p>
 
-## 下载安装
+## 当前状态
 
-提供 Windows x64、macOS Apple Silicon（arm64）和 Intel（x64）版本：
+仓库正在从 v0.5.0 的单机日历发展为支持账号、群组和成员权限的协作版本。**下面的功能与开发说明以当前源码为准，Release 下载仍是 v0.5.0，不包含这些新增协作功能。**桌面包版本号暂时保留为 `0.5.0`。
 
-`v0.5.0` 是 v0 系列最终版；后续发布从 v1 系列开始。
+| 模块 | 当前进度 |
+| --- | --- |
+| 账号 | 已有注册、登录、自动恢复登录、多窗口状态同步与退出登录 |
+| 群组基础 | 已有创建、切换、成员列表、退出、转让群主后退出和解散 |
+| 群内 Todo / Event | 已有创建、查看、编辑、删除、成员权限管理和按群组查看日历 |
+| Todo 完成记录 | 已按用户记录每次完成状态，可查看当天完成成员 |
+| 个人头像 | 已接入腾讯云 COS；配置存储后可上传、替换或移除头像 |
+| 邀请入群与同意加群 | **开发中，尚未完成，当前阻塞新 Release**；现有邀请码接口和界面只是已有基础 |
+| 搜索 | 已有 Todo / Event 搜索，但尚未接入群组与成员可见范围过滤 |
 
-| 版本 | 适合场景 | 下载 |
-| --- | --- | --- |
-| 安装版 | 安装到电脑，并创建桌面与开始菜单快捷方式 | [Note-Setup-0.5.0.exe](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-Setup-0.5.0.exe) |
-| 便携版 | 不安装，下载后直接运行 | [Note-0.5.0.exe](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0.exe) |
-| macOS Apple Silicon | M 系列芯片的 Mac | [Note-0.5.0-mac-arm64.dmg](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0-mac-arm64.dmg) |
-| macOS Intel | Intel 芯片的 Mac | [Note-0.5.0-mac-x64.dmg](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0-mac-x64.dmg) |
-
-安装包已经包含界面、Go 后端和 SQLite 支持，使用者不需要另行安装 Go、Node.js、数据库或其他运行环境。
-
-> 当前安装包没有代码签名。Windows SmartScreen 可能显示“Windows 已保护你的电脑”，确认文件来自本仓库后，可选择“更多信息” → “仍要运行”。
-
-macOS：打开 DMG，将 Note 拖入 Applications（应用程序）。另提供 ZIP 包。Mac 版没有 Apple Developer 签名或公证；首次打开若被系统阻止，请确认下载来源后，在“系统设置 → 隐私与安全性”中选择“仍要打开”。无需关闭系统的安全检查。Mac 版通过构建机启动检查，窗口交互与通知仍欢迎用户实机验证；通知需在系统设置中允许 Note 发送。
+目前的入群代码使用“群组 ID + 6 位邀请码”校验，通过后直接写入成员关系；界面已有邀请卡片、二维码和邀请码刷新入口。**邀请入群与同意加群的完整流程仍待完成，当前没有入群申请及同意／拒绝的审批流程。**
 
 ## 功能
 
-从月历中的一个圆点，到一天中的一段时间，再到桌面角落的交互时钟，用适合当前场景的方式查看安排。
+### 账号与群组工作区
 
-以下为 v0.5.0 Windows 桌面版实机截图，使用黑色背景与黄色主题；点击图片可以查看原图。
+首次使用当前源码需要注册并登录。账号支持通过邮箱或完整的 `用户名#12345` 登录；重新加载时会尝试恢复登录，退出入口位于“设置 → 账号”。
 
-### 待办与日程，各自表达不同的安排
+主界面左侧选择群组，右侧显示该群组的日历。新建窗口固定使用打开时的群组，提交 Todo / Event 时携带 `group_id`。群组图标由群组 ID 决定颜色，并显示群名首字。
+
+群成员可以查看群内 Todo 和 Event；每条记录有独立的 `viewer`（只读）或 `editor`（可编辑）权限。创建者默认可编辑，其他成员默认只读；创建者可以批量调整成员权限，删除也仅限仍在群内的创建者。群主身份不自动获得其他成员创建记录的编辑权限。
+
+普通成员可以退出群组；群主退出前需要将群主转让给其他成员，也可以解散群组。解散会删除群内 Todo、Event、权限与完成记录。
+
+### 待办与日程
 
 | | Todo · 待办 | Event · 日程 |
 | --- | --- | --- |
 | 适合记录 | 交报告、买东西、到点做某件事 | 会议、课程、专注工作等时间段 |
-| 时间 | 一个时间点 | 开始时间与结束时间，可跨天 |
-| 完成状态 | 支持当天完成、整个周期全部完成 | 不使用待办的完成状态 |
-| 时钟中的样子 | 钟面外侧的针形标记 | 钟面内部的时间圆弧 |
-| 提醒 | 可选择静默提醒或弹窗提醒 | 当前版本尚不提供 Event 提醒 |
+| 时间 | 一个时间点 | 开始与结束时间，可跨天 |
+| 完成状态 | 每位用户分别记录某一天是否完成 | 不使用完成状态 |
+| 时钟展示 | 钟面外侧的针形标记 | 钟面内部的时间圆弧 |
+| 提醒 | 静默提醒或弹窗提醒，也可关闭 | 暂无 Event 提醒 |
 
-点击工具栏的 **＋**，在“新建”中选择待办或日程。Todo 标题必填且不可重复，内容留空时会使用标题；颜色既可以随机生成，也可以手动选择，让不同安排更容易辨认。
+点击工具栏的 **＋**，选择新建待办或日程。Todo 标题必填，允许重名；内容留空时使用标题。颜色可以随机生成，也可以手动选择。
 
-### 年、月视图：先看全局，再进入某一天
+周期 Todo 的完成只影响**当前用户、当前日期这一次**，不改变其他成员的状态；详情中可以查看这一天已完成的成员。当前源码已移除旧版“整个周期全部完成”的 `all_done` 状态。
 
-年视图按月份展示日期，点击月份进入月视图；点击“回到今天”会定位并短暂高亮当前月份，不会强制切换视图。月视图把 Todo 和 Event 收拢为日期格中的彩色圆点，点击日期即可查看当天安排。
+### 多种日历视图
 
-| 年视图 · 浏览月份 | 月视图 · 用圆点概览安排 |
+- **年视图**：按月份浏览日期，点击月份进入月视图。
+- **月视图**：用彩色圆点概览 Todo 和 Event，点击日期进入当天。
+- **周视图**：用时间轴比较一周的安排，支持横向或纵向排列。
+- **日视图**：支持标签、时间轴、时钟三种样式，默认使用标签。标签按未完成待办、日程、已完成待办分组，可直接切换自己的完成状态。
+
+时间轴按配置的轨道数展示 Event，并标出 Todo 的时间点。跨天 Event 会在涉及的每一天显示当天的部分。
+
+### 24 小时时钟与拖动改期
+
+钟面顶部为 0 点，右侧为 6 点，底部为 12 点，左侧为 18 点。外圈显示 Todo 标记，内圈显示 Event 圆弧；今天可显示动态时、分、秒针，并提供完整／精简时针模式。
+
+有编辑权限时，可以在时间轴或时钟中拖动 Todo 调整时间，拖动 Event 的起止端点调整时间，步长为 5 分钟。跨天 Event 的裁切边界不作为可拖动端点。
+
+> 周期事项的拖动会修改整个周期的时间；仅调整某一天这一次的单次改期尚未实现。轨道达到数量上限后会循环使用，密集日程仍可能重叠。
+
+### 桌面小窗与提醒
+
+点击小窗按钮，只保留今天的安排与恢复按钮。小窗可在设置中选择标签、时间轴或时钟样式，默认使用标签；仍可查看详情，按权限完成待办或调整时间。
+
+后台唤醒默认进入小窗，也可以选择上一次关闭时的样式或指定视图。桌面端主日历之外最多保留一个辅助窗口，新建、详情、设置、专注编辑和弹窗提醒会相互替换。
+
+Todo 支持两种桌面提醒：
+
+- **静默提醒**：使用系统原生通知，不主动播放声音。
+- **弹窗提醒**：在屏幕右下角打开置顶提醒窗口。
+
+登录后，应用为当前用户安排今天尚未到点、尚未完成且开启提醒的 Todo。隐藏到系统托盘后提醒仍会工作；退出登录或完全退出应用后停止提醒。日历与提醒的日期计算使用 `Asia/Shanghai`。
+
+### 重复安排与设置
+
+Todo 和 Event 都支持仅一次、每天、工作日、周末、每周、每月及自定义日期。开始日期、结束日期与自定义日期通过主日历联动选择；选择过程保留表单状态，点击创建后才写入记录。
+
+设置分为四类：
+
+| 分类 | 内容 |
 | --- | --- |
-| ![年视图](docs/images/v0.5.0/year.jpg) | ![月视图](docs/images/v0.5.0/month.jpg) |
-
-### 周、日时间轴：看清时间段与重叠关系
-
-周视图适合比较一周的安排，日视图适合查看某一天的具体时间段。Event 按开始、结束时间绘制，Todo 则标在对应时间点；点击任意一项可以打开详情面板。
-
-两个视图都支持切换时间轴排列方向。每个日期窗格按配置的轨道数均分，不会因为当天只有两个 Event 就让它们占满整个窗格。
-
-| 周视图 · 对照一周安排 | 日视图 · 展开当天时间段 |
-| --- | --- |
-| ![周时间轴](docs/images/v0.5.0/week.jpg) | ![日时间轴](docs/images/v0.5.0/day-timeline.jpg) |
-
-跨天 Event 会在涉及的每一天显示当天的部分：昨天开始、今天结束的日程，也能在今天的时间轴与时钟里看见。
-
-### 24 小时时钟：把一天画在钟面上
-
-在日视图勾选“时钟”，即可切换到 24 小时钟面：顶部是 0 点，右侧是 6 点，底部是 12 点，左侧是 18 点。刻度与数字位于外侧，内部空间留给 Event 圆弧。
-
-- **外圈看 Todo，内圈看 Event**：颜色与日程设置保持一致；相同或相近时间的 Todo 会使用外圈轨道分开显示。
-- **动态时针**：今天可显示动态时、分、秒针，并提供完整／精简时针模式；查看其他日期时，不显示当前时针与数字时间。
-- **直接操作**：点击标记或圆弧查看详情；拖动 Todo 标记调整时间，拖动 Event 头尾调整开始或结束时间，步长为 5 分钟。
-- **跨天处理**：圆弧只表示当前日期内的时间段，跨日裁切边界不作为可拖动端点。
-
-![日时钟：外侧 Todo 标记与内侧 Event 圆弧](docs/images/v0.5.0/day-clock.jpg)
-
-> 周期事项的拖动会修改**整个周期的时间**，不是仅调整当天这一次。单次改期尚未实现。
-
-<details>
-<summary>重叠日程如何分配轨道？</summary>
-
-Event 依次放入轨道，时间轴从左向右、时钟从外向内检查，优先复用与已有 Event 不重叠的轨道。当所有轨道都发生冲突且达到上限时，从第一条轨道开启新一轮；旧轮仍然显示，但不再参与新一轮的冲突检查。因此轨道数是显示上限，并不保证任意密度的日程都完全不重叠。Todo 外圈轨道达到上限后也会循环使用。
-
-</details>
-
-### 小窗模式：桌面角落也能查看和操作
-
-点击工具栏的小窗按钮，只保留**今天的时钟与恢复按钮**。窗口紧贴最外层 Todo 轨道，减少空白背景；点击右上角恢复完整日历，左上角空白处可以拖动窗口。
-
-小窗不是静态挂件：Todo 和 Event 仍可点击打开详情，也可拖动调整时间。
-
-<p align="center">
-  <img src="docs/images/v0.5.0/mini-clock.jpg" alt="交互小窗：紧凑的今天时钟与恢复按钮" width="362">
-</p>
-
-后台唤醒默认进入小窗模式。若习惯继续上次的工作，可以在设置中改为“上一次关闭时的样式”，也可以指定其他视图。
-
-### 重复安排与联动日期选择
-
-Todo 与 Event 都支持以下规则，无需每天手动创建：
-
-| 规则 | 使用场景 |
-| --- | --- |
-| 仅一次 | 临时事项、单次会议 |
-| 每天／工作日／周末 | 日常习惯、工作安排、周末计划 |
-| 每周／每月 | 固定周会、月度事项 |
-| 自定义日期 | 不规则但已经确定的多个日期 |
-
-周期 Todo 可以只完成当天这一项，也可以将整个周期全部完成。Event 则按重复规则展开为各天的时间段，不需要完成打卡。
-
-<details>
-<summary>查看新建表单与日期选择界面</summary>
-
-<p align="center">
-  <img src="docs/images/v0.5.0/create-todo.jpg" alt="新建：选择待办或日程，填写标题、内容与重复规则" width="342">
-</p>
-
-开始日期与 Event 结束日期复用主日历，顶部文字提示当前正在选择哪一项。选择后立即回填表单；减号仅收起日历，不关闭新建面板，也不会丢失已选日期。
-
-![主日历联动选择开始日期](docs/images/v0.5.0/date-picker.jpg)
-
-这里的“实时保存”是保留**表单中的选择状态**；只有点击“创建”才会写入新记录。
-
-</details>
-
-### 详情、编辑与提醒
-
-点击周／日时间轴或时钟上的 Todo、Event，可在独立面板查看详情。Todo 的内容还能展开到更大的专注编辑窗口，保存后返回详情。
-
-主日历之外最多保留一个辅助面板：新建、详情、设置、专注编辑与弹窗提醒会相互替换，避免桌面堆满窗口。用于选择日期的主日历不计入辅助面板。
-
-Todo 提供两种提醒方式：
-
-- **静默提醒**：使用 Windows 原生通知，不主动播放声音，可在通知横幅或通知中心查看。
-- **弹窗提醒**：在屏幕右下角打开置顶的独立提醒窗口，主动聚焦并闪烁任务栏图标，不需要先展开主日历。
-
-应用会安排**今天尚未到点、尚未完成且开启提醒**的 Todo。已经过点、当天已完成或全部完成的 Todo 不会提醒。隐藏到系统托盘后提醒仍会工作；从托盘完全退出应用后则不会提醒。
-
-### 设置中心：按自己的习惯使用
-
-设置采用独立大面板，侧边栏分为三个分类：
-
-| 分类 | 可以调整什么 |
-| --- | --- |
+| 账号 | 查看账号资料、更换或移除头像、退出登录 |
 | 外观 | 背景颜色、主题颜色、窗口不透明度 |
-| 首选项 | 默认视图、日视图首选模式、时针首选模式 |
-| 配置项 | 周／日视图轨道排列方向、轨道数、后台唤醒样式 |
+| 首选项 | 默认视图、日视图与小窗样式、时针模式、搜索分栏 |
+| 配置项 | 时间轴方向、轨道数、搜索数量、后台唤醒样式 |
 
-![外观设置：背景颜色、主题颜色与不透明度](docs/images/v0.5.0/settings-appearance.jpg)
+当前默认背景为白色 `#FFFFFF`，主题色为黄色；旧默认配色会迁移，自定义配色保留。
+
+### 个人头像
+
+点击侧边栏底部账号，进入个人资料更换或移除头像。未设置头像时显示占位图，显示时使用圆形裁切。
+
+头像存储在腾讯云 COS，数据库只保存公开 URL，不在本机保存图片文件。支持 JPEG / PNG，文件不超过 5 MiB、宽高各不超过 4096 像素；后端验证图片内容，居中裁剪后转换为 512×512 JPEG，移除原始元数据。
+
+COS 配置全部留空时，服务可以正常启动，头像上传入口禁用；只填写部分必需配置会导致启动报错。真实 COS 上传与公开访问需配置后验证。
+
+## 已发布版本与截图
+
+v0.5.0 是此前的单机桌面版，提供 Windows x64、macOS Apple Silicon（arm64）和 Intel（x64）下载：
+
+| 版本 | 适合场景 | 下载 |
+| --- | --- | --- |
+| Windows 安装版 | 安装并创建桌面与开始菜单快捷方式 | [Note-Setup-0.5.0.exe](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-Setup-0.5.0.exe) |
+| Windows 便携版 | 下载后直接运行 | [Note-0.5.0.exe](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0.exe) |
+| macOS Apple Silicon | M 系列芯片的 Mac | [Note-0.5.0-mac-arm64.dmg](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0-mac-arm64.dmg) |
+| macOS Intel | Intel 芯片的 Mac | [Note-0.5.0-mac-x64.dmg](https://github.com/GH-ytym/note/releases/download/v0.5.0/Note-0.5.0-mac-x64.dmg) |
+
+v0.5.0 安装包已包含前端、Go 后端和 SQLite 支持，使用者无需安装开发环境。当前源码新增的 Redis 依赖不适用于这个旧 Release。
+
+Windows 安装包没有代码签名，SmartScreen 可能显示“Windows 已保护你的电脑”；确认文件来自本仓库后，可选择“更多信息 → 仍要运行”。macOS 打开 DMG 后将 Note 拖入 Applications；若首次打开被阻止，确认来源后在“系统设置 → 隐私与安全性”中选择“仍要打开”。Mac 版没有 Apple Developer 签名或公证，另有 ZIP 包，通知需要在系统设置中允许。
 
 <details>
-<summary>查看首选项与配置项</summary>
+<summary>查看 v0.5.0 截图（历史界面）</summary>
 
-![首选项：默认视图、日视图模式与时针模式](docs/images/v0.5.0/settings-preferences.jpg)
+以下是 v0.5.0 Windows 桌面版的黑色背景与黄色主题截图，用于展示日历、时间轴和时钟。当前源码已调整布局、默认配色与完成状态，并增加账号和群组界面，截图不代表当前开发版外观。
 
-![配置项：轨道排列、轨道数与后台唤醒样式](docs/images/v0.5.0/settings-configuration.jpg)
+| 年视图 | 月视图 |
+| --- | --- |
+| ![v0.5.0 年视图](docs/images/v0.5.0/year.jpg) | ![v0.5.0 月视图](docs/images/v0.5.0/month.jpg) |
+
+| 周时间轴 | 日时间轴 |
+| --- | --- |
+| ![v0.5.0 周时间轴](docs/images/v0.5.0/week.jpg) | ![v0.5.0 日时间轴](docs/images/v0.5.0/day-timeline.jpg) |
+
+![v0.5.0 日时钟](docs/images/v0.5.0/day-clock.jpg)
+
+<p align="center">
+  <img src="docs/images/v0.5.0/mini-clock.jpg" alt="v0.5.0 时钟小窗" width="362">
+</p>
 
 </details>
 
-## 数据与隐私
+## 数据与存储
 
-Note 没有账户、云同步、广告或多人协作功能。日程只保存在本机 SQLite 数据库中：
+当前源码将账号、群组、Todo、Event、成员权限和完成记录存储在 **API 所在机器的 SQLite 数据库**中；Redis 保存刷新会话，COS 保存头像。这些协作功能依赖同一个后端，各台电脑独立运行的本地数据库不会自动同步。
 
-```text
-%APPDATA%\note-desktop\data\note.db
-```
+| 运行方式 | SQLite 默认位置 |
+| --- | --- |
+| 命令行 API | 项目根目录启动时为 `data/note.db`，可通过 `NOTE_DB_PATH` 指定 |
+| Windows 桌面端 | `%APPDATA%\note-desktop\data\note.db` |
+| macOS 桌面端 | `~/Library/Application Support/note-desktop/data/note.db` |
 
-macOS 对应路径为 `~/Library/Application Support/note-desktop/data/note.db`；备份整个 `~/Library/Application Support/note-desktop` 文件夹前，请先完全退出应用。
+桌面端设置保存在用户数据目录的 `appearance.json`，关闭到后台时的视图状态保存在 `workspace.json`；未设置 `NOTE_JWT_SECRET` 时，Electron 在 `data/jwt-secret` 生成并沿用签名密钥。备份桌面 SQLite 与设置前，请从托盘完全退出应用，再复制整个用户数据目录；Redis 会话和 COS 头像需分别处理。
 
-应用设置保存在同一目录上一级的 `appearance.json`，关闭到后台时的视图状态保存在 `workspace.json`。旧版本的设置文件会自动补齐新增选项。备份或迁移时，先从系统托盘中完全退出 Note，再复制整个 `%APPDATA%\note-desktop` 文件夹。
+**旧数据迁移尚有限制**：有数据的旧单机 Todo / Event 表需要先明确并回填 `group_id` 与 `creator_id`，旧完成记录也需要明确用户归属；当前迁移不会自动猜测这些归属。开发时建议使用独立数据库，保留 v0.5.0 数据备份。
 
-## 技术栈
+主要数据表：
 
-- 后端：Go、Gin、GORM
-- 数据库：SQLite（已启用 WAL、外键和写入等待）
+| 表 | 内容 |
+| --- | --- |
+| `users` | 用户名、账号后缀、邮箱、密码哈希、昵称与头像 URL |
+| `groups` / `group_members` | 群组、群主、邀请码和成员资格 |
+| `todos` / `events` | 待办与日程、所属群组、创建者、时间、重复规则和版本 |
+| `todo_dates` / `event_dates` | 自定义重复日期 |
+| `todo_members` / `event_members` | 每条记录的成员编辑权限 |
+| `todo_completions` | 按 Todo 和日期保存完成用户及完成时间 |
+
+周期日程按查询范围即时展开，不会为未来每一天预先插入记录。
+
+## 技术栈与项目结构
+
+- 后端：Go、Gin、GORM、SQLite、Redis、JWT / bcrypt
 - 周期计算：`rrule-go`
-- 前端：React、Vite、Phosphor Icons
-- 桌面端：Electron、electron-builder
-
-## 项目结构
+- 前端：React、TypeScript、Vite、Phosphor Icons、`qrcode.react`
+- 桌面端：Electron、TypeScript、electron-builder
+- 头像存储：腾讯云 COS
 
 ```text
 note/
 ├─ cmd/api/                 Go 程序入口
 ├─ internal/
+│  ├─ auth/                 注册、登录、JWT 与刷新会话
+│  ├─ middleware/           登录验证与认证请求检查
+│  ├─ group/                群组、邀请码与成员管理
+│  ├─ profile/              用户资料、图片处理与 COS 存储
+│  ├─ todo/                 Todo、成员权限与个人完成记录
+│  ├─ event/                Event 与成员权限
+│  ├─ calendar/             聚合 Todo / Event 日历实例
+│  ├─ search/               标题与内容搜索
 │  ├─ handler/              HTTP 参数解析与响应
 │  ├─ model/                GORM 数据模型
 │  ├─ router/               Gin 路由
-│  ├─ todo/                 Todo 业务与数据访问
-│  ├─ event/                Event 业务与数据访问
-│  ├─ calendar/             组装 Todo 与 Event 日历实例
 │  ├─ errors/               共享业务错误
-│  ├─ utils/                通用工具
 │  ├─ retry/                通用重试
-│  └─ app.go                数据库、HTTP 服务与优雅关闭
-├─ web/                     React 前端
-└─ desktop/                 Electron 主进程、预加载脚本与打包配置
+│  ├─ utils/                日期、颜色与邀请码工具
+│  └─ app.go                数据库、服务组装与优雅关闭
+├─ web/                     React 前端与界面样式
+├─ desktop/                 Electron 主进程、preload、测试与打包配置
+├─ docs/                    截图、认证说明与验证记录
+└─ scripts/                 本地认证调试脚本
 ```
 
-## 桌面版开发运行
+## 开发运行
 
-开发环境需要：
+以下说明适用于当前源码。需要 Go 1.26.0 或更高版本、Node.js 与 npm（CI 使用 Node.js 24），以及独立运行的 Redis。**当前桌面包不内置 Redis，后端启动时会检查连接。**
 
-- Go 1.26 或更高版本
-- Node.js 和 npm
-- Windows x64 或 macOS（Intel / Apple Silicon）
-
-第一次运行先安装两部分依赖：
+在项目根目录安装依赖：
 
 ```powershell
-cd web
-npm install
-
-cd ..\desktop
-npm install
+npm install --prefix web
+npm install --prefix desktop
 ```
 
-然后从 `desktop` 目录启动：
+### 桌面模式
+
+先启动 Redis；默认连接 `127.0.0.1:6379`，其他地址或密码通过环境变量配置。然后在项目根目录执行：
 
 ```powershell
-npm run start
+npm run start --prefix desktop
 ```
 
-该命令会自动构建 React 前端、编译 Go 后端，并启动后端子进程与 Electron 窗口。开发版的数据库同样保存在 Electron 用户数据目录下。
+该命令会编译桌面 TypeScript、构建 React 前端与 Go 后端，再启动后端子进程和 Electron。Electron 自动生成 JWT 密钥，并使用系统分配的本机端口；默认数据库位于上文所列用户数据目录。
 
-## 浏览器开发模式
+如果该目录已有 v0.5.0 数据，需先处理数据归属迁移。桌面端会自行设置数据库路径，`NOTE_DB_PATH` 的自定义值仅适用于独立启动 API。
 
-先从项目根目录启动 API：
+### 浏览器模式
+
+启动 Redis 后，在项目根目录配置 JWT 密钥并启动 API：
 
 ```powershell
+# 为本地开发生成随机密钥；持续使用同一后端时应保存并复用该值
+$env:NOTE_JWT_SECRET = node -e "process.stdout.write(require('node:crypto').randomBytes(48).toString('base64url'))"
+$env:NOTE_REDIS_ADDR = "127.0.0.1:6379"
+$env:NOTE_DB_PATH = "data/note-dev.db"
 go run ./cmd/api
 ```
 
-首次启动会自动创建 `data/note.db` 并迁移表结构。API 默认只监听本机：<http://127.0.0.1:8080/ping>。
+API 默认监听 `127.0.0.1:8080`，首次启动会创建指定数据库并迁移表结构；健康检查为 [http://127.0.0.1:8080/api/ping](http://127.0.0.1:8080/api/ping)。
 
-再打开一个终端启动前端：
+另开终端，在项目根目录启动前端：
 
 ```powershell
-cd web
-npm run dev
+npm run dev --prefix web
 ```
 
-访问终端显示的地址，默认是 <http://localhost:5173>。Vite 会把 `/api` 请求代理到 `127.0.0.1:8080`。
+访问终端显示的地址，默认是 [http://localhost:5173](http://localhost:5173)。Vite 将 `/api` 请求代理至本机 8080 端口；若修改 API 端口，需要同步调整 `web/vite.config.ts` 的代理地址。在 API 终端按 `Ctrl+C` 会依次关闭 HTTP 服务与 SQLite 连接池。
 
-在 API 终端按 `Ctrl+C` 后，程序会先优雅关闭 HTTP 服务，再关闭 SQLite 连接池。
-
-## 环境变量
+### 环境变量
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `NOTE_DB_PATH` | `data/note.db` | SQLite 数据库文件位置 |
-| `HTTP_ADDR` | `127.0.0.1:8080` | HTTP 监听地址；端口设为 `0` 时由系统分配 |
-| `NOTE_WEB_DIR` | 空 | 可选的 React 构建产物目录，Electron 会自动设置 |
-| `NOTE_STOP_ON_STDIN_CLOSE` | 空 | 设为 `1` 时，父进程关闭 stdin 后停止服务；由 Electron 使用 |
+| `NOTE_DB_PATH` | `data/note.db` | 独立 API 的 SQLite 文件位置；Electron 自行设置 |
+| `HTTP_ADDR` | `127.0.0.1:8080` | HTTP 监听地址；Electron 使用 `127.0.0.1:0` 自动分配端口 |
+| `NOTE_JWT_SECRET` | 无 | 至少 32 字节；独立 API 必填，Electron 未配置时自动生成 |
+| `NOTE_REDIS_ADDR` | `127.0.0.1:6379` | Redis 地址 |
+| `NOTE_REDIS_PASSWORD` | 空 | Redis 密码 |
+| `NOTE_COOKIE_SECURE` | `false` | 设为 `true` 时刷新 Cookie 仅通过 HTTPS 发送 |
+| `NOTE_WEB_DIR` | 空 | 可选的 React 构建目录，Electron 自动设置 |
+| `NOTE_STOP_ON_STDIN_CLOSE` | 空 | 设为 `1` 时父进程关闭 stdin 后停止服务，Electron 自动设置 |
+| `NOTE_COS_BUCKET_URL` | 空 | COS 桶的 HTTPS 地址 |
+| `NOTE_COS_SECRET_ID` | 空 | COS 访问密钥 ID |
+| `NOTE_COS_SECRET_KEY` | 空 | COS 访问密钥 |
+| `NOTE_COS_PUBLIC_URL` | 桶地址 | 可选的头像 HTTPS 自定义域名或 CDN 地址 |
 
-示例：
-
-```powershell
-$env:NOTE_DB_PATH = "D:\NoteData\note.db"
-$env:HTTP_ADDR = "127.0.0.1:18080"
-go run ./cmd/api
-```
+头像配置示例桶地址：`https://bucket-appid.cos.ap-shanghai.myqcloud.com`。头像 URL 需要可公开读取，上传与删除由后端凭证执行；密钥只放后端环境变量，不应写入前端或提交到 Git。
 
 ## API 概览
 
-### 群组前端与云头像
+统一使用 `/api` 前缀，路由同时保留无前缀的别名。除健康检查和认证接口外，业务接口均要求 `Authorization: Bearer <access_token>`。
 
-主界面左侧选择群组，右侧日历仅加载该群组；新建窗口固定打开时的群组，并在请求中提交 `group_id`。
-侧边栏提供创建、加入、成员列表、邀请卡片／二维码、刷新邀请码、转让并退出、解散等入口。
-邀请仍使用后端现有的 **6 位**邀请码；本机运行时分享群组 ID＋邀请码文本，部署到公开网址后自动分享邀请链接。
-Todo 与 Event 详情按 `my_role` 展示编辑能力，创建者可以批量调整成员权限；Todo 完成状态仍属于当前用户。
-搜索沿用现有实现，暂未改为按选中群组搜索。默认背景为纯白 `#FFFFFF`，旧版默认黑色和浅灰配色会迁移，自定义配色保留；主日历不再显示额外的外层圆角边框。
-
-群组图标由群组 ID 固定选择颜色，配合群名首字；不需要上传图片。
-个人头像显示为圆形，未设置时显示占位图。点击侧边栏底部账号，在个人资料中更换或移除头像。
-
-后端把头像上传至腾讯云 COS，**不在本机保存图片文件**，SQLite 的 `users.avatar` 仅存公开 URL。
-上传限制：JPEG／PNG、文件不超过 5 MiB、宽高各不超过 4096 像素。后端验证实际图片内容，居中裁剪成方形，转换为 512×512 JPEG 并移除原始元数据。
-每次上传生成新对象路径；数据库提交后尽力删除旧对象，数据库失败则尽力删除新对象。
-
-| 变量 | 用途 |
-| --- | --- |
-| `NOTE_COS_BUCKET_URL` | 桶的 HTTPS 访问地址，例如 `https://bucket-appid.cos.ap-shanghai.myqcloud.com` |
-| `NOTE_COS_SECRET_ID` | 后端使用的腾讯云访问密钥 ID |
-| `NOTE_COS_SECRET_KEY` | 后端使用的腾讯云访问密钥 |
-| `NOTE_COS_PUBLIC_URL` | 可选：头像的 HTTPS 自定义域名／CDN 地址；默认使用桶地址 |
-
-这些变量全部未配置时服务正常启动，但上传入口禁用；部分配置会在启动时提示错误。
-后续开通 COS 时，为专用头像桶设置公开读取、禁止匿名写入；后台凭证只授权该桶 `avatars/` 路径的上传和删除操作。密钥仅放后端环境变量，不能放前端代码或提交到 Git。
-这里没有部署或创建真实云资源；自动化测试使用内存对象存储，真实 COS 的上传及公开访问需要配置后验证。
-
-头像 API 均要求 `Authorization: Bearer <access_token>`：
-
-| 方法 | 路径 | 请求 |
-| --- | --- | --- |
-| `GET` | `/api/users/me` | 返回本人公开资料及 `avatar_upload_enabled` |
-| `PUT` | `/api/users/me/avatar` | `multipart/form-data`，文件字段为 `avatar` |
-| `DELETE` | `/api/users/me/avatar` | 移除头像，恢复为空字符串 |
-
-Postman 上传时在 Body → form-data 中把 `avatar` 设为 File，选择图片；让 Postman 自动生成带 boundary 的 Content-Type。
-前端上传遇到 access 过期时会沿用 refresh 流程，重试时保持原 FormData。
+登录、刷新和退出额外要求 `X-Note-Request: 1`；刷新和退出使用 `note_refresh` Cookie。Access JWT 有效期为 60 分钟，刷新会话轮换后的有效期为 7 天；前端遇到 401 会尝试刷新并重试一次。详细说明见 [登录、自动恢复与退出](docs/authentication.md)，本地调试见 [认证调试指南](docs/debug-auth.md)。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/ping` | 健康检查 |
-| `POST` | `/api/todos` | 创建 Todo |
-| `GET` | `/api/todos` | 分页查询 Todo |
-| `GET` | `/api/todos/:id` | 查询单个 Todo |
-| `PATCH` | `/api/todos/:id` | 修改 Todo，使用 `version` 乐观锁 |
-| `DELETE` | `/api/todos/:id` | 删除 Todo |
-| `GET` | `/api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` | 查询时间范围内的日程实例 |
-| `PATCH` | `/api/todos/:id/occurrences/:date` | 修改某个 Todo 在某一天的完成状态 |
-| `POST` | `/api/events` | 创建具有开始、结束时间的 Event |
-| `GET` | `/api/events/:id` | 查询单个 Event |
-| `PATCH` | `/api/events/:id` | 修改 Event，使用 `version` 乐观锁 |
+| `POST` | `/api/auth/register` | 注册，提交 `{name, email, password}` |
+| `POST` | `/api/auth/login` | 登录，提交 `{account, password}` |
+| `POST` | `/api/auth/refresh` | 使用 Cookie 换取新 JWT |
+| `POST` | `/api/auth/logout` | 撤销当前刷新会话并清除 Cookie |
+| `GET / POST` | `/api/groups` | 查询自己的群组／创建群组 |
+| `GET` | `/api/groups/:groupID/members` | 查询群成员 |
+| `GET` | `/api/groups/:groupID/invite` | 获取当前邀请码，限群成员 |
+| `POST` | `/api/groups/:groupID/refresh` | 刷新邀请码，限群主 |
+| `POST` | `/api/groups/:groupID/join` | 当前按 `{code}` 直接入群，尚无审批 |
+| `POST` | `/api/groups/:groupID/quit` | 退出；群主需提交 `{target}` 转让 |
+| `POST` | `/api/groups/:groupID/dismiss` | 解散群组，限群主 |
+| `GET` | `/api/groups/:groupID/todos`、`/api/groups/:groupID/events` | 分页查询群内 Todo / Event |
+| `POST` | `/api/todos`、`/api/events` | 创建记录，需携带 `group_id` |
+| `GET / PATCH / DELETE` | `/api/todos/:id`、`/api/events/:id` | 查询、编辑、删除；编辑使用 `version` 乐观锁 |
+| `PATCH` | `/api/todos/:id/members`、`/api/events/:id/members` | 创建者批量修改成员权限 |
+| `PATCH` | `/api/todos/:id/occurrences/:date` | 修改自己的某次完成状态，提交 `{done}` |
+| `GET` | `/api/todos/:id/occurrences/:date/completions` | 查询当天完成成员 |
+| `GET` | `/api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&group_id=ID` | 查询日历实例；`group_id` 可选，日期范围为左闭右开 |
+| `GET` | `/api/search/todos`、`/api/search/events`、`/api/search/all` | 关键词搜索与分页；群组及成员可见范围过滤待补充 |
+| `GET` | `/api/users/me` | 本人公开资料与 `avatar_upload_enabled` |
+| `PUT / DELETE` | `/api/users/me/avatar` | 上传／移除头像；上传使用 multipart 文件字段 `avatar` |
 
-## 数据表
+成员权限请求为 `{user_ids, role}`，其中 `role=1` 表示 editor，`role=2` 表示 viewer。
 
-- `todos`：日程标题、内容、规则、时间、颜色、提醒方式和版本。
-- `todo_dates`：自定义重复模式选择的日期。
-- `todo_completions`：只记录已经完成的单次日程日期；未记录即视为未完成。
-- `events`：Event 的标题、内容、开始时间、结束时间、重复规则、颜色和版本。
-- `event_dates`：Event 使用自定义重复模式时选择的日期。
+## 检查与构建
 
-周期日程的出现时间由查询范围即时计算，数据库不会为未来每一天预先插入记录。
-
-## 构建 Windows 桌面程序
-
-在 `desktop` 目录执行：
-
-```powershell
-# 生成可直接运行的目录
-npm run pack
-
-# 生成安装版和便携版
-npm run dist
-```
-
-构建结果位于 `desktop/release/`。打包过程会自动重新构建 React 前端和 Go 后端。
-
-### 构建 macOS 桌面程序
-
-在 Mac 上安装前端及桌面依赖后，从 `desktop` 目录运行 `npm run dist:mac`，生成当前机器架构的 DMG 和 ZIP。Go 后端与 Electron 使用相同架构；不要在一次构建中混用架构。
-
-GitHub Actions 的 `macOS release` 工作流分别在 Intel 和 Apple Silicon 构建机上测试、打包并启动应用检查，全部通过后将四个文件追加到现有 `v0.5.0` Release，不替换 Windows 文件，也不移动版本标签。Mac 安装包源码对应工作流运行的提交，包含 v0.5.0 功能及 macOS 适配。
-
-## 检查
+在项目根目录执行：
 
 ```powershell
-# 项目根目录
 go test ./...
-
-cd web
-npm run build
-
-cd ..\desktop
-npm test
-npm run typecheck
-npm test
-node --check preload.cjs
+npm test --prefix web
+npm run build --prefix web
+npm test --prefix desktop
+npm run typecheck --prefix desktop
 ```
 
-### Desktop TypeScript
+认证测试使用 miniredis，不需要连接开发 Redis。桌面测试会先编译 `desktop/*.cts` 与 `desktop/scripts/*.cts` 到 `desktop/dist/`；Electron 从 `dist/main.cjs` 启动，preload 编译为独立 CommonJS 文件，前端与 preload 共用的接口声明位于 `desktop/contracts.cts`。
 
-`desktop/*.cts` 和 `desktop/scripts/*.cts` 是桌面端 TypeScript 源码，开启严格类型检查。
-`npm run build --prefix desktop` 编译到 `desktop/dist/`；Electron 从 `dist/main.cjs` 启动。
-沙箱 preload 仍编译为独立 CommonJS 文件，只在运行时加载 Electron 模块。
-`desktop/contracts.cts` 是前端与 preload 共用的接口声明。
-`start`、`pack`、`dist` 和 `dist:mac` 会先编译桌面源码，再构建前端与 Go 后端。
-`npm test --prefix desktop` 编译并运行桌面端测试。版本继续固定为 `0.5.0`。
+本地打包：
+
+```powershell
+# Windows：生成可直接运行的目录
+npm run pack --prefix desktop
+
+# Windows：生成安装版和便携版
+npm run dist --prefix desktop
+
+# macOS：在 Mac 上生成当前机器架构的 DMG 和 ZIP
+npm run dist:mac --prefix desktop
+```
+
+构建结果位于 `desktop/release/`；这些命令会重新构建桌面代码、前端与 Go 后端。macOS 构建时 Go 后端与 Electron 使用相同架构。
+
+当前打包版本号及现有 macOS 发布工作流仍固定为 `0.5.0`。新版本发布需等邀请入群与同意加群流程完成后再更新。

@@ -37,11 +37,28 @@ type PatchEventRequest struct {
 
 type EventDetailResponse struct {
 	model.Event
-	Creator *UserSummaryResponse `json:"creator"`
+	Creator     *UserSummaryResponse `json:"creator"`
+	MyRole      model.EventRole      `json:"my_role"`
+	MemberRoles []MemberRoleResponse `json:"member_roles"`
 }
 
-func newEventDetailResponse(item model.Event) EventDetailResponse {
-	response := EventDetailResponse{Event: item}
+func newEventDetailResponse(item model.Event, actorIDs ...uint) EventDetailResponse {
+	response := EventDetailResponse{Event: item, MyRole: model.EventViewer, MemberRoles: make([]MemberRoleResponse, 0)}
+	var actorID uint
+	if len(actorIDs) > 0 {
+		actorID = actorIDs[0]
+	}
+	if item.CreatorID == actorID {
+		response.MyRole = model.EventEditor
+	}
+	for _, member := range item.Members {
+		if member.UserID == actorID && actorID != item.CreatorID {
+			response.MyRole = member.Role
+		}
+		if actorID == item.CreatorID {
+			response.MemberRoles = append(response.MemberRoles, MemberRoleResponse{UserID: member.UserID, Role: string(member.Role)})
+		}
+	}
 	if item.Creator != nil {
 		response.Creator = &UserSummaryResponse{
 			ID: item.Creator.ID, Username: item.Creator.Username, Suffix: item.Creator.Suffix,

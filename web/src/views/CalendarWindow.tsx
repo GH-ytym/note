@@ -13,6 +13,8 @@ import CalendarGrid from "../components/CalendarGrid";
 import YearCalendar from "../components/YearCalendar";
 import CalendarTimeline from "../components/CalendarTimeline";
 import SearchBox from "../components/SearchBox";
+import GroupSidebar from "../components/GroupSidebar";
+import { useGroups } from "../groups";
 import DayAgendaPanel from "../components/DayAgendaPanel";
 import MiniDragHandle from "../components/MiniDragHandle";
 import { assignEventTracks } from "../lib/timeline";
@@ -41,6 +43,7 @@ export default function CalendarWindow({
   initialDate = TODAY_KEY,
 }: { initialView?: View; initialDate?: string } = {}) {
   const { settings } = useAppearance();
+  const { selected: selectedGroup, loading: groupsLoading } = useGroups();
   const [currentMonth, setCurrentMonth] = useState(() =>
     monthFromKey(initialDate),
   );
@@ -157,7 +160,7 @@ export default function CalendarWindow({
     loading: calendarLoading,
     error: calendarError,
     refresh: refreshCalendar,
-  } = useCalendarItems(range.from, range.to);
+  } = useCalendarItems(range.from, range.to, selectedGroup?.id ?? null);
   const events = useMemo(() => assignEventTracks(rawEvents, eventTracks.current), [rawEvents]);
 
   useEffect(() => {
@@ -223,6 +226,7 @@ export default function CalendarWindow({
   }
 
   async function retime(item: CalendarItem, edge: "start" | "end", minutes: number) {
+    if (item.canEdit === false) return;
     if (saving) return;
     setSaving(true);
     try {
@@ -236,15 +240,16 @@ export default function CalendarWindow({
   }
 
   function openUtility(role: "create" | "settings") {
+    if (role === "create" && !selectedGroup) { setNotice("请先创建、加入或选择一个群组"); return; }
     setSearchOpen(false);
     const request =
       role === "create"
-        ? window.noteDesktop?.openCreate?.({ date: selectedDate })
+        ? window.noteDesktop?.openCreate?.({ date: selectedDate, groupId: selectedGroup?.id })
         : window.noteDesktop?.openSettings?.();
     if (request) request.catch((error) => setNotice(error instanceof Error ? error.message : "操作失败"));
     else
       browserAuxiliary.current = window.open(
-        `/?window=${role}&date=${selectedDate}`,
+        `/?window=${role}&date=${selectedDate}&group_id=${selectedGroup?.id || ""}`,
         "note-secondary",
         "width=420,height=650",
       );
@@ -441,14 +446,16 @@ export default function CalendarWindow({
 
   return (
     <main
-      className={`calendar-shell multi-view-calendar ${mini ? "is-mini-clock" : ""} ${IS_DESKTOP ? "is-desktop-calendar" : ""} ${calendarPicking ? "is-calendar-picking is-desktop-date-picking" : ""}`}
+      className={`calendar-shell multi-view-calendar ${!mini ? "has-group-sidebar" : ""} ${mini ? "is-mini-clock" : ""} ${IS_DESKTOP ? "is-desktop-calendar" : ""} ${calendarPicking ? "is-calendar-picking is-desktop-date-picking" : ""}`}
       style={{
         "--selection-color": selectionColor,
         "--selection-soft": colorWithAlpha(selectionColor, 0.12),
         "--selection-ink": readableSelectionInk(selectionColor),
       }}
     >
+      {!mini && <GroupSidebar onSettings={() => openUtility("settings")} />}
       <div className="workspace-stack">
+        {!selectedGroup && !mini && <section className="workspace-empty" role="status"><h2>{groupsLoading ? "正在读取群组…" : "欢迎使用 Note"}</h2><p>{groupsLoading ? "稍等片刻" : "从左侧创建或加入群组，再安排日程与待办。"}</p></section>}
         <div className="month-stack">
           <section
             className={`calendar-panel view-${view} ${calendarLoading ? "is-loading" : ""}`}

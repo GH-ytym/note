@@ -11,6 +11,7 @@ export default function ContentEditorWindow() {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -31,8 +32,10 @@ export default function ContentEditorWindow() {
       return;
     }
     request
-      .then((state) => {
+      .then(async (state) => {
         if (!state) throw new Error("编辑会话已经结束");
+        const todo = await getTodo(state.todoId);
+        setCanEdit(todo.my_role === "editor");
         setEditorState(state);
         setContent(state.content || "");
       })
@@ -43,7 +46,7 @@ export default function ContentEditorWindow() {
   async function saveAndReturn(event: React.FormEvent) {
     event.preventDefault();
     const nextContent = content.trim();
-    if (!editorState) return;
+    if (!editorState || !canEdit) return;
 
     setSaving(true);
     setError("");
@@ -83,7 +86,7 @@ export default function ContentEditorWindow() {
           value={content}
           maxLength={500}
           autoFocus
-          disabled={saving}
+          disabled={saving || !canEdit}
           onChange={(event) => {
             setContent(event.target.value);
             setError("");
@@ -97,9 +100,9 @@ export default function ContentEditorWindow() {
         />
         <div className="focused-editor-status">
           <span className={error ? "is-error" : ""} role={error ? "alert" : undefined}>
-            {error || `${content.length} / 500`}
+            {error || (!canEdit ? "当前只有查看权限" : `${content.length} / 500`)}
           </span>
-          <button className="focused-editor-save" type="submit" disabled={saving}>
+          <button className="focused-editor-save" type="submit" disabled={saving || !canEdit}>
             <CheckCircle size={21} weight="fill" aria-hidden="true" />
             {saving ? "保存中" : "保存并返回"}
           </button>

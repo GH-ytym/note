@@ -1,5 +1,6 @@
 import type { DataChange } from "../desktop";
 import { validDate } from "../lib/calendar";
+import { publishDataChanged } from "../data-events";
 
 export function windowParams() {
   return new URLSearchParams(window.location.search);
@@ -14,7 +15,7 @@ export function closeCurrentWindow() {
 }
 
 export async function notifyDataChanged(payload: DataChange) {
-  await window.noteDesktop?.notifyDataChanged?.(payload);
+  await publishDataChanged(payload);
 }
 
 export function initialDateFromWindow() {

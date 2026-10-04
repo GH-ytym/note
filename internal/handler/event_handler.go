@@ -32,7 +32,7 @@ func (h *EventHandler) GetEvent(c *gin.Context) {
 	if eventResponseError(c, err) {
 		return
 	}
-	c.JSON(200, newEventDetailResponse(item))
+	c.JSON(200, newEventDetailResponse(item, userID))
 }
 
 func (h *EventHandler) PatchEvent(c *gin.Context) {
@@ -54,7 +54,7 @@ func (h *EventHandler) PatchEvent(c *gin.Context) {
 	if eventResponseError(c, err) {
 		return
 	}
-	c.JSON(200, newEventDetailResponse(item))
+	c.JSON(200, newEventDetailResponse(item, userID))
 }
 
 func eventResponseError(c *gin.Context, err error) bool {
@@ -120,7 +120,7 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 	if eventResponseError(c, err) {
 		return
 	}
-	c.JSON(http.StatusCreated, newEventDetailResponse(item))
+	c.JSON(http.StatusCreated, newEventDetailResponse(item, userID))
 }
 
 func eventIdentityError(userID uint) error {
@@ -147,7 +147,7 @@ func (h *EventHandler) ListEvents(c *gin.Context) {
 	}
 	items := make([]EventDetailResponse, 0, len(page.Items))
 	for _, item := range page.Items {
-		items = append(items, newEventDetailResponse(item))
+		items = append(items, newEventDetailResponse(item, userID))
 	}
 	c.JSON(http.StatusOK, gin.H{"data": items, "page": page.Page, "page_size": page.PageSize, "total": page.Total})
 }

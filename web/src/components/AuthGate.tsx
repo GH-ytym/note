@@ -3,6 +3,8 @@ import type { FormEvent, ReactNode } from "react";
 import { auth, APIError } from "../auth";
 import WindowFrame from "../windows/WindowFrame";
 import "../styles/auth.css";
+import { useProfile } from "../profile";
+import Avatar from "./Avatar";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
   const user = useSyncExternalStore(auth.subscribe, auth.snapshot);
@@ -71,6 +73,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
 
 export function AccountSettings() {
   const user = useSyncExternalStore(auth.subscribe, auth.snapshot);
+  const { profile, error: profileError, upload, remove, reload } = useProfile();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const logout = async () => {
@@ -80,8 +83,22 @@ export function AccountSettings() {
     finally { setBusy(false); }
   };
   return <div className="account-settings">
+    <h2>个人资料</h2>
+    <div className="account-avatar-controls"><Avatar url={profile?.avatar} name={profile?.nickname || user?.name || "我"} size={72} />
+      <label>更换头像<input type="file" accept="image/jpeg,image/png" disabled={busy || !profile?.avatar_upload_enabled} onChange={event => {
+        const file = event.target.files?.[0]; event.target.value = "";
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) { setError("请选择不超过 5MB 的图片"); return; }
+        setBusy(true); setError(""); void upload(file).catch(reason => setError(reason instanceof Error ? reason.message : "上传失败")).finally(() => setBusy(false));
+      }} /></label>
+      {profile?.avatar && <button disabled={busy} onClick={() => { setBusy(true); setError(""); void remove().catch(reason => setError(reason instanceof Error ? reason.message : "移除失败")).finally(() => setBusy(false)); }}>移除头像</button>}
+    </div>
+    <small>支持 JPEG、PNG，最大 5MB；上传后居中裁剪为方形，显示为圆形。</small>
+    {profile && !profile.avatar_upload_enabled && <p>暂时不能上传头像，请稍后再试。</p>}
+    {profileError && <p role="alert">{profileError} <button onClick={() => void reload()}>重试</button></p>}
     <p>当前账号：<strong>{user?.account}</strong></p>
-    <button disabled={busy} onClick={logout}>{busy ? "正在退出…" : "退出登录"}</button>
+    {busy && <p role="status">正在处理…</p>}
+    <button disabled={busy} onClick={logout}>退出登录</button>
     {error && <p role="alert" className="auth-error">{error}</p>}
   </div>;
 }

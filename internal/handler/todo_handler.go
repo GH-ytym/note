@@ -185,7 +185,7 @@ func (h *TodoHandler) GetTodo(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, newTodoDetailResponse(item))
+	c.JSON(http.StatusOK, newTodoDetailResponse(item, userID))
 }
 
 // PatchTodo updates a Todo with optimistic locking

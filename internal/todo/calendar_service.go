@@ -43,6 +43,15 @@ func (s *service) CalendarOccurrences(
 	occurrences := make([]CalendarOccurrence, 0)
 
 	for _, item := range items {
+		myRole := model.TodoViewer
+		if item.CreatorID == userID {
+			myRole = model.TodoEditor
+		}
+		for _, member := range item.Members {
+			if member.UserID == userID && item.CreatorID != userID {
+				myRole = member.Role
+			}
+		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -61,6 +70,7 @@ func (s *service) CalendarOccurrences(
 		// 仅一次的 Todo 不需要周期计算器。
 		if item.RepeatMode == model.RepeatOnce {
 			occurrences = append(occurrences, CalendarOccurrence{
+				MyRole: myRole, GroupID: item.GroupID, CreatorID: item.CreatorID,
 				TodoID:     item.ID,
 				Title:      item.Title,
 				Content:    content,
@@ -92,6 +102,7 @@ func (s *service) CalendarOccurrences(
 					continue
 				}
 				occurrences = append(occurrences, CalendarOccurrence{
+					MyRole: myRole, GroupID: item.GroupID, CreatorID: item.CreatorID,
 					TodoID:     item.ID,
 					Title:      item.Title,
 					Content:    content,
@@ -142,6 +153,7 @@ func (s *service) CalendarOccurrences(
 			}
 
 			occurrences = append(occurrences, CalendarOccurrence{
+				MyRole: myRole, GroupID: item.GroupID, CreatorID: item.CreatorID,
 				TodoID:     item.ID,
 				Title:      item.Title,
 				Content:    content,

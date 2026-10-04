@@ -177,6 +177,7 @@ func (r *gormRepository) CalendarCandidates(
 
 	err := r.db.
 		WithContext(ctx).
+		Preload("Members", "user_id = ?", userID).
 		Where(`EXISTS (SELECT 1 FROM group_members gm
 			WHERE gm.group_id = todos.group_id AND gm.user_id = ?)`, userID).
 		Preload(
@@ -382,7 +383,7 @@ func (r *gormRepository) ByIDForUser(ctx context.Context, id uint, userID uint) 
 		}
 
 		// 群内所有成员可见，不按 viewer/editor 筛选；确认资格后再加载详情。
-		if err := tx.
+		if err := tx.Preload("Members").
 			Preload("CustomDates").
 			Preload("Creator", func(db *gorm.DB) *gorm.DB {
 				// id 用于匹配 CreatorID；只加载创建者的展示资料。

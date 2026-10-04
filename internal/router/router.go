@@ -24,10 +24,19 @@ func NewWithWeb(
 	gh *handler.GroupHandler,
 	tm *auth.TokenManager,
 	webDir string,
+	profiles ...*handler.ProfileHandler,
 ) *gin.Engine {
 	r := gin.Default()
 	registerAPI(r, th, eh, ch, sh, ah, gh, tm)
 	registerAPI(r.Group("/api"), th, eh, ch, sh, ah, gh, tm)
+	if len(profiles) > 0 && profiles[0] != nil {
+		for _, prefix := range []string{"", "/api"} {
+			users := r.Group(prefix+"/users", middleware.RequireLogin(tm))
+			users.GET("/me", profiles[0].Me)
+			users.PUT("/me/avatar", profiles[0].UploadAvatar)
+			users.DELETE("/me/avatar", profiles[0].RemoveAvatar)
+		}
+	}
 
 	if webDir != "" {
 		indexPath := filepath.Join(webDir, "index.html")

@@ -258,6 +258,15 @@ func (s *service) ListInRange(
 
 	occurrences := make([]CalendarOccurrence, 0)
 	for _, item := range items {
+		myRole := model.EventViewer
+		if item.CreatorID == userID {
+			myRole = model.EventEditor
+		}
+		for _, member := range item.Members {
+			if member.UserID == userID && item.CreatorID != userID {
+				myRole = member.Role
+			}
+		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -281,6 +290,7 @@ func (s *service) ListInRange(
 			//和repo一样的相交规则
 			if startsat.Before(to) && endsat.After(from) {
 				occurrences = append(occurrences, CalendarOccurrence{
+					MyRole:     myRole,
 					EventID:    item.ID,
 					GroupID:    item.GroupID,
 					CreatorID:  item.CreatorID,
@@ -316,6 +326,7 @@ func (s *service) ListInRange(
 					continue
 				}
 				occurrences = append(occurrences, CalendarOccurrence{
+					MyRole:     myRole,
 					EventID:    item.ID,
 					GroupID:    item.GroupID,
 					CreatorID:  item.CreatorID,
@@ -356,6 +367,7 @@ func (s *service) ListInRange(
 				continue
 			}
 			occurrences = append(occurrences, CalendarOccurrence{
+				MyRole:    myRole,
 				EventID:   item.ID,
 				GroupID:   item.GroupID,
 				CreatorID: item.CreatorID,

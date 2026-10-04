@@ -86,6 +86,22 @@ func (h *CalendarHandler) GetCalendar(c *gin.Context) {
 		return
 	}
 
+	// 数据源已经检查当前群成员资格，这里只保留选中群组的实例。
+	if query.GroupID != 0 {
+		todos := result.Todos[:0]
+		for _, item := range result.Todos {
+			if item.GroupID == query.GroupID {
+				todos = append(todos, item)
+			}
+		}
+		events := result.Events[:0]
+		for _, item := range result.Events {
+			if item.GroupID == query.GroupID {
+				events = append(events, item)
+			}
+		}
+		result.Todos, result.Events = todos, events
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"data": result,
 		"from": query.From,

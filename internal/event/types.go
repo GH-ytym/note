@@ -42,6 +42,7 @@ type PatchCommand struct {
 }
 
 type CalendarOccurrence struct {
+	MyRole     model.EventRole  `json:"my_role"`
 	EventID    uint             `json:"event_id"`
 	GroupID    uint             `json:"group_id"`
 	CreatorID  uint             `json:"creator_id"`

@@ -11,6 +11,7 @@ export async function retimeItem(item: CalendarItem, edge: "start" | "end", minu
   const record = await (isEvent
     ? getEvent(id)
     : getTodo(id));
+  if (record.my_role === "viewer") throw new Error("你只有查看权限");
   if (record.version !== item.version)
     throw new Error("记录已更新，请刷新后再拖动");
   const field = isEvent && edge === "end" ? "ends_at" : "starts_at";

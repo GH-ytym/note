@@ -19,11 +19,33 @@ type UserSummaryResponse struct {
 // model.Todo.Creator 仍为 json:"-"，通过这里明确选择要返回的字段。
 type TodoDetailResponse struct {
 	model.Todo
-	Creator *UserSummaryResponse `json:"creator"`
+	Creator     *UserSummaryResponse `json:"creator"`
+	MyRole      model.TodoRole       `json:"my_role"`
+	MemberRoles []MemberRoleResponse `json:"member_roles"`
 }
 
-func newTodoDetailResponse(item model.Todo) TodoDetailResponse {
-	response := TodoDetailResponse{Todo: item}
+type MemberRoleResponse struct {
+	UserID uint   `json:"user_id"`
+	Role   string `json:"role"`
+}
+
+func newTodoDetailResponse(item model.Todo, actorIDs ...uint) TodoDetailResponse {
+	response := TodoDetailResponse{Todo: item, MyRole: model.TodoViewer, MemberRoles: make([]MemberRoleResponse, 0)}
+	var actorID uint
+	if len(actorIDs) > 0 {
+		actorID = actorIDs[0]
+	}
+	if item.CreatorID == actorID {
+		response.MyRole = model.TodoEditor
+	}
+	for _, member := range item.Members {
+		if member.UserID == actorID && actorID != item.CreatorID {
+			response.MyRole = member.Role
+		}
+		if actorID == item.CreatorID {
+			response.MemberRoles = append(response.MemberRoles, MemberRoleResponse{UserID: member.UserID, Role: string(member.Role)})
+		}
+	}
 	if item.Creator != nil {
 		response.Creator = &UserSummaryResponse{
 			ID:       item.Creator.ID,
@@ -79,8 +101,9 @@ type PatchTodoRequest struct {
 
 // DTO of calender query
 type CalendarQuery struct {
-	From string `form:"from" binding:"required"`
-	To   string `form:"to" binding:"required"`
+	GroupID uint   `form:"group_id" binding:"omitempty,min=1"`
+	From    string `form:"from" binding:"required"`
+	To      string `form:"to" binding:"required"`
 }
 
 // DTO of single occurence

@@ -4,6 +4,7 @@ import {
   appearanceTokens,
   contrast,
   normalizeSettings,
+  migrateStoredAppearance,
 } from "./appearance.ts";
 
 test("text and accent ink remain readable across light, dark, and medium backgrounds", () => {
@@ -18,6 +19,17 @@ test("text and accent ink remain readable across light, dark, and medium backgro
       assert.ok(contrast(tokens["--on-theme"], themeColor) >= 4.5);
     }
   }
+});
+
+test("old default changes to light once, while explicit dark settings remain available", () => {
+  const old = { backgroundColor: "#000000", themeColor: "#F3B51B", opacity: 95, defaultView: "week" };
+  assert.equal(migrateStoredAppearance(old).backgroundColor, "#FFFFFF");
+  assert.equal(migrateStoredAppearance(old).defaultView, "week");
+  assert.equal(migrateStoredAppearance({ ...old, appearanceVersion: 2 }).backgroundColor, "#000000");
+  assert.equal(migrateStoredAppearance({ ...old, themeColor: "#66AAFF" }).backgroundColor, "#000000");
+  const previousLight = { ...old, backgroundColor: "#F7F8FA", opacity: 100, appearanceVersion: 2 };
+  assert.equal(migrateStoredAppearance(previousLight).backgroundColor, "#FFFFFF");
+  assert.equal(migrateStoredAppearance({ ...previousLight, appearanceVersion: 3 }).backgroundColor, "#F7F8FA");
 });
 
 test("settings migration fills preferences and clamps clock tracks", () => {

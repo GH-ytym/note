@@ -74,3 +74,20 @@ test('late business responses after logout are discarded', async () => {
   finish(ok());
   await assert.rejects(request, { status: 401 });
 });
+
+test('avatar multipart upload preserves its boundary and body after access refresh', async () => {
+  const client = new AuthClient(async () => user('new'));
+  client.accept(user());
+  const body = new FormData();
+  body.append('avatar', new Blob(['test image'], { type: 'image/png' }), 'avatar.png');
+  let calls = 0;
+  await client.request('/users/me/avatar', { method: 'PUT', body }, async (_url, init) => {
+    calls++;
+    assert.equal(init.body, body);
+    assert.equal(init.headers.has('Content-Type'), false);
+    assert.equal(init.method, 'PUT');
+    assert.equal(init.headers.get('Authorization'), calls === 1 ? 'Bearer old' : 'Bearer new');
+    return calls === 1 ? new Response('{}', { status: 401 }) : ok();
+  });
+  assert.equal(calls, 2);
+});

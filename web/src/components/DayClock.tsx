@@ -43,7 +43,7 @@ export default function DayClock({
     );
   };
   function begin(event: React.PointerEvent, item: CalendarItem, edge: Edge) {
-    if (saving || event.button !== 0) return;
+    if (saving || item.canEdit === false || event.button !== 0) return;
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = {
@@ -92,7 +92,7 @@ export default function DayClock({
       event.preventDefault();
       onOpen(item);
     }
-    if (["ArrowLeft", "ArrowRight"].includes(event.key) && !saving) {
+    if (["ArrowLeft", "ArrowRight"].includes(event.key) && !saving && item.canEdit !== false) {
       event.preventDefault();
       void onRetime(item, edge, event.key === "ArrowLeft" ? -5 : 5);
     }

@@ -1,8 +1,12 @@
-import type { Todo, ScheduleForm, CompletedUser } from "../types";
+import type { TodoDetail, ScheduleForm, CompletedUser } from "../types";
 import { useEffect, useState } from "react";
 import { ArrowsOutSimple, Trash } from "@phosphor-icons/react";
 import { deleteTodo, getOccurrenceCompletions, getTodo, patchOccurrence, patchTodo } from "../api";
 import { auth } from "../auth";
+import { onDataChanged } from "../data-events";
+import Avatar from "../components/Avatar";
+import SchedulePermissions from "../components/SchedulePermissions";
+import { useGroups } from "../groups";
 import { ColorField, SelectField, TimeField } from "../components/FormFields";
 import {
   REMINDER_LABELS,
@@ -22,10 +26,11 @@ import useLinkedDatePicker from "../windows/useLinkedDatePicker";
 import { closeCurrentWindow, notifyDataChanged, windowParams } from "../windows/window-utils";
 
 export default function DetailView({ todoId, date, onDone }: { todoId?: number; date?: string; onDone?: () => void }) {
+  const { groups } = useGroups();
   const params = windowParams();
   const todoID = Number(todoId ?? params.get("todo_id"));
   const occurrenceDate = validDate(date ?? params.get("date"));
-  const [record, setRecord] = useState<{todo: Todo; occurrenceDone: boolean; users: CompletedUser[]} | null>(null);
+  const [record, setRecord] = useState<{todo: TodoDetail; occurrenceDone: boolean; users: CompletedUser[]} | null>(null);
   const [form, setForm] = useState<ScheduleForm | null>(null);
   const [customDates, setCustomDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +41,8 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
   const [error, setError] = useState("");
   const datePicker = useLinkedDatePicker({ setForm, setCustomDates, setError });
   const finish = onDone || closeCurrentWindow;
+  const canEdit = record?.todo.my_role === "editor";
+  const creator = record?.todo.creator_id === auth.user?.id;
 
   async function load() {
     const [todo, completions] = await Promise.all([
@@ -78,6 +85,23 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
     const timer = window.setTimeout(() => setDeleteConfirming(false), 3500);
     return () => window.clearTimeout(timer);
   }, [deleteConfirming]);
+
+  useEffect(() => {
+    let active = true, generation = 0;
+    const remove = onDataChanged(change => {
+      if (!["permissions", "groups", "profile"].includes(change.type)) return;
+      const current = ++generation;
+      void getTodo(todoID).then(todo => {
+        // 不覆盖未保存表单及其 version；并发编辑仍由后端乐观锁检测。
+        if (active && generation === current) setRecord(record => record ? { ...record, todo: { ...record.todo, my_role: todo.my_role, member_roles: todo.member_roles, creator: todo.creator } } : record);
+      }).catch(reason => {
+        if (!active || generation !== current) return;
+        setError(reason instanceof Error ? reason.message : "读取权限失败");
+        if (reason?.status === 403 || reason?.status === 404) setRecord(null);
+      });
+    });
+    return () => { active = false; remove(); };
+  }, [todoID]);
 
   useEffect(() => window.noteDesktop?.onContentEditorSaved?.((result) => {
     if (Number(result?.todoId) !== todoID) return;
@@ -131,7 +155,7 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
   }
 
   function openContentEditor() {
-    if (!record || !form) return;
+    if (!record || !form || !canEdit) return;
     if (window.noteDesktop?.openContentEditor) {
       window.noteDesktop.openContentEditor({
         todoId: todoID,
@@ -171,8 +195,8 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
   }
 
   async function submit(event: React.FormEvent) {
-    if (!form || !record) return;
     event.preventDefault();
+    if (!form || !record || !canEdit) return;
     const title = form.title.trim();
     const content = form.content.trim();
     if (!title) {
@@ -210,6 +234,7 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
   }
 
   async function removeTodo() {
+    if (!creator) return;
     if (!deleteConfirming) {
       setDeleteConfirming(true);
       return;
@@ -243,6 +268,7 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
           "--detail-soft": colorWithAlpha(form.color, 0.14),
         }}
       >
+        <div className="group-context"><span>{groups.find(group => group.id === record.todo.group_id)?.name || "群组"}</span>{record.todo.creator && <><Avatar url={record.todo.creator.avatar} name={record.todo.creator.nickname || record.todo.creator.username} size={24} /><span>{record.todo.creator.nickname || record.todo.creator.username} 创建</span></>}<small>{canEdit ? "可编辑" : "只读"}</small></div>
         <div className="completion-controls" aria-label="完成状态">
           <label className="completion-toggle">
             <input
@@ -259,7 +285,8 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
           {record.users.length === 0 ? <p>还没有人完成</p> : (
             <ul>
               {record.users.map(user => (
-                <li key={user.id}>
+                <li key={user.id} className="completion-user">
+                  <Avatar url={user.avatar} name={user.nickname || user.username} size={26} />
                   {user.nickname || user.username || `用户 ${user.id}`} · {new Date(user.completed_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
                 </li>
               ))}
@@ -267,6 +294,7 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
           )}
         </section>
 
+        <fieldset className="schedule-fields" disabled={!canEdit || saving}>
         <label>
           <span>标题</span>
           <input value={form.title} maxLength={50} required autoFocus onChange={(event) => setField("title", event.target.value)} />
@@ -306,14 +334,16 @@ export default function DetailView({ todoId, date, onDone }: { todoId?: number; 
         <SelectField label="提醒" value={form.reminder} options={Object.keys(REMINDER_VALUES)} onChange={(value) => setField("reminder", value)} />
         <ColorField value={form.color} onChange={(value) => setField("color", value)} />
 
+        </fieldset>
+        {creator && <SchedulePermissions kind="todo" id={todoID} groupID={record.todo.group_id} creatorID={record.todo.creator_id} roles={record.todo.member_roles} onChanged={async () => { const todo = await getTodo(todoID); setRecord(current => current ? { ...current, todo: { ...current.todo, my_role: todo.my_role, member_roles: todo.member_roles } } : current); }} />}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className={`delete-button ${deleteConfirming ? "is-confirming" : ""}`} type="button" onClick={removeTodo} disabled={saving || deleting || Boolean(completionSaving)}>
+        {creator && <button className={`delete-button ${deleteConfirming ? "is-confirming" : ""}`} type="button" onClick={removeTodo} disabled={saving || deleting || Boolean(completionSaving)}>
           <Trash size={16} />
           {deleting ? "删除中" : deleteConfirming ? "再次点击确认删除" : "删除日程"}
-        </button>
+        </button>}
         <footer className="side-footer utility-footer">
           <button className="cancel-button" type="button" onClick={finish}>关闭</button>
-          <button className="save-button" type="submit" disabled={saving || deleting || Boolean(completionSaving)}>{saving ? "保存中" : "保存"}</button>
+          {canEdit && <button className="save-button" type="submit" disabled={saving || deleting || Boolean(completionSaving)}>{saving ? "保存中" : "保存"}</button>}
         </footer>
       </form>
     </WindowFrame>

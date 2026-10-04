@@ -18,6 +18,7 @@ import {
   DEFAULT_PREFERENCES,
   DEFAULT_SETTINGS,
   normalizeSettings,
+  migrateStoredAppearance,
   appearanceTokens,
   foreground,
   luminance,
@@ -43,9 +44,9 @@ function applyAppearance(settings: Settings) {
 function readStoredAppearance() {
   try {
     const stored = window.localStorage.getItem(APPEARANCE_STORAGE_KEY);
-    return stored
-      ? normalizeSettings(JSON.parse(stored))
-      : DEFAULT_SETTINGS;
+    const next = stored ? migrateStoredAppearance(JSON.parse(stored)) : DEFAULT_SETTINGS;
+    storeAppearance(next);
+    return next;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -55,7 +56,7 @@ function storeAppearance(settings: Settings) {
   try {
     window.localStorage.setItem(
       APPEARANCE_STORAGE_KEY,
-      JSON.stringify(settings),
+      JSON.stringify({ ...settings, appearanceVersion: 3 }),
     );
   } catch {
     // Electron 主进程仍会持久化；浏览器禁用存储时只保留本次会话。

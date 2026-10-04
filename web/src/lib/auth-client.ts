@@ -82,7 +82,7 @@ export class AuthClient {
     const token = user.access_token;
     const send = (accessToken: string) => {
       const headers = new Headers(options.headers);
-      if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+      if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
       headers.set("Authorization", `Bearer ${accessToken}`);
       return fetcher(`/api${path}`, { ...options, headers, credentials: "include" });
     };

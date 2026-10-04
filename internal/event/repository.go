@@ -40,7 +40,7 @@ func (r *gormRepository) Get(ctx context.Context, id, userID uint) (model.Event,
 		if _, err := loadEventForUser(tx, id, userID); err != nil {
 			return err
 		}
-		return eventDetails(tx).First(&item, id).Error
+		return eventDetails(tx).Preload("Members").First(&item, id).Error
 	}, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return model.Event{}, err
@@ -155,7 +155,7 @@ func (r *gormRepository) ListInRange(
 	}
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return tx.
+		return tx.Preload("Members", "user_id = ?", userID).
 			Where(`EXISTS (SELECT 1 FROM group_members gm
 			WHERE gm.group_id = events.group_id AND gm.user_id = ?)`, userID).
 			Preload("CustomDates").

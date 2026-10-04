@@ -4,6 +4,8 @@ import App from "./views/CalendarWindow";
 import StandaloneWindow from "./windows/StandaloneWindow";
 import { AppearanceProvider } from "./appearance";
 import AuthGate from "./components/AuthGate";
+import { GroupsProvider } from "./groups";
+import { ProfileProvider } from "./profile";
 import "./styles.css";
 
 const searchParams = new URLSearchParams(window.location.search);
@@ -25,7 +27,7 @@ const content = ["create", "detail", "reminder", "day", "settings", "content-edi
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppearanceProvider>
-      <AuthGate>{content}</AuthGate>
+      <AuthGate><ProfileProvider><GroupsProvider>{content}</GroupsProvider></ProfileProvider></AuthGate>
     </AppearanceProvider>
   </StrictMode>,
 );

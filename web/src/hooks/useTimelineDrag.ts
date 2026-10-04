@@ -34,7 +34,7 @@ export default function useTimelineDrag(horizontal: boolean, saving: boolean,
   }
   const interaction = (item: CalendarItem) => ({
     onPointerDown(e: React.PointerEvent<HTMLElement>) {
-      if (saving || e.button !== 0) return;
+      if (saving || item.canEdit === false || e.button !== 0) return;
       const scroll = e.currentTarget.closest<HTMLElement>(".calendar-timeline");
       if (!scroll) return;
       const handle = (e.target as Element).closest<HTMLElement>("[data-time-edge]");
@@ -54,7 +54,7 @@ export default function useTimelineDrag(horizontal: boolean, saving: boolean,
     onClick() { if (!suppress.current) onOpen(item); suppress.current = false; },
     onKeyDown(e: React.KeyboardEvent) {
       if (e.key === "Escape") { e.preventDefault(); finish(true); }
-      else if (!saving && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+      else if (!saving && item.canEdit !== false && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
         e.preventDefault();
         void onRetime(item, e.shiftKey && item.kind === "event" ? "end" : "start", ["ArrowUp", "ArrowLeft"].includes(e.key) ? -5 : 5);
       }

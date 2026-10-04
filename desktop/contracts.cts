@@ -44,7 +44,7 @@ export interface NoteDesktop {
   onAuxiliaryOpened: Listener<{ role: string }>;
   toggleCalendar(): Promise<{ open: boolean }>;
   getCalendarVisibility(): Promise<{ open: boolean }>;
-  openCreate(payload: { date: string }): Promise<WindowResult>;
+  openCreate(payload: { date: string; groupId?: number }): Promise<WindowResult>;
   openDetail(payload: { todoId?: number; eventId?: number; date: string }): Promise<WindowResult>;
   openSettings(): Promise<WindowResult>;
   openContentEditor(payload: EditorState): Promise<WindowResult>;

@@ -50,9 +50,9 @@ const WINDOW_PROFILES = {
   "content-editor": { width: 760, height: 560, minWidth: 500, minHeight: 360 },
 };
 const DEFAULT_APPEARANCE: Readonly<Settings> = Object.freeze({
-  backgroundColor: "#000000",
+  backgroundColor: "#FFFFFF",
   themeColor: "#F3B51B",
-  opacity: 95,
+  opacity: 100,
   defaultView: "month",
   dayViewMode: "tags",
   miniViewMode: "tags",
@@ -324,7 +324,7 @@ function registerIPC() {
 
   ipcMain.handle("note:open-create", (event, payload: Input = {}) => {
     assertTrustedSender(event);
-    return windowResult(createCreateWindow(normalizeDate(payload.date)));
+    return windowResult(createCreateWindow(normalizeDate(payload.date), payload.groupId === undefined ? undefined : normalizeTodoID(payload.groupId)));
   });
 
   ipcMain.handle("note:open-detail", (event, payload: Input = {}) => {
@@ -714,7 +714,14 @@ function appearanceSettingsPath() {
 
 function loadAppearanceSettings() {
   try {
-    return normalizeAppearance(JSON.parse(fs.readFileSync(appearanceSettingsPath(), "utf8")));
+    const stored = JSON.parse(fs.readFileSync(appearanceSettingsPath(), "utf8"));
+    const background = String(stored.backgroundColor).toUpperCase();
+    const defaultTheme = String(stored.themeColor).toUpperCase() === "#F3B51B";
+    const legacyDark = stored.appearanceVersion !== 2 && stored.appearanceVersion !== 3 && background === "#000000" && Number(stored.opacity) === 95;
+    const legacyLight = stored.appearanceVersion !== 3 && background === "#F7F8FA" && Number(stored.opacity) === 100;
+    const next = normalizeAppearance(defaultTheme && (legacyDark || legacyLight) ? { ...stored, backgroundColor: "#FFFFFF", opacity: 100 } : stored);
+    persistAppearanceSettings(next);
+    return next;
   } catch {
     return { ...DEFAULT_APPEARANCE };
   }
@@ -723,7 +730,7 @@ function loadAppearanceSettings() {
 function persistAppearanceSettings(settings: Settings) {
   const settingsPath = appearanceSettingsPath();
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+  fs.writeFileSync(settingsPath, `${JSON.stringify({ ...settings, appearanceVersion: 3 }, null, 2)}\n`, "utf8");
 }
 
 function applyAppearanceToWindow(target: MaybeWindow) {
@@ -876,8 +883,8 @@ function toggleCalendarWindow() {
   return { ...windowResult(showCalendarWindow({ focus: true })), open: true };
 }
 
-function createCreateWindow(date: string) {
-  return createWindow({ key: "create", role: "create", title: "新建 · Note", query: { date } });
+function createCreateWindow(date: string, groupId?: number) {
+  return createWindow({ key: "create", role: "create", title: "新建 · Note", query: { date, ...(groupId ? { group_id: groupId } : {}) } });
 }
 
 function createDetailWindow(todoID: number, date: string) {

@@ -8,9 +8,9 @@ export interface Preferences {
 }
 export type Settings = Appearance & Preferences;
 export const DEFAULT_APPEARANCE: Readonly<Appearance> = Object.freeze({
-  backgroundColor: "#000000",
+  backgroundColor: "#FFFFFF",
   themeColor: "#F3B51B",
-  opacity: 95,
+  opacity: 100,
 });
 
 export const DEFAULT_PREFERENCES: Readonly<Preferences> = Object.freeze({
@@ -94,6 +94,16 @@ export function normalizeSettings(value: Record<string, unknown> = {}): Settings
       ? Math.max(3, Math.min(10, Math.round(clockTracks)))
       : DEFAULT_PREFERENCES.clockTracks,
   };
+}
+
+// 只在读取旧设置时迁移旧版默认配色；用户之后仍可主动选择深色。
+export function migrateStoredAppearance(value: Record<string, unknown>): Settings {
+  const background = String(value.backgroundColor).toUpperCase();
+  const defaultTheme = String(value.themeColor).toUpperCase() === "#F3B51B";
+  const legacyDark = value.appearanceVersion !== 2 && value.appearanceVersion !== 3 && background === "#000000" && Number(value.opacity) === 95;
+  const legacyLight = value.appearanceVersion !== 3 && background === "#F7F8FA" && Number(value.opacity) === 100;
+  const legacyDefault = defaultTheme && (legacyDark || legacyLight);
+  return normalizeSettings(legacyDefault ? { ...value, ...DEFAULT_APPEARANCE } : value);
 }
 
 export function hexChannels(hex: string) {

@@ -267,6 +267,43 @@ go run ./cmd/api
 
 ## API 概览
 
+### 群组前端与云头像
+
+主界面左侧选择群组，右侧日历仅加载该群组；新建窗口固定打开时的群组，并在请求中提交 `group_id`。
+侧边栏提供创建、加入、成员列表、邀请卡片／二维码、刷新邀请码、转让并退出、解散等入口。
+邀请仍使用后端现有的 **6 位**邀请码；本机运行时分享群组 ID＋邀请码文本，部署到公开网址后自动分享邀请链接。
+Todo 与 Event 详情按 `my_role` 展示编辑能力，创建者可以批量调整成员权限；Todo 完成状态仍属于当前用户。
+搜索沿用现有实现，暂未改为按选中群组搜索。默认背景为纯白 `#FFFFFF`，旧版默认黑色和浅灰配色会迁移，自定义配色保留；主日历不再显示额外的外层圆角边框。
+
+群组图标由群组 ID 固定选择颜色，配合群名首字；不需要上传图片。
+个人头像显示为圆形，未设置时显示占位图。点击侧边栏底部账号，在个人资料中更换或移除头像。
+
+后端把头像上传至腾讯云 COS，**不在本机保存图片文件**，SQLite 的 `users.avatar` 仅存公开 URL。
+上传限制：JPEG／PNG、文件不超过 5 MiB、宽高各不超过 4096 像素。后端验证实际图片内容，居中裁剪成方形，转换为 512×512 JPEG 并移除原始元数据。
+每次上传生成新对象路径；数据库提交后尽力删除旧对象，数据库失败则尽力删除新对象。
+
+| 变量 | 用途 |
+| --- | --- |
+| `NOTE_COS_BUCKET_URL` | 桶的 HTTPS 访问地址，例如 `https://bucket-appid.cos.ap-shanghai.myqcloud.com` |
+| `NOTE_COS_SECRET_ID` | 后端使用的腾讯云访问密钥 ID |
+| `NOTE_COS_SECRET_KEY` | 后端使用的腾讯云访问密钥 |
+| `NOTE_COS_PUBLIC_URL` | 可选：头像的 HTTPS 自定义域名／CDN 地址；默认使用桶地址 |
+
+这些变量全部未配置时服务正常启动，但上传入口禁用；部分配置会在启动时提示错误。
+后续开通 COS 时，为专用头像桶设置公开读取、禁止匿名写入；后台凭证只授权该桶 `avatars/` 路径的上传和删除操作。密钥仅放后端环境变量，不能放前端代码或提交到 Git。
+这里没有部署或创建真实云资源；自动化测试使用内存对象存储，真实 COS 的上传及公开访问需要配置后验证。
+
+头像 API 均要求 `Authorization: Bearer <access_token>`：
+
+| 方法 | 路径 | 请求 |
+| --- | --- | --- |
+| `GET` | `/api/users/me` | 返回本人公开资料及 `avatar_upload_enabled` |
+| `PUT` | `/api/users/me/avatar` | `multipart/form-data`，文件字段为 `avatar` |
+| `DELETE` | `/api/users/me/avatar` | 移除头像，恢复为空字符串 |
+
+Postman 上传时在 Body → form-data 中把 `avatar` 设为 File，选择图片；让 Postman 自动生成带 boundary 的 Content-Type。
+前端上传遇到 access 过期时会沿用 refresh 流程，重试时保持原 FormData。
+
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/ping` | 健康检查 |

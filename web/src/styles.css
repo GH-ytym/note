@@ -7,20 +7,20 @@
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --page: #000000;
-  --panel: #0a0a0a;
-  --cell: #0e0e0e;
-  --cell-hover: #141414;
-  --cell-disabled: #070707;
-  --line: rgb(225 229 221 / 12%);
-  --text: #f2f4ef;
-  --muted: #8b918b;
+  --page: #ffffff;
+  --panel: #ffffff;
+  --cell: #ffffff;
+  --cell-hover: #f0f2f5;
+  --cell-disabled: #ffffff;
+  --line: rgb(23 26 24 / 18%);
+  --text: #171a18;
+  --muted: #606660;
   --dim: #4f554f;
   --yellow: #f3b51b;
   --theme-rgb: 243 181 27;
   --on-theme: #171100;
-  --accent-ink: #f3b51b;
-  --danger: #ff8a80;
+  --accent-ink: #7f5b00;
+  --danger: #b42318;
   --side-width: min(390px, 34vw);
 }
 

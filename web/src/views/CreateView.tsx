@@ -1,6 +1,8 @@
 import type { ScheduleForm } from "../types";
 import { useEffect, useState } from "react";
 import { createEvent, createTodo } from "../api";
+import { useGroups } from "../groups";
+import { GroupIcon } from "../components/GroupSidebar";
 import { ColorField, SelectField, TimeField } from "../components/FormFields";
 import {
   REMINDER_VALUES,
@@ -15,6 +17,10 @@ import useLinkedDatePicker from "../windows/useLinkedDatePicker";
 import { closeCurrentWindow, notifyDataChanged } from "../windows/window-utils";
 
 export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initialDate?: string; onDone?: () => void }) {
+	const { groups, selected, loading: groupsLoading } = useGroups();
+  const [groupID, setGroupID] = useState(Number(new URLSearchParams(window.location.search).get("group_id")) || 0);
+  useEffect(() => { if (!groupID && selected) setGroupID(selected.id); }, [groupID, selected]);
+  const group = groups.find(item => item.id === groupID);
 	const [kind, setKind] = useState("todo");
 	const [form, setForm] = useState({
     title: "",
@@ -61,6 +67,7 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initia
 
 	async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!group) { setError("请先进入一个群组再创建"); return; }
     const title = form.title.trim();
     const content = form.content.trim();
     if (!title) {
@@ -79,6 +86,7 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initia
 		const dates = [...customDates].sort();
 		const startsOn = form.repeat === "自定义" ? dates[0] : form.date;
 		const common = {
+			group_id: group.id,
 			title,
 			content,
 			starts_at: dateTimeAt(startsOn, form.time),
@@ -115,6 +123,7 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initia
 
   return (
     <WindowFrame title="新建" className="is-form-window" onBack={onDone}>
+		<div className="group-context">{group ? <><GroupIcon group={group} /><strong>{group.name}</strong><span>创建在此群组中</span></> : <span>{groupsLoading ? "正在读取群组…" : "请先在主界面创建或加入群组"}</span>}</div>
 		<form className="side-form utility-form" onSubmit={submit}>
 			<div className="item-kind-switch" role="group" aria-label="类型">
 				<button className={kind === "todo" ? "is-active" : ""} type="button" onClick={() => setKind("todo")}>待办</button>
@@ -186,7 +195,7 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initia
         {error && <p className="form-error" role="alert">{error}</p>}
         <footer className="side-footer utility-footer">
           <button className="cancel-button" type="button" onClick={finish}>取消</button>
-          <button className="save-button" type="submit" disabled={saving}>{saving ? "创建中" : "创建"}</button>
+          <button className="save-button" type="submit" disabled={saving || !group}>{saving ? "创建中" : "创建"}</button>
         </footer>
       </form>
     </WindowFrame>

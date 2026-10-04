@@ -27,15 +27,26 @@ export interface TodoDetail extends Todo {
   group_id: number;
   creator_id: number;
   creator: UserSummary | null;
+  my_role: MemberRole;
+  member_roles: MemberPermission[];
 }
+export type MemberRole = "viewer" | "editor";
+export interface MemberPermission { user_id: number; role: MemberRole }
+export interface Group { id: number; name: string; owner_id: number; created_at: string }
+export interface GroupMember extends UserSummary { joined_at: string }
+export interface Profile extends UserSummary { avatar_upload_enabled: boolean }
 export interface CompletedUser extends UserSummary { completed_at: string }
 export interface OccurrenceCompletions {
   todo_id: number;
   completed_count: number;
   users: CompletedUser[];
 }
-export interface CalendarEvent extends ScheduleRecord { ends_at: string }
+export interface CalendarEvent extends ScheduleRecord {
+  ends_at: string; group_id: number; creator_id: number; creator: UserSummary | null;
+  my_role: MemberRole; member_roles: MemberPermission[];
+}
 export interface CreateSchedule {
+  group_id: number;
   title: string;
   starts_at: string;
   repeat_mode: RepeatMode;
@@ -45,8 +56,8 @@ export interface CreateSchedule {
 }
 export interface CreateTodo extends CreateSchedule { notify_mode?: NotifyMode }
 export interface CreateEvent extends CreateSchedule { ends_at: string }
-export type TodoChanges = Partial<CreateTodo> & { version: number };
-export type EventChanges = Partial<CreateEvent> & { version: number };
+export type TodoChanges = Partial<Omit<CreateTodo, "group_id">> & { version: number };
+export type EventChanges = Partial<Pick<CreateEvent, "title" | "content" | "starts_at" | "ends_at">> & { version: number };
 
 export interface SearchItem {
   kind: "todo" | "event";
@@ -62,6 +73,7 @@ export interface SearchItem {
 export interface SearchPage { items: SearchItem[]; total: number; page: number; page_size: number }
 
 interface Occurrence {
+  group_id: number; creator_id: number; my_role: MemberRole;
   title: string; content: string; color: string; starts_at: string;
   repeat_mode: RepeatMode; version: number;
 }
@@ -76,6 +88,7 @@ export interface CalendarResponse {
 }
 
 export interface CalendarItem {
+  groupId?: number; creatorId?: number; canEdit?: boolean;
   track?: number;
   id: string; kind: "todo" | "event"; title: string; content: string; color: string;
   date: string; time: string; version: number; repeat: string;

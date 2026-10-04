@@ -13,6 +13,7 @@ import (
 	"note/internal/calendar"
 	"note/internal/event"
 	"note/internal/group"
+	"note/internal/profile"
 	"note/internal/search"
 	"os"
 	"os/signal"
@@ -121,6 +122,11 @@ func Run() (runErr error) {
 	}
 
 	refreshStore := auth.NewRefreshStore(redisClient)
+	avatarStore, err := profile.NewCOSStoreFromEnv()
+	if err != nil {
+		return fmt.Errorf("initialize avatar storage: %w", err)
+	}
+	profileHandler := handler.NewProfileHandler(profile.NewService(profile.NewRepository(db), avatarStore))
 
 	authRepository := auth.NewGORMRepository(db)
 	authService := auth.NewService(authRepository)
@@ -178,6 +184,7 @@ func Run() (runErr error) {
 			groupHandler,
 			tokenManager,
 			os.Getenv("NOTE_WEB_DIR"),
+			profileHandler,
 		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

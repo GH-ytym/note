@@ -62,6 +62,7 @@ export type EventChanges = Partial<Pick<CreateEvent, "title" | "content" | "star
 export interface SearchItem {
   kind: "todo" | "event";
   id: number;
+  group_id: number;
   title: string;
   content: string | null;
   color: string;

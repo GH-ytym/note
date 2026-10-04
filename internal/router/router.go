@@ -82,9 +82,6 @@ func registerAPI(
 	protected.Use(middleware.RequireLogin(tm))
 
 	protected.GET("/calendar", ch.GetCalendar)
-	protected.GET("/search/todos", sh.SearchTodos)
-	protected.GET("/search/events", sh.SearchEvents)
-	protected.GET("/search/all", sh.SearchAll)
 
 	groups := protected.Group("/groups")
 	{
@@ -93,6 +90,10 @@ func registerAPI(
 		groups.GET("/:groupID/members", gh.ListMembers)
 		groups.GET("/:groupID/todos", th.ListTodos)
 		groups.GET("/:groupID/events", eh.ListEvents)
+		// 群组搜索沿用 RequireLogin，并在仓库内校验当前成员资格。
+		groups.GET("/:groupID/search/todos", sh.SearchTodos)
+		groups.GET("/:groupID/search/events", sh.SearchEvents)
+		groups.GET("/:groupID/search/all", sh.SearchAll)
 		//群成员获取邀请码，只有群主可以刷新。
 		groups.GET("/:groupID/invite", gh.GetInviteCode)
 		groups.POST("/:groupID/refresh", gh.RefreshInviteCode)

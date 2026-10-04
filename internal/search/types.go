@@ -6,6 +6,8 @@ import (
 
 // ListQuery 是业务查询条件，不依赖 HTTP 参数绑定。
 type ListQuery struct {
+	GroupID  uint
+	UserID   uint
 	Keyword  string
 	Page     int
 	PageSize int
@@ -16,6 +18,7 @@ type ListQuery struct {
 type Item struct {
 	Kind      string     `json:"kind"`
 	ID        uint       `json:"id"`
+	GroupID   uint       `json:"group_id"`
 	Title     string     `json:"title"`
 	Content   *string    `json:"content"`
 	Color     string     `json:"color"`

@@ -27,7 +27,13 @@ func (s *service) SearchAll(ctx context.Context, q ListQuery) (Result, error) {
 }
 
 // Preserve the repository's score and page; never paginate a second time.
-func searchPage(ctx context.Context, q ListQuery, run func(context.Context, string, int, int) ([]Item, int64, error)) (Result, error) {
+func searchPage(ctx context.Context, q ListQuery, run func(context.Context, ListQuery) ([]Item, int64, error)) (Result, error) {
+	if q.UserID == 0 {
+		return Result{}, apperrors.ErrGroupUnauthenticated
+	}
+	if q.GroupID == 0 {
+		return Result{}, apperrors.ErrInvalidSearchQuery
+	}
 	if q.Page == 0 {
 		q.Page = 1
 	}
@@ -38,7 +44,7 @@ func searchPage(ctx context.Context, q ListQuery, run func(context.Context, stri
 	if q.Keyword == "" || q.Page < 1 || q.PageSize < 1 || q.PageSize > 100 || q.Page-1 > int(^uint(0)>>1)/q.PageSize {
 		return Result{}, apperrors.ErrInvalidSearchQuery
 	}
-	items, total, err := run(ctx, q.Keyword, q.Page, q.PageSize)
+	items, total, err := run(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}

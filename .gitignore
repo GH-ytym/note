@@ -59,6 +59,7 @@ Thumbs.db
 Desktop.ini
 
 # Temporary and backup files
+/internal/_backup/
 *.tmp
 *.temp
 *.swp

@@ -22,7 +22,7 @@
 | Todo 完成记录 | 已按用户记录每次完成状态，可查看当天完成成员 |
 | 个人头像 | 已接入腾讯云 COS；配置存储后可上传、替换或移除头像 |
 | 邀请入群与同意加群 | **开发中，尚未完成，当前阻塞新 Release**；现有邀请码接口和界面只是已有基础 |
-| 搜索 | 已有 Todo / Event 搜索，但尚未接入群组与成员可见范围过滤 |
+| 搜索 | 已按当前群组搜索 Todo / Event，并校验登录与当前群成员资格；跨群组搜索待实现 |
 
 目前的入群代码使用“群组 ID + 6 位邀请码”校验，通过后直接写入成员关系；界面已有邀请卡片、二维码和邀请码刷新入口。**邀请入群与同意加群的完整流程仍待完成，当前没有入群申请及同意／拒绝的审批流程。**
 
@@ -35,6 +35,8 @@
 主界面左侧选择群组，右侧显示该群组的日历。新建窗口固定使用打开时的群组，提交 Todo / Event 时携带 `group_id`。群组图标由群组 ID 决定颜色，并显示群名首字。
 
 群成员可以查看群内 Todo 和 Event；每条记录有独立的 `viewer`（只读）或 `editor`（可编辑）权限。创建者默认可编辑，其他成员默认只读；创建者可以批量调整成员权限，删除也仅限仍在群内的创建者。群主身份不自动获得其他成员创建记录的编辑权限。
+
+搜索框只搜索当前选中的群组，支持按 Todo / Event 分栏或合并评分、排序和分页。退群者创建的 Todo / Event 保留在原群，现有群成员仍可搜索这些记录。改造前的 search 包在本地保留于 `internal/_backup/search/`，供后续跨群组搜索开发参考；该目录已被 Git 忽略，不参与正常构建。
 
 普通成员可以退出群组；群主退出前需要将群主转让给其他成员，也可以解散群组。解散会删除群内 Todo、Event、权限与完成记录。
 
@@ -292,7 +294,7 @@ npm run dev --prefix web
 | `PATCH` | `/api/todos/:id/occurrences/:date` | 修改自己的某次完成状态，提交 `{done}` |
 | `GET` | `/api/todos/:id/occurrences/:date/completions` | 查询当天完成成员 |
 | `GET` | `/api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&group_id=ID` | 查询日历实例；`group_id` 可选，日期范围为左闭右开 |
-| `GET` | `/api/search/todos`、`/api/search/events`、`/api/search/all` | 关键词搜索与分页；群组及成员可见范围过滤待补充 |
+| `GET` | `/api/groups/:groupID/search/todos`、`/api/groups/:groupID/search/events`、`/api/groups/:groupID/search/all` | 仅搜索指定群组；校验当前成员资格，支持评分与分页 |
 | `GET` | `/api/users/me` | 本人公开资料与 `avatar_upload_enabled` |
 | `PUT / DELETE` | `/api/users/me/avatar` | 上传／移除头像；上传使用 multipart 文件字段 `avatar` |
 

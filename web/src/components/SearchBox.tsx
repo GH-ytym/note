@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowUpRight, MagnifyingGlass, X } from "@phosphor-icons/rea
 import { createPortal } from "react-dom";
 import useWindowDrag from "../hooks/useWindowDrag";
 import { searchTodo, searchEvent, searchAll } from "../api";
+import { useGroups } from "../groups";
 import type { SearchItem, SearchPage } from "../types";
 
 interface Props {
@@ -14,11 +15,15 @@ interface Props {
 }
 
 export default function SearchBox({ open, onOpen, onSelect, limit, defaultSplit }: Props) {
+  const { selected } = useGroups();
+  const groupID = selected?.id ?? null;
   const drag = useWindowDrag(true);
   const [keyword, setKeyword] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [split, setSplit] = useState(defaultSplit);
-  const [pages, setPages] = useState<SearchPage[]>([]);
+  const [result, setResult] = useState<{ groupID: number; pages: SearchPage[] } | null>(null);
+  // 切群的这一帧也不展示上一个群的结果；旧请求由 effect cleanup 取消。
+  const pages = result?.groupID === groupID ? result.pages : [];
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -44,6 +49,7 @@ export default function SearchBox({ open, onOpen, onSelect, limit, defaultSplit 
     return () => { if (calendar) calendar.inert = false; };
   }, [open, expanded]);
   useEffect(() => setSplit(defaultSplit), [defaultSplit]);
+  useEffect(() => setPage(1), [groupID]);
   useEffect(() => { if (!open) { setExpanded(false); setPage(1); } }, [open]);
   useEffect(() => {
     if (!open) return;
@@ -55,21 +61,21 @@ export default function SearchBox({ open, onOpen, onSelect, limit, defaultSplit 
   }, [open, onOpen]);
   useEffect(() => {
     const controller = new AbortController();
-    setPages([]);
+    setResult(null);
     setError("");
-    if (!open || !keyword.trim()) { setLoading(false); return; }
+    if (!open || !groupID || !keyword.trim()) { setLoading(false); return; }
     setLoading(true);
     // Query each text change; abort and ignore an obsolete response.
     const request = expanded && !split
-      ? searchAll(keyword, limit, page, controller.signal).then(result => [result])
-      : Promise.all([searchTodo(keyword, limit, page, controller.signal), searchEvent(keyword, limit, page, controller.signal)]);
-    request.then(result => {
-      if (!controller.signal.aborted) setPages(result);
+      ? searchAll(groupID, keyword, limit, page, controller.signal).then(result => [result])
+      : Promise.all([searchTodo(groupID, keyword, limit, page, controller.signal), searchEvent(groupID, keyword, limit, page, controller.signal)]);
+    request.then(pages => {
+      if (!controller.signal.aborted) setResult({ groupID, pages });
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "搜索失败");
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [keyword, open, expanded, split, limit, page]);
+  }, [groupID, keyword, open, expanded, split, limit, page]);
 
   function select(item: SearchItem) { onOpen(false); onSelect(item); }
   const totalPages = Math.max(1, ...pages.map(result => Math.ceil(result.total / limit)));
@@ -97,7 +103,7 @@ export default function SearchBox({ open, onOpen, onSelect, limit, defaultSplit 
     }
   }}>
     <MagnifyingGlass size={16} aria-hidden="true" />
-    <input ref={input} aria-label="搜索待办和日程" placeholder="搜索待办和日程" value={keyword}
+    <input ref={input} aria-label="搜索当前群组的待办和日程" placeholder={groupID ? "搜索当前群组" : "请先选择群组"} disabled={!groupID} value={keyword}
       aria-expanded={open} aria-controls="search-results" onFocus={() => { if (keyword.trim()) onOpen(true); }}
       onChange={event => { setKeyword(event.target.value); setPage(1); onOpen(Boolean(event.target.value.trim())); }} />
     {keyword && <button aria-label="清空搜索" onClick={() => { setKeyword(""); onOpen(false); input.current?.focus(); }}><X size={14} /></button>}

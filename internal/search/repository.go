@@ -2,16 +2,20 @@ package search
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
-	"gorm.io/gorm"
+	apperrors "note/internal/errors"
+	"note/internal/model"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 // The repository owns scoring, stable ordering and pagination for every search.
 type Repository interface {
-	SearchTodos(context.Context, string, int, int) ([]Item, int64, error)
-	SearchEvents(context.Context, string, int, int) ([]Item, int64, error)
-	SearchAll(context.Context, string, int, int) ([]Item, int64, error)
+	SearchTodos(context.Context, ListQuery) ([]Item, int64, error)
+	SearchEvents(context.Context, ListQuery) ([]Item, int64, error)
+	SearchAll(context.Context, ListQuery) ([]Item, int64, error)
 }
 type gormRepository struct {
 	db *gorm.DB
@@ -19,44 +23,62 @@ type gormRepository struct {
 
 func NewGORMRepository(db *gorm.DB) Repository { return &gormRepository{db: db} }
 
-const todoMatchesSQL = `SELECT 'todo' AS kind, id, title, content, color, starts_at,
+const todoMatchesSQL = `SELECT 'todo' AS kind, id, group_id, title, content, color, starts_at,
  NULL AS ends_at, updated_at FROM todos
- WHERE title LIKE @contains ESCAPE '!' OR content LIKE @contains ESCAPE '!'`
-const eventMatchesSQL = `SELECT 'event' AS kind, id, title, content, color, starts_at,
+ WHERE group_id = @group_id
+ AND (title LIKE @contains ESCAPE '!' OR content LIKE @contains ESCAPE '!')`
+const eventMatchesSQL = `SELECT 'event' AS kind, id, group_id, title, content, color, starts_at,
  ends_at, updated_at FROM events
- WHERE title LIKE @contains ESCAPE '!' OR content LIKE @contains ESCAPE '!'`
+ WHERE group_id = @group_id
+ AND (title LIKE @contains ESCAPE '!' OR content LIKE @contains ESCAPE '!')`
 
-func (r *gormRepository) SearchTodos(ctx context.Context, keyword string, page, pageSize int) ([]Item, int64, error) {
-	return r.searchMatches(ctx, todoMatchesSQL, keyword, page, pageSize)
+func (r *gormRepository) SearchTodos(ctx context.Context, q ListQuery) ([]Item, int64, error) {
+	return r.searchMatches(ctx, todoMatchesSQL, q)
 }
-func (r *gormRepository) SearchEvents(ctx context.Context, keyword string, page, pageSize int) ([]Item, int64, error) {
-	return r.searchMatches(ctx, eventMatchesSQL, keyword, page, pageSize)
+func (r *gormRepository) SearchEvents(ctx context.Context, q ListQuery) ([]Item, int64, error) {
+	return r.searchMatches(ctx, eventMatchesSQL, q)
 }
-func (r *gormRepository) SearchAll(ctx context.Context, keyword string, page, pageSize int) ([]Item, int64, error) {
-	return r.searchMatches(ctx, todoMatchesSQL+" UNION ALL "+eventMatchesSQL, keyword, page, pageSize)
+func (r *gormRepository) SearchAll(ctx context.Context, q ListQuery) ([]Item, int64, error) {
+	return r.searchMatches(ctx, todoMatchesSQL+" UNION ALL "+eventMatchesSQL, q)
 }
 
 func (r *gormRepository) searchMatches(
 	ctx context.Context,
 	matchedSQL string,
-	keyword string,
-	page, pageSize int,
+	q ListQuery,
 ) ([]Item, int64, error) {
-	escaped := escapeKeyword(keyword)
+	if q.UserID == 0 {
+		return nil, 0, apperrors.ErrGroupUnauthenticated
+	}
+	if q.GroupID == 0 {
+		return nil, 0, apperrors.ErrInvalidSearchQuery
+	}
+	escaped := escapeKeyword(q.Keyword)
 
-	args := map[string]interface{}{
-		"keyword":  keyword,
+	args := map[string]any{
+		"group_id": q.GroupID,
+		"keyword":  q.Keyword,
 		"prefix":   escaped + "%",
 		"contains": "%" + escaped + "%",
-		"limit":    pageSize,
-		"offset":   (page - 1) * pageSize,
+		"limit":    q.PageSize,
+		"offset":   (q.Page - 1) * q.PageSize,
 	}
 
 	items := make([]Item, 0)
 	var total int64
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		//使用事务保证查询的时候是同一份数据库快照
+		// 成员资格、总数和分页结果使用同一份数据库快照。
+		// 残留的 Todo / Event 编辑授权不能代替当前群成员资格。
+		var memberCount int64
+		if err := tx.Model(&model.GroupMember{}).
+			Where("group_id = ? AND user_id = ?", q.GroupID, q.UserID).
+			Count(&memberCount).Error; err != nil {
+			return fmt.Errorf("check search group membership: %w", err)
+		}
+		if memberCount == 0 {
+			return apperrors.ErrGroupAccessDenied
+		}
 		// 第一次查询：统计两表合并后的匹配总数，不分页。
 		countSQL := `
 			SELECT COUNT(*)
@@ -92,7 +114,7 @@ func (r *gormRepository) searchMatches(
 		}
 
 		return nil
-	})
+	}, &sql.TxOptions{ReadOnly: true})
 
 	if err != nil {
 		return nil, 0, err

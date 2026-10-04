@@ -1,5 +1,10 @@
 package search
 
+// GroupSearchURI 只从路由读取群组，用户身份由 RequireLogin 写入上下文。
+type GroupSearchURI struct {
+	GroupID uint `uri:"groupID" binding:"required,min=1"`
+}
+
 // SearchQuery 是 GET 查询参数，转换成 ListQuery 后交给 Service。
 type SearchQuery struct {
 	Keyword  string `form:"keyword" binding:"required"`

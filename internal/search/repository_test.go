@@ -32,7 +32,7 @@ func TestSearchAll(t *testing.T) {
 		_ = sqldb.Close()
 	})
 	//3.迁移表
-	if err := db.AutoMigrate(&model.Todo{}, &model.Event{}); err != nil {
+	if err := db.AutoMigrate(&model.GroupMember{}, &model.Todo{}, &model.Event{}); err != nil {
 		t.Fatalf("数据库迁移失败:%v", err)
 	}
 	owner, group := seedSearchTodoOwnership(t, db)
@@ -88,7 +88,9 @@ func TestSearchAll(t *testing.T) {
 	//创建搜索仓库
 	repo := NewGORMRepository(db)
 	//5.测试搜索
-	items, total, err := repo.SearchAll(context.Background(), "开会", 1, 2)
+	items, total, err := repo.SearchAll(context.Background(), ListQuery{
+		GroupID: group.ID, UserID: owner.ID, Keyword: "开会", Page: 1, PageSize: 2,
+	})
 	if err != nil {
 		t.Fatalf("searchAll failed:%v", err)
 	}
@@ -112,7 +114,7 @@ func TestSearchAll(t *testing.T) {
 
 	// 五、查询第二页，只有剩下的一条，但总数仍然是三条
 	items, total, err = repo.SearchAll(
-		context.Background(), "开会", 2, 2,
+		context.Background(), ListQuery{GroupID: group.ID, UserID: owner.ID, Keyword: "开会", Page: 2, PageSize: 2},
 	)
 	if err != nil {
 		t.Fatalf("search second page: %v", err)
@@ -139,7 +141,7 @@ func TestCategoryRanking(t *testing.T) {
 	}
 	pool.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = pool.Close() })
-	if err := db.AutoMigrate(&model.Todo{}, &model.Event{}); err != nil {
+	if err := db.AutoMigrate(&model.GroupMember{}, &model.Todo{}, &model.Event{}); err != nil {
 		t.Fatal(err)
 	}
 	owner, group := seedSearchTodoOwnership(t, db)
@@ -168,11 +170,12 @@ func TestCategoryRanking(t *testing.T) {
 	ctx := context.Background()
 	for page := 1; page <= 4; page++ {
 		wantScore := []int{100, 80, 60, 20}[page-1]
-		todos, total, err := repo.SearchTodos(ctx, keyword, page, 1)
+		query := ListQuery{GroupID: group.ID, UserID: owner.ID, Keyword: keyword, Page: page, PageSize: 1}
+		todos, total, err := repo.SearchTodos(ctx, query)
 		if err != nil || total != 4 || len(todos) != 1 || todos[0].Title != titles[page-1] {
 			t.Fatalf("todo page %d: %v, total %d, err %v", page, todos, total, err)
 		}
-		events, total, err := repo.SearchEvents(ctx, keyword, page, 1)
+		events, total, err := repo.SearchEvents(ctx, query)
 		if err != nil || total != 4 || len(events) != 1 || events[0].Title != titles[page-1] {
 			t.Fatalf("event page %d: %v, total %d, err %v", page, events, total, err)
 		}
@@ -180,7 +183,7 @@ func TestCategoryRanking(t *testing.T) {
 			t.Fatalf("category scores must match merged search: todos=%d events=%d want=%d", todos[0].Score, events[0].Score, wantScore)
 		}
 	}
-	all, total, err := repo.SearchAll(ctx, keyword, 1, 100)
+	all, total, err := repo.SearchAll(ctx, ListQuery{GroupID: group.ID, UserID: owner.ID, Keyword: keyword, Page: 1, PageSize: 100})
 	if err != nil || total != 8 {
 		t.Fatalf("all total %d: %v", total, err)
 	}
@@ -199,6 +202,9 @@ func seedSearchTodoOwnership(t *testing.T, db *gorm.DB) (model.User, model.Group
 	}
 	group := model.Group{Name: "搜索测试群", OwnerID: owner.ID}
 	if err := db.Create(&group).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.GroupMember{GroupID: group.ID, UserID: owner.ID}).Error; err != nil {
 		t.Fatal(err)
 	}
 	return owner, group

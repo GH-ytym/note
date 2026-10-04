@@ -77,10 +77,10 @@ export const uploadAvatar = (file: File) => {
 };
 export const removeAvatar = () => request<Profile>("/users/me/avatar", { method: "DELETE" });
 
-function search(kind: "todos" | "events" | "all", keyword: string, pageSize: number, page = 1, signal?: AbortSignal) {
+function search(groupID: number, kind: "todos" | "events" | "all", keyword: string, pageSize: number, page = 1, signal?: AbortSignal) {
   const params = new URLSearchParams({ keyword, page: String(page), page_size: String(pageSize) });
-  return request<{ page: SearchPage }>(`/search/${kind}?${params}`, { signal }).then(result => result.page);
+  return request<{ page: SearchPage }>(`/groups/${groupID}/search/${kind}?${params}`, { signal }).then(result => result.page);
 }
-export const searchTodo = (keyword: string, limit: number, page = 1, signal?: AbortSignal) => search("todos", keyword, limit, page, signal);
-export const searchEvent = (keyword: string, limit: number, page = 1, signal?: AbortSignal) => search("events", keyword, limit, page, signal);
-export const searchAll = (keyword: string, limit: number, page = 1, signal?: AbortSignal) => search("all", keyword, limit, page, signal);
+export const searchTodo = (groupID: number, keyword: string, limit: number, page = 1, signal?: AbortSignal) => search(groupID, "todos", keyword, limit, page, signal);
+export const searchEvent = (groupID: number, keyword: string, limit: number, page = 1, signal?: AbortSignal) => search(groupID, "events", keyword, limit, page, signal);
+export const searchAll = (groupID: number, keyword: string, limit: number, page = 1, signal?: AbortSignal) => search(groupID, "all", keyword, limit, page, signal);

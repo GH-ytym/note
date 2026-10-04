@@ -30,13 +30,16 @@ type eventSourceStub struct {
 	result []event.CalendarOccurrence
 	err    error
 	calls  int
+	userID uint
 }
 
 func (s *eventSourceStub) ListInRange(
 	_ context.Context,
+	userID uint,
 	_, _ time.Time,
 ) ([]event.CalendarOccurrence, error) {
 	s.calls++
+	s.userID = userID
 	return s.result, s.err
 }
 
@@ -58,6 +61,9 @@ func TestGetCombinesTodosAndEvents(t *testing.T) {
 	}
 	if todos.calls != 1 || events.calls != 1 {
 		t.Errorf("source calls = todos:%d events:%d, want 1 each", todos.calls, events.calls)
+	}
+	if events.userID != 1 {
+		t.Fatalf("event source userID = %d, want 1", events.userID)
 	}
 }
 

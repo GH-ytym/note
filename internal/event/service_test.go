@@ -26,10 +26,18 @@ type mockEventRepository struct {
 	listErr     error
 }
 
-func (m *mockEventRepository) Get(_ context.Context, _ uint) (model.Event, error) {
+func (m *mockEventRepository) List(_ context.Context, _ ListQuery) ([]model.Event, int64, error) {
+	return m.listResult, int64(len(m.listResult)), m.listErr
+}
+func (m *mockEventRepository) Delete(_ context.Context, _, _ uint) error { return m.updateErr }
+func (m *mockEventRepository) PatchRole(_ context.Context, _, _ uint, _ []uint, _ model.EventRole) error {
+	return m.updateErr
+}
+
+func (m *mockEventRepository) Get(_ context.Context, _, _ uint) (model.Event, error) {
 	return m.getResult, m.getErr
 }
-func (m *mockEventRepository) Update(_ context.Context, item *model.Event, version uint) error {
+func (m *mockEventRepository) Update(_ context.Context, item *model.Event, version, _ uint) error {
 	m.updateCalls++
 	if m.updateErr != nil {
 		return m.updateErr
@@ -52,6 +60,7 @@ func (m *mockEventRepository) Create(_ context.Context, item *model.Event) error
 
 func (m *mockEventRepository) ListInRange(
 	_ context.Context,
+	_ uint,
 	from time.Time,
 	to time.Time,
 ) ([]model.Event, error) {
@@ -74,7 +83,7 @@ func TestCreate(t *testing.T) {
 	title := "qwen是傻逼"
 	content := "deepseek是傻逼"
 	item, err := service.Create(context.Background(),
-		CreateCommand{
+		CreateCommand{GroupID: 1, CreatorID: 1,
 			Title:      title,
 			Content:    &content,
 			Color:      "#ffffff",
@@ -93,6 +102,9 @@ func TestCreate(t *testing.T) {
 	}
 	if item.Title != title {
 		t.Fatalf("Create called Title %s, expected %s", item.Title, title)
+	}
+	if item.GroupID != 1 || item.CreatorID != 1 {
+		t.Fatalf("event identity: group=%d creator=%d", item.GroupID, item.CreatorID)
 	}
 	if item.Content == nil {
 		t.Fatal("Create returned nil Content")
@@ -157,7 +169,7 @@ func TestCreateEventRejectsInvalidTimeRange(t *testing.T) {
 
 			_, err := service.Create(
 				context.Background(),
-				CreateCommand{
+				CreateCommand{GroupID: 1, CreatorID: 1,
 					Title:      "abc",
 					Color:      "#ffffff",
 					StartsAt:   test.startsAt,
@@ -389,7 +401,7 @@ func TestListInRangeExpandsOccurrences(t *testing.T) {
 	}}
 	service := NewService(repo)
 
-	items, err := service.ListInRange(context.Background(), from, to)
+	items, err := service.ListInRange(context.Background(), 1, from, to)
 	if err != nil {
 		t.Fatalf("ListInRange() error = %v", err)
 	}
@@ -425,7 +437,7 @@ func TestListInRangeLongWeeklyEventCanOverlapItself(t *testing.T) {
 	repo := &mockEventRepository{listResult: []model.Event{{
 		ID: 1, Title: "跨月周期", StartsAt: start, EndsAt: start.AddDate(0, 0, 10), RepeatMode: model.RepeatWeekly,
 	}}}
-	items, err := NewService(repo).ListInRange(context.Background(), from, from.AddDate(0, 0, 1))
+	items, err := NewService(repo).ListInRange(context.Background(), 1, from, from.AddDate(0, 0, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +464,7 @@ func TestListInRangeIncludesOccurrenceOverlappingStart(t *testing.T) {
 	}}}
 	service := NewService(repo)
 
-	items, err := service.ListInRange(context.Background(), from, to)
+	items, err := service.ListInRange(context.Background(), 1, from, to)
 	if err != nil {
 		t.Fatalf("ListInRange() error = %v", err)
 	}
@@ -480,7 +492,7 @@ func TestListInRangeExpandsCustomDates(t *testing.T) {
 	}}}
 	service := NewService(repo)
 
-	items, err := service.ListInRange(context.Background(), from, to)
+	items, err := service.ListInRange(context.Background(), 1, from, to)
 	if err != nil {
 		t.Fatalf("ListInRange() error = %v", err)
 	}
@@ -502,7 +514,7 @@ func TestListInRangeRejectsInvalidStoredEvent(t *testing.T) {
 	}}}
 	service := NewService(repo)
 
-	_, err := service.ListInRange(context.Background(), from, from.AddDate(0, 0, 1))
+	_, err := service.ListInRange(context.Background(), 1, from, from.AddDate(0, 0, 1))
 	if !errors.Is(err, apperrors.ErrInvalidEventTimeRange) {
 		t.Fatalf("ListInRange() error = %v, want %v", err, apperrors.ErrInvalidEventTimeRange)
 	}
@@ -526,7 +538,7 @@ func TestListInRangeRejectsInvalidRange(t *testing.T) {
 			repo := &mockEventRepository{}
 			service := NewService(repo)
 
-			_, err := service.ListInRange(context.Background(), test.from, test.to)
+			_, err := service.ListInRange(context.Background(), 1, test.from, test.to)
 			if !errors.Is(err, apperrors.ErrInvalidCalendarRange) {
 				t.Fatalf("ListInRange() error = %v, want %v", err, apperrors.ErrInvalidCalendarRange)
 			}
@@ -545,7 +557,7 @@ func validCreateCommand() CreateCommand {
 		time.Local,
 	)
 
-	return CreateCommand{
+	return CreateCommand{GroupID: 1, CreatorID: 1,
 		Title:      "项目会议",
 		Color:      "#AABBCC",
 		StartsAt:   startsAt,

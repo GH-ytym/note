@@ -112,6 +112,8 @@ func TestSQLiteDatabase(t *testing.T) {
 	eventStartsAt := time.Date(2026, time.August, 30, 14, 5, 37, 0, time.FixedZone("CST", 8*60*60))
 	eventEndsAt := time.Date(2026, time.August, 30, 15, 45, 12, 0, time.FixedZone("CST", 8*60*60))
 	event := model.Event{
+		GroupID:    group.ID,
+		CreatorID:  user.ID,
 		Title:      "Calendar event integration test",
 		Color:      "#5B8DEF",
 		StartsAt:   eventStartsAt,
@@ -143,10 +145,12 @@ func TestSQLiteDatabase(t *testing.T) {
 	}
 
 	invalidEvent := model.Event{
-		Title:    "Invalid calendar event",
-		Color:    "#F3B51B",
-		StartsAt: eventStartsAt,
-		EndsAt:   eventStartsAt,
+		GroupID:   group.ID,
+		CreatorID: user.ID,
+		Title:     "Invalid calendar event",
+		Color:     "#F3B51B",
+		StartsAt:  eventStartsAt,
+		EndsAt:    eventStartsAt,
 	}
 	if err := db.Create(&invalidEvent).Error; err == nil {
 		t.Fatal("calendar event with a non-positive duration was accepted")
@@ -296,6 +300,18 @@ func TestMigrateLegacyTodoSchema(t *testing.T) {
 		}
 	}
 	if err := db.Exec("UPDATE todos SET group_id = ?, creator_id = ?", group.ID, owner.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	// Todo 已回填但 Event 未回填时，仍须拒绝猜测旧 Event 的归属。
+	if err := migrateDatabase(db); err == nil || !strings.Contains(err.Error(), "events 表") {
+		t.Fatalf("legacy event without ownership must wait for backfill: %v", err)
+	}
+	for _, statement := range []string{"ALTER TABLE events ADD COLUMN group_id integer", "ALTER TABLE events ADD COLUMN creator_id integer"} {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Exec("UPDATE events SET group_id = ?, creator_id = ?", group.ID, owner.ID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := migrateDatabase(db); err != nil {

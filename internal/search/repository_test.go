@@ -74,7 +74,7 @@ func TestSearchAll(t *testing.T) {
 		t.Fatalf("insert todos: %v", err)
 	}
 
-	event := model.Event{
+	event := model.Event{GroupID: group.ID, CreatorID: owner.ID,
 		Title:      "开会准备",
 		Content:    &content,
 		StartsAt:   start,
@@ -153,7 +153,7 @@ func TestCategoryRanking(t *testing.T) {
 		if err := db.Create(&model.Todo{GroupID: group.ID, CreatorID: owner.ID, Title: title, Content: &content, StartsAt: &start, UpdatedAt: updated}).Error; err != nil {
 			t.Fatal(err)
 		}
-		if err := db.Create(&model.Event{Title: title, Content: &content, StartsAt: start, EndsAt: start.Add(time.Hour), UpdatedAt: updated}).Error; err != nil {
+		if err := db.Create(&model.Event{GroupID: group.ID, CreatorID: owner.ID, Title: title, Content: &content, StartsAt: start, EndsAt: start.Add(time.Hour), UpdatedAt: updated}).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -161,7 +161,7 @@ func TestCategoryRanking(t *testing.T) {
 	if err := db.Create(&model.Todo{GroupID: group.ID, CreatorID: owner.ID, Title: other, Content: &other, StartsAt: &start}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Create(&model.Event{Title: other, Content: &other, StartsAt: start, EndsAt: start.Add(time.Hour)}).Error; err != nil {
+	if err := db.Create(&model.Event{GroupID: group.ID, CreatorID: owner.ID, Title: other, Content: &other, StartsAt: start, EndsAt: start.Add(time.Hour)}).Error; err != nil {
 		t.Fatal(err)
 	}
 	repo := NewGORMRepository(db)

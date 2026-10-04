@@ -83,6 +83,7 @@ func registerAPI(
 		groups.GET("", gh.MyGroups)
 		groups.GET("/:groupID/members", gh.ListMembers)
 		groups.GET("/:groupID/todos", th.ListTodos)
+		groups.GET("/:groupID/events", eh.ListEvents)
 		//群成员获取邀请码，只有群主可以刷新。
 		groups.GET("/:groupID/invite", gh.GetInviteCode)
 		groups.POST("/:groupID/refresh", gh.RefreshInviteCode)
@@ -120,5 +121,7 @@ func registerAPI(
 		events.POST("", eh.CreateEvent)
 		events.GET("/:id", eh.GetEvent)
 		events.PATCH("/:id", eh.PatchEvent)
+		events.DELETE("/:id", eh.DeleteEvent)
+		events.PATCH("/:id/members", eh.PatchRoles)
 	}
 }

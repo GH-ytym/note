@@ -8,6 +8,8 @@ import (
 
 // CreateCommand is the validated input passed from the HTTP layer to Service.
 type CreateCommand struct {
+	GroupID     uint
+	CreatorID   uint
 	Title       string
 	Content     *string
 	Color       string
@@ -15,6 +17,20 @@ type CreateCommand struct {
 	EndsAt      time.Time
 	RepeatMode  model.RepeatMode
 	CustomDates []time.Time
+}
+
+type ListQuery struct {
+	GroupID  uint
+	UserID   uint
+	Page     int
+	PageSize int
+}
+
+type Page struct {
+	Items    []model.Event
+	Page     int
+	PageSize int
+	Total    int64
 }
 
 type PatchCommand struct {
@@ -27,6 +43,8 @@ type PatchCommand struct {
 
 type CalendarOccurrence struct {
 	EventID    uint             `json:"event_id"`
+	GroupID    uint             `json:"group_id"`
+	CreatorID  uint             `json:"creator_id"`
 	Title      string           `json:"title"`
 	Content    string           `json:"content"`
 	Color      string           `json:"color"`

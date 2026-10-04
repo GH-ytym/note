@@ -17,9 +17,12 @@ import (
 // Service 声明 Event 对外提供的业务操作。
 type Service interface {
 	Create(ctx context.Context, command CreateCommand) (model.Event, error)
-	ListInRange(ctx context.Context, from, to time.Time) ([]CalendarOccurrence, error)
-	Get(ctx context.Context, id uint) (model.Event, error)
-	Patch(ctx context.Context, id uint, command PatchCommand) (model.Event, error)
+	List(ctx context.Context, query ListQuery) (Page, error)
+	ListInRange(ctx context.Context, userID uint, from, to time.Time) ([]CalendarOccurrence, error)
+	Get(ctx context.Context, id, userID uint) (model.Event, error)
+	Patch(ctx context.Context, id, userID uint, command PatchCommand) (model.Event, error)
+	Delete(ctx context.Context, id, userID uint) error
+	PatchRole(ctx context.Context, actorID, eventID uint, userIDs []uint, role model.EventRole) error
 }
 
 // service 负责执行业务规则，并通过 Repository 完成数据持久化。
@@ -31,18 +34,30 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
-func (s *service) Get(ctx context.Context, id uint) (model.Event, error) {
-	return s.repo.Get(ctx, id)
+func (s *service) Get(ctx context.Context, id, userID uint) (model.Event, error) {
+	if userID == 0 {
+		return model.Event{}, apperrors.ErrGroupUnauthenticated
+	}
+	if id == 0 {
+		return model.Event{}, apperrors.ErrEventNotFound
+	}
+	return s.repo.Get(ctx, id, userID)
 }
 
-func (s *service) Patch(ctx context.Context, id uint, command PatchCommand) (model.Event, error) {
+func (s *service) Patch(ctx context.Context, id, userID uint, command PatchCommand) (model.Event, error) {
+	if userID == 0 {
+		return model.Event{}, apperrors.ErrGroupUnauthenticated
+	}
+	if id == 0 {
+		return model.Event{}, apperrors.ErrEventNotFound
+	}
 	if command.Version == 0 {
 		return model.Event{}, apperrors.ErrEventInvalidVersion
 	}
 	if command.Title == nil && command.Content == nil && command.StartsAt == nil && command.EndsAt == nil {
 		return model.Event{}, apperrors.ErrNothingToUpdate
 	}
-	item, err := s.repo.Get(ctx, id)
+	item, err := s.repo.Get(ctx, id, userID)
 	if err != nil {
 		return model.Event{}, err
 	}
@@ -71,13 +86,20 @@ func (s *service) Patch(ctx context.Context, id uint, command PatchCommand) (mod
 	if item.StartsAt.IsZero() || item.EndsAt.IsZero() || !item.EndsAt.After(item.StartsAt) {
 		return model.Event{}, apperrors.ErrInvalidEventTimeRange
 	}
-	if err := s.repo.Update(ctx, &item, command.Version); err != nil {
+	// 写事务里再次检查当前群成员和编辑权限，避免校验后退群或被降权。
+	if err := s.repo.Update(ctx, &item, command.Version, userID); err != nil {
 		return model.Event{}, err
 	}
 	return item, nil
 }
 
 func (s *service) Create(ctx context.Context, command CreateCommand) (model.Event, error) {
+	if command.CreatorID == 0 {
+		return model.Event{}, apperrors.ErrGroupUnauthenticated
+	}
+	if command.GroupID == 0 {
+		return model.Event{}, apperrors.ErrEventInvalidGroup
+	}
 	title := strings.TrimSpace(command.Title)
 	if title == "" {
 		return model.Event{}, apperrors.ErrTitleRequired
@@ -125,6 +147,8 @@ func (s *service) Create(ctx context.Context, command CreateCommand) (model.Even
 		customDates = append(customDates, model.EventDate{Date: date})
 	}
 	item := model.Event{
+		GroupID:     command.GroupID,
+		CreatorID:   command.CreatorID,
 		Title:       title,
 		Content:     content,
 		Color:       color1,
@@ -154,18 +178,80 @@ func validRepeatMode(mode model.RepeatMode) bool {
 	}
 }
 
+func (s *service) List(ctx context.Context, query ListQuery) (Page, error) {
+	if query.UserID == 0 {
+		return Page{}, apperrors.ErrGroupUnauthenticated
+	}
+	if query.GroupID == 0 {
+		return Page{}, apperrors.ErrEventInvalidGroup
+	}
+	if query.Page == 0 {
+		query.Page = 1
+	}
+	if query.PageSize == 0 {
+		query.PageSize = 20
+	}
+	if query.Page < 1 || query.PageSize < 1 || query.PageSize > 100 || query.Page-1 > int(^uint(0)>>1)/query.PageSize {
+		return Page{}, apperrors.ErrInvalidPagination
+	}
+	items, total, err := s.repo.List(ctx, query)
+	if err != nil {
+		return Page{}, err
+	}
+	return Page{Items: items, Total: total, Page: query.Page, PageSize: query.PageSize}, nil
+}
+
+func (s *service) Delete(ctx context.Context, id, userID uint) error {
+	if userID == 0 {
+		return apperrors.ErrGroupUnauthenticated
+	}
+	if id == 0 {
+		return apperrors.ErrEventNotFound
+	}
+	return s.repo.Delete(ctx, id, userID)
+}
+
+func (s *service) PatchRole(ctx context.Context, actorID, eventID uint, userIDs []uint, role model.EventRole) error {
+	if actorID == 0 {
+		return apperrors.ErrGroupUnauthenticated
+	}
+	if eventID == 0 {
+		return apperrors.ErrEventNotFound
+	}
+	if (role != model.EventViewer && role != model.EventEditor) || len(userIDs) == 0 || len(userIDs) > 100 {
+		return apperrors.ErrEventRoleInvalid
+	}
+	ids := make([]uint, 0, len(userIDs))
+	seen := make(map[uint]struct{}, len(userIDs))
+	for _, id := range userIDs {
+		if id == 0 {
+			return apperrors.ErrEventRoleInvalid
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return s.repo.PatchRole(ctx, actorID, eventID, ids, role)
+}
+
 func (s *service) ListInRange(
 	ctx context.Context,
+	userID uint,
 	from time.Time,
 	to time.Time,
 ) ([]CalendarOccurrence, error) {
+	if userID == 0 {
+		return nil, apperrors.ErrGroupUnauthenticated
+	}
 	if from.IsZero() ||
 		to.IsZero() ||
 		!from.Before(to) {
 		return nil, apperrors.ErrInvalidCalendarRange
 	}
 	//找到所有可能的event集合
-	items, err := s.repo.ListInRange(ctx, from, to)
+	items, err := s.repo.ListInRange(ctx, userID, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +282,8 @@ func (s *service) ListInRange(
 			if startsat.Before(to) && endsat.After(from) {
 				occurrences = append(occurrences, CalendarOccurrence{
 					EventID:    item.ID,
+					GroupID:    item.GroupID,
+					CreatorID:  item.CreatorID,
 					Title:      item.Title,
 					Content:    content,
 					Color:      item.Color,
@@ -229,6 +317,8 @@ func (s *service) ListInRange(
 				}
 				occurrences = append(occurrences, CalendarOccurrence{
 					EventID:    item.ID,
+					GroupID:    item.GroupID,
+					CreatorID:  item.CreatorID,
 					Title:      item.Title,
 					Content:    content,
 					Color:      item.Color,
@@ -266,10 +356,12 @@ func (s *service) ListInRange(
 				continue
 			}
 			occurrences = append(occurrences, CalendarOccurrence{
-				EventID: item.ID,
-				Title:   item.Title,
-				Content: content,
-				Color:   item.Color,
+				EventID:   item.ID,
+				GroupID:   item.GroupID,
+				CreatorID: item.CreatorID,
+				Title:     item.Title,
+				Content:   content,
+				Color:     item.Color,
 				//某次的开始时间，不是最初的startsat
 				StartsAt: t,
 				//某次的结束时间，不是在最初的endsat

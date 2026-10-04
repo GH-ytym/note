@@ -25,6 +25,7 @@ type EventSource interface {
 	//实际上就是service实现的那个ListInRange
 	ListInRange(
 		ctx context.Context,
+		userID uint,
 		from time.Time,
 		to time.Time,
 	) ([]event.CalendarOccurrence, error)
@@ -82,7 +83,7 @@ func (s *service) Get(
 		return Result{}, err
 	}
 
-	events, err := s.events.ListInRange(ctx, from, to)
+	events, err := s.events.ListInRange(ctx, userID, from, to)
 	if err != nil {
 		return Result{}, err
 	}

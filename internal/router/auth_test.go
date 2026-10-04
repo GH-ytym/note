@@ -26,6 +26,7 @@ func TestAuthenticationRouteCoverage(t *testing.T) {
 			{"PATCH", "/todos/1/occurrences/2026-09-26"}, {"DELETE", "/todos/1"},
 			{"GET", "/todos/1/occurrences/2026-09-26/completions"},
 			{"POST", "/events"}, {"GET", "/events/1"}, {"PATCH", "/events/1"},
+			{"GET", "/groups/1/events"}, {"DELETE", "/events/1"}, {"PATCH", "/events/1/members"},
 		} {
 			t.Run(route.method+prefix+route.path, func(t *testing.T) {
 				for _, header := range []string{"", "Bearer invalid"} {

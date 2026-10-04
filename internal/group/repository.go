@@ -117,6 +117,17 @@ func (r *gormRepository) Dismiss(ctx context.Context, groupID, userID uint) erro
 			Delete(&model.Todo{}).Error; err != nil {
 			return fmt.Errorf("delete dismissed group todos: %w", err)
 		}
+		// Event 也属于群组，先清理子记录，再删除日程。
+		eventIDs := tx.Model(&model.Event{}).Select("id").Where("group_id = ?", groupID)
+		if err := tx.Where("event_id IN (?)", eventIDs).Delete(&model.EventDate{}).Error; err != nil {
+			return fmt.Errorf("delete dismissed group event dates: %w", err)
+		}
+		if err := tx.Where("event_id IN (?)", eventIDs).Delete(&model.EventMember{}).Error; err != nil {
+			return fmt.Errorf("delete dismissed group event roles: %w", err)
+		}
+		if err := tx.Where("group_id = ?", groupID).Delete(&model.Event{}).Error; err != nil {
+			return fmt.Errorf("delete dismissed group events: %w", err)
+		}
 		if err := tx.Where("group_id = ?", groupID).
 			Delete(&model.GroupMember{}).Error; err != nil {
 			return fmt.Errorf("delete dismissed group memberships: %w", err)
@@ -200,17 +211,29 @@ func (r *gormRepository) Join(ctx context.Context, groupID uint, userID uint, co
 			})
 		}
 
-		//如果没有要创建的权限记录，就直接结束事务中的操作，不执行批量插入
-		//(群里一个todo都没有)
-		//否则反而会导致下面的操作失败引发回滚
-		if len(permissions) == 0 {
-			return nil
+		// 空切片不插入，但仍要继续初始化 Event 权限。
+		if len(permissions) > 0 {
+			if err := tx.Omit("User").CreateInBatches(&permissions, 200).Error; err != nil {
+				return fmt.Errorf("initialize todo roles: %w", err)
+			}
 		}
-
-		// 权限与成员关系一起提交，权限写入失败时成员关系也会回滚。
-		if err := tx.Omit("User").
-			CreateInBatches(&permissions, 200).Error; err != nil {
-			return fmt.Errorf("initialize todo roles: %w", err)
+		var events []model.Event
+		if err := tx.Select("id", "creator_id").Where("group_id = ?", groupID).Find(&events).Error; err != nil {
+			return fmt.Errorf("find group events: %w", err)
+		}
+		eventPermissions := make([]model.EventMember, 0, len(events))
+		for _, event := range events {
+			role := model.EventViewer
+			if event.CreatorID == userID {
+				role = model.EventEditor
+			}
+			eventPermissions = append(eventPermissions, model.EventMember{EventID: event.ID, UserID: userID, Role: role})
+		}
+		// Todo、Event 权限和成员关系一起提交，任一步失败都回滚。
+		if len(eventPermissions) > 0 {
+			if err := tx.Omit("User").CreateInBatches(&eventPermissions, 200).Error; err != nil {
+				return fmt.Errorf("initialize event roles: %w", err)
+			}
 		}
 
 		return nil
@@ -385,7 +408,7 @@ func (r *gormRepository) ReplaceInviteCode(
 // ↓
 // 如果是群主：校验接任者，更新 OwnerID
 // ↓
-// 删除退出者在本群的 TodoMember
+// 删除退出者在本群的 TodoMember 和 EventMember
 // ↓
 // 删除退出者的 GroupMember
 // ↓
@@ -446,7 +469,7 @@ func (r *gormRepository) Quit(ctx context.Context, groupID uint, userID uint, ta
 			}
 		}
 
-		// 删除退出者在本群的 Todo 权限
+		// 删除退出者在本群的 Todo 和 Event 权限，保留内容。
 		//不会删除ta对todo的完成记录
 		groupTodoIDs := tx.Model(&model.Todo{}).
 			Select("id").
@@ -459,6 +482,11 @@ func (r *gormRepository) Quit(ctx context.Context, groupID uint, userID uint, ta
 			).
 			Delete(&model.TodoMember{}).Error; err != nil {
 			return fmt.Errorf("delete departing todo roles: %w", err)
+		}
+		groupEventIDs := tx.Model(&model.Event{}).Select("id").Where("group_id = ?", groupID)
+		if err := tx.Where("user_id = ? AND event_id IN (?)", userID, groupEventIDs).
+			Delete(&model.EventMember{}).Error; err != nil {
+			return fmt.Errorf("delete departing event roles: %w", err)
 		}
 
 		// 删除退出者的group-user关系

@@ -42,42 +42,75 @@ func migrateDatabase(db *gorm.DB) error {
 }
 
 func migrateEventSchema(db *gorm.DB) error {
-	if !db.Migrator().HasTable(&model.Event{}) {
-		if err := db.AutoMigrate(&model.Event{}, &model.EventDate{}); err != nil {
-			return fmt.Errorf("auto migrate fresh event schema: %w", err)
+	var count int64
+	if db.Migrator().HasTable(&model.Event{}) {
+		if err := db.Model(&model.Event{}).Count(&count).Error; err != nil {
+			return err
 		}
-		return nil
-	}
-
-	// Avoid rebuilding a populated SQLite events table. The SQLite migrator can
-	// omit old columns while copying data into its temporary table.
-	if !db.Migrator().HasColumn(&model.Event{}, "RepeatMode") {
-		if err := db.Exec("ALTER TABLE `events` ADD COLUMN `repeat_mode` text NOT NULL DEFAULT 'once'").Error; err != nil {
-			return fmt.Errorf("add events.repeat_mode: %w", err)
-		}
-	}
-
-	if !db.Migrator().HasTable(&model.EventDate{}) {
-		if err := db.Transaction(func(tx *gorm.DB) error {
-			if err := tx.Exec(`
-				CREATE TABLE event_dates (
-					id integer PRIMARY KEY AUTOINCREMENT,
-					event_id integer NOT NULL,
-					date date NOT NULL,
-					created_at datetime,
-					CONSTRAINT fk_events_custom_dates
-						FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
-				)
-			`).Error; err != nil {
+		if count > 0 {
+			if !db.Migrator().HasColumn("events", "group_id") || !db.Migrator().HasColumn("events", "creator_id") {
+				return fmt.Errorf("events 表有 %d 条旧数据，需要先明确并回填 group_id 和 creator_id", count)
+			}
+			var unassigned int64
+			if err := db.Raw(`SELECT COUNT(*) FROM events e
+				LEFT JOIN groups g ON g.id = e.group_id LEFT JOIN users u ON u.id = e.creator_id
+				WHERE g.id IS NULL OR u.id IS NULL`).Scan(&unassigned).Error; err != nil {
 				return err
 			}
-			return tx.Exec("CREATE UNIQUE INDEX idx_event_date ON event_dates(event_id, date)").Error
-		}); err != nil {
-			return fmt.Errorf("create event_dates: %w", err)
+			if unassigned > 0 {
+				return fmt.Errorf("events 表有 %d 条数据的群组或创建者无效，需要先回填归属", unassigned)
+			}
 		}
 	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		if !tx.Migrator().HasTable(&model.Event{}) {
+			if err := tx.Migrator().CreateTable(&model.Event{}); err != nil {
+				return fmt.Errorf("create event schema: %w", err)
+			}
+		} else {
+			// 空的旧表可以补归属列；有旧数据时上面已要求人工明确归属。
+			for _, column := range []struct{ name, definition string }{
+				{"group_id", "integer NOT NULL REFERENCES groups(id) ON DELETE RESTRICT"},
+				{"creator_id", "integer NOT NULL REFERENCES users(id) ON DELETE RESTRICT"},
+			} {
+				if !tx.Migrator().HasColumn("events", column.name) {
+					if err := tx.Exec("ALTER TABLE events ADD COLUMN " + column.name + " " + column.definition).Error; err != nil {
+						return err
+					}
+				}
+			}
+		}
 
-	return nil
+		// Avoid rebuilding a populated SQLite events table. The SQLite migrator can
+		// omit old columns while copying data into its temporary table.
+		if !tx.Migrator().HasColumn(&model.Event{}, "RepeatMode") {
+			if err := tx.Exec("ALTER TABLE `events` ADD COLUMN `repeat_mode` text NOT NULL DEFAULT 'once'").Error; err != nil {
+				return fmt.Errorf("add events.repeat_mode: %w", err)
+			}
+		}
+
+		for _, child := range []any{&model.EventDate{}, &model.EventMember{}} {
+			if !tx.Migrator().HasTable(child) {
+				if err := tx.Migrator().CreateTable(child); err != nil {
+					return fmt.Errorf("create event child schema: %w", err)
+				}
+			}
+		}
+		for _, statement := range []string{
+			"CREATE INDEX IF NOT EXISTS idx_events_group_id ON events(group_id)",
+			"CREATE INDEX IF NOT EXISTS idx_events_creator_id ON events(creator_id)",
+		} {
+			if err := tx.Exec(statement).Error; err != nil {
+				return err
+			}
+		}
+		// 只补缺失授权，重复启动不会覆盖创建者已设置的 editor/viewer。
+		return tx.Exec(`INSERT INTO event_members (event_id, user_id, role, created_at, updated_at)
+		SELECT e.id, gm.user_id, CASE WHEN gm.user_id = e.creator_id THEN 'editor' ELSE 'viewer' END,
+		CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+		FROM events e JOIN group_members gm ON gm.group_id = e.group_id
+		WHERE NOT EXISTS (SELECT 1 FROM event_members em WHERE em.event_id = e.id AND em.user_id = gm.user_id)`).Error
+	})
 }
 
 func migrateTodoSchema(db *gorm.DB) error {

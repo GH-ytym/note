@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	apperrors "note/internal/errors"
 	"note/internal/event"
+	"note/internal/middleware"
 	"note/internal/model"
 	"strings"
 	"testing"
@@ -22,10 +23,18 @@ type mockEventService struct {
 	createErr   error
 }
 
-func (m *mockEventService) Get(_ context.Context, _ uint) (model.Event, error) {
+func (m *mockEventService) List(_ context.Context, _ event.ListQuery) (event.Page, error) {
+	return event.Page{}, nil
+}
+func (m *mockEventService) Delete(_ context.Context, _, _ uint) error { return m.createErr }
+func (m *mockEventService) PatchRole(_ context.Context, _, _ uint, _ []uint, _ model.EventRole) error {
+	return m.createErr
+}
+
+func (m *mockEventService) Get(_ context.Context, _, _ uint) (model.Event, error) {
 	return m.result, m.createErr
 }
-func (m *mockEventService) Patch(_ context.Context, _ uint, _ event.PatchCommand) (model.Event, error) {
+func (m *mockEventService) Patch(_ context.Context, _, _ uint, _ event.PatchCommand) (model.Event, error) {
 	return m.result, m.createErr
 }
 
@@ -40,6 +49,7 @@ func (m *mockEventService) Create(
 
 func (m *mockEventService) ListInRange(
 	_ context.Context,
+	_ uint,
 	_ time.Time,
 	_ time.Time,
 ) ([]event.CalendarOccurrence, error) {
@@ -58,10 +68,11 @@ func TestCreateEventHandler(t *testing.T) {
 	eventHandler := NewEventHandler(service)
 
 	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set(middleware.UserIDKey, uint(7)); c.Next() })
 	router.POST("/events", eventHandler.CreateEvent)
 
 	body := `{
-		"title": "项目会议",
+		"group_id":1, "title": "项目会议",
 		"content": "讨论 Event 功能",
 		"color": "#AABBCC",
 		"starts_at": "2026-09-03T10:00:00+08:00",
@@ -103,6 +114,9 @@ func TestCreateEventHandler(t *testing.T) {
 			service.received.Title,
 			"项目会议",
 		)
+	}
+	if service.received.GroupID != 1 || service.received.CreatorID != 7 {
+		t.Fatalf("command identity: group=%d creator=%d", service.received.GroupID, service.received.CreatorID)
 	}
 
 	if service.received.Content == nil {
@@ -157,7 +171,7 @@ func TestCreateEventHandlerRejectsInvalidRequest(t *testing.T) {
 		{
 			name: "invalid start time",
 			body: `{
-				"title":"项目会议",
+				"group_id":1, "title":"项目会议",
 				"starts_at":"not-a-time",
 				"ends_at":"2026-09-03T11:00:00+08:00"
 			}`,
@@ -221,12 +235,12 @@ func TestCreateEventHandlerMapsServiceErrors(t *testing.T) {
 			name:       "unexpected repository error",
 			serviceErr: errors.New("database unavailable"),
 			wantStatus: http.StatusInternalServerError,
-			wantBody:   "failed to create event",
+			wantBody:   "failed to read or update event",
 		},
 	}
 
 	validBody := `{
-		"title":"项目会议",
+		"group_id":1, "title":"项目会议",
 		"content":"讨论 Event 功能",
 		"color":"#AABBCC",
 		"starts_at":"2026-09-03T10:00:00+08:00",
@@ -263,6 +277,7 @@ func performCreateEventRequest(
 ) *httptest.ResponseRecorder {
 	eventHandler := NewEventHandler(service)
 	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set(middleware.UserIDKey, uint(7)); c.Next() })
 	router.POST("/events", eventHandler.CreateEvent)
 
 	request := httptest.NewRequest(

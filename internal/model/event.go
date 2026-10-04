@@ -17,4 +17,11 @@ type Event struct {
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
 	Version     uint        `gorm:"not null;default:1" json:"version"`
+
+	// 群组是访问边界；创建者退群后也不能访问。
+	GroupID   uint          `gorm:"not null;index" json:"group_id"`
+	Group     *Group        `gorm:"foreignKey:GroupID;constraint:OnDelete:RESTRICT" json:"-"`
+	CreatorID uint          `gorm:"not null;index" json:"creator_id"`
+	Creator   *User         `gorm:"foreignKey:CreatorID;constraint:OnDelete:RESTRICT" json:"-"`
+	Members   []EventMember `gorm:"foreignKey:EventID;constraint:OnDelete:CASCADE" json:"-"`
 }

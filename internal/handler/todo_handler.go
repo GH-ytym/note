@@ -5,6 +5,7 @@ import (
 	"net/http"
 	apperrors "note/internal/errors"
 	"note/internal/middleware"
+	"note/internal/model"
 	todoapp "note/internal/todo"
 	"time"
 
@@ -446,4 +447,57 @@ func parseCustomDates(values []string) ([]time.Time, error) {
 	}
 
 	return dates, nil
+}
+
+func (h *TodoHandler) PatchRoles(c *gin.Context) {
+	actorID := c.GetUint(middleware.UserIDKey)
+	if actorID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+
+	todoID, ok := parseTodoID(c)
+	if !ok {
+		return
+	}
+
+	var q RolesRequest
+	if err := c.ShouldBindJSON(&q); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request",
+		})
+		return
+	}
+	var role model.TodoRole
+	switch q.Role {
+	case 1:
+		role = model.TodoEditor
+	case 2:
+		role = model.TodoViewer
+	}
+	err := h.service.PatchRole(c.Request.Context(), actorID, todoID, q.UserIDs, role)
+	switch {
+	case err == nil:
+		c.Status(http.StatusNoContent)
+
+	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+
+	case errors.Is(err, apperrors.ErrTodoNotFound),
+		errors.Is(err, apperrors.ErrTodoMemberNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+
+	case errors.Is(err, apperrors.ErrGroupAccessDenied),
+		errors.Is(err, apperrors.ErrTodoPermissionDenied):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+
+	case errors.Is(err, apperrors.ErrTodoRoleInvalid),
+		errors.Is(err, apperrors.ErrTodoInvalidMembers):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "修改 Todo 成员权限失败",
+		})
+	}
 }

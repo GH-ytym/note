@@ -39,6 +39,12 @@ type Service interface {
 		userID uint,
 		occursOn time.Time,
 	) ([]CompletionUser, error)
+	PatchRole(
+		ctx context.Context,
+		actorID, todoID uint,
+		userIDs []uint,
+		role model.TodoRole,
+	) error
 }
 
 // service 负责执行业务规则，并通过 Repository 完成数据持久化。
@@ -378,4 +384,40 @@ func validNotifyMode(mode model.NotifyMode) bool {
 	default:
 		return false
 	}
+}
+
+func (s *service) PatchRole(
+	ctx context.Context,
+	actorID, todoID uint,
+	userIDs []uint,
+	role model.TodoRole,
+) error {
+	if actorID == 0 {
+		return apperrors.ErrGroupUnauthenticated
+	}
+	if todoID == 0 {
+		return apperrors.ErrTodoNotFound
+	}
+	if role != model.TodoViewer && role != model.TodoEditor {
+		return apperrors.ErrTodoRoleInvalid
+	}
+	if len(userIDs) == 0 || len(userIDs) > 100 {
+		return apperrors.ErrTodoInvalidMembers
+	}
+
+	//去重
+	seen := make(map[uint]struct{}, len(userIDs))
+	userIDs1 := make([]uint, 0, len(userIDs))
+
+	for _, userID := range userIDs {
+		if userID == 0 {
+			return apperrors.ErrTodoInvalidMembers
+		}
+		if _, exists := seen[userID]; exists {
+			continue
+		}
+		seen[userID] = struct{}{}
+		userIDs1 = append(userIDs1, userID)
+	}
+	return s.repo.PatchRole(ctx, actorID, todoID, userIDs1, role)
 }

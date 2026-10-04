@@ -19,4 +19,8 @@ var (
 	ErrTodoEditDenied         = errors.New("没有该 Todo 的编辑权限")
 	ErrTodoDeleteDenied       = errors.New("只有创建者可以删除该 Todo")
 	ErrTodoOccurrenceNotFound = errors.New("这天没有发生该 Todo")
+	ErrTodoRoleInvalid        = errors.New("权限不合法，创建者必须保持 editor")
+	ErrTodoInvalidMembers     = errors.New("成员列表必须包含 1～100 个有效用户 ID")
+	ErrTodoPermissionDenied   = errors.New("只有创建者可以调整 Todo 成员权限")
+	ErrTodoMemberNotFound     = errors.New("部分目标用户不是当前群成员，或缺少 Todo 授权记录")
 )

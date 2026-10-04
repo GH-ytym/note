@@ -100,3 +100,13 @@ type OccurrenceCompletionsResponse struct {
 	CompletedCount int                     `json:"completed_count"`
 	Users          []CompletedUserResponse `json:"users"`
 }
+
+// 改权限的dto
+type RolesRequest struct {
+	// 本次需要修改的用户。
+	UserIDs []uint `json:"user_ids" binding:"required,min=1,max=100,dive,min=1"`
+
+	// 1：editor  2：viewer
+	//不用管之前是什么权限
+	Role uint `json:"role" binding:"required,oneof=1 2"`
+}

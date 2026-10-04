@@ -30,18 +30,16 @@ func (s *service) CalendarOccurrences(
 		return nil, apperrors.ErrInvalidCalendarRange
 	}
 
-	//找到所有的todo候选
-	items, err := s.repo.CalendarCandidates(ctx, userID, from, to)
+	// Todo、自定义日期和完成记录来自同一个数据库快照
+	items, completions, err := s.repo.CalendarData(
+		ctx,
+		userID,
+		from,
+		to,
+	)
 	if err != nil {
 		return nil, err
 	}
-	todoIDs := make([]uint, 0, len(items))
-
-	//收集todoID交给CompletionsInRange
-	for _, item := range items {
-		todoIDs = append(todoIDs, item.ID)
-	}
-
 	occurrences := make([]CalendarOccurrence, 0)
 
 	for _, item := range items {
@@ -157,12 +155,7 @@ func (s *service) CalendarOccurrences(
 		}
 	}
 
-	// 一次性读取当前范围内的完成记录，再与计算出的发生日期合并。
-	completions, err := s.repo.CompletionsInRange(ctx, todoIDs, from, to)
-	if err != nil {
-		return nil, err
-	}
-
+	//completion在之前已经拿到了
 	//这里只有todoid+date，没有user
 	completionSet := make(map[occurrenceKey]struct{}, len(completions))
 	//先把所有已完成的todo+date放进map里面
@@ -172,8 +165,9 @@ func (s *service) CalendarOccurrences(
 			Date:   completion.OccursOn.Format(time.DateOnly),
 		}
 		// 每个人有独立状态，其他人的完成不影响当前用户。
+		//只要我自己有完成记录，那前端就能打上完成标记，跟别人没关系
 		for _, record := range completion.Records {
-			//只跟自己比较，因为前端只需要自己的完成状态
+			//只跟自己比较
 			if record.UserID == userID {
 				completionSet[key] = struct{}{}
 				break

@@ -63,8 +63,8 @@ func Run() (runErr error) {
 
 	// SQLite 同一时刻只有一个写入者。桌面应用的数据量很小，
 	// 使用一个连接可以让多个窗口的写操作在进程内自然排队。
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetMaxOpenConns(1) //最多打开xxx个连接，包含正在使用的和空闲的
+	sqlDB.SetMaxIdleConns(1) //最多留下xxx个空闲连接，等下次直接复用；多余的空闲连接会关闭
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	err = retry.Do(ctx, func() error {

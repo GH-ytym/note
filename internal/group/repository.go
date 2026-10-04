@@ -2,6 +2,7 @@ package group
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	apperrors "note/internal/errors"
@@ -66,7 +67,7 @@ func (r *gormRepository) ListMembers(ctx context.Context, groupID, userID uint) 
 			return fmt.Errorf("list group members: %w", err)
 		}
 		return nil
-	})
+	}, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +252,7 @@ func (r *gormRepository) GetInviteCode(ctx context.Context, groupID uint, userID
 		// 检查全部通过后才返回邀请码。
 		code = group.Code
 		return nil
-	})
+	}, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return "", err
 	}

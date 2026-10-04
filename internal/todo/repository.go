@@ -2,12 +2,14 @@ package todo
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"note/internal/model"
+	"slices"
 	"time"
 
 	apperrors "note/internal/errors"
-	"note/internal/model"
 
 	"github.com/teambition/rrule-go"
 	"gorm.io/gorm"
@@ -50,11 +52,113 @@ type Repository interface {
 		from time.Time,
 		to time.Time,
 	) ([]model.TodoCompletion, error)
+	PatchRole(
+		ctx context.Context,
+		actorID, todoID uint,
+		userIDs []uint,
+		role model.TodoRole,
+	) error
+
+	// 一次取得日历所需的数据，保证来自同一个数据库快照
+	CalendarData(
+		ctx context.Context,
+		userID uint,
+		from time.Time,
+		to time.Time,
+	) ([]model.Todo, []model.TodoCompletion, error)
 }
 
 // gormRepository 是 Repository 的 GORM 实现，对 todo 包外隐藏。
 type gormRepository struct {
 	db *gorm.DB
+}
+
+func (r *gormRepository) PatchRole(ctx context.Context, actorID, todoID uint, userIDs []uint, role model.TodoRole) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		//找todo，和它的creator与group
+		var todo model.Todo
+		err := tx.Select("id", "group_id", "creator_id").
+			First(&todo, todoID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.ErrTodoNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("find todo: %w", err)
+		}
+
+		//actor必须在群里
+		var cnt int64
+		if err := tx.Model(&model.GroupMember{}).
+			Where(
+				"group_id = ? AND user_id = ?",
+				todo.GroupID,
+				actorID,
+			).
+			Count(&cnt).Error; err != nil {
+			return fmt.Errorf("check actor membership: %w", err)
+		}
+		if cnt == 0 {
+			return apperrors.ErrGroupAccessDenied
+		}
+
+		//actor还必须是这个todo的创建者
+		if todo.CreatorID != actorID {
+			return apperrors.ErrTodoPermissionDenied
+		}
+
+		//创建者不能被改为viewer
+		if role == model.TodoViewer {
+			if slices.Contains(userIDs, todo.CreatorID) {
+				return apperrors.ErrTodoRoleInvalid
+			}
+		}
+
+		//所有userIDs都要在群组内
+		//查groupmember
+		var cnt1 int64
+		if err := tx.Model(&model.GroupMember{}).
+			Where(
+				"group_id = ? AND user_id IN ?",
+				todo.GroupID,
+				userIDs,
+			).
+			Count(&cnt1).Error; err != nil {
+			return fmt.Errorf("check target memberships: %w", err)
+		}
+		if cnt1 != int64(len(userIDs)) {
+			return apperrors.ErrTodoMemberNotFound
+		}
+
+		// 所有人都必须有这条 Todo 的授权记录
+		//查todomember
+		var cnt2 int64
+		if err := tx.Model(&model.TodoMember{}).
+			Where(
+				"todo_id = ? AND user_id IN ?",
+				todoID,
+				userIDs,
+			).
+			Count(&cnt2).Error; err != nil {
+			return fmt.Errorf("check todo members: %w", err)
+		}
+		if cnt2 != int64(len(userIDs)) {
+			return apperrors.ErrTodoMemberNotFound
+		}
+
+		//一次性修改
+		if err := tx.Model(&model.TodoMember{}).
+			Where(
+				"todo_id = ? AND user_id IN ?",
+				todoID,
+				userIDs,
+			).
+			Update("role", role).
+			Error; err != nil {
+			return fmt.Errorf("update todo member roles: %w", err)
+		}
+
+		return nil
+	})
 }
 
 func NewGORMRepository(db *gorm.DB) Repository {
@@ -244,7 +348,7 @@ func (r *gormRepository) List(
 		}
 
 		return nil
-	})
+	}, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -288,7 +392,7 @@ func (r *gormRepository) ByIDForUser(ctx context.Context, id uint, userID uint) 
 			return fmt.Errorf("load todo %d detail: %w", id, err)
 		}
 		return nil
-	})
+	}, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return model.Todo{}, err
 	}
@@ -673,7 +777,7 @@ func (r *gormRepository) GetOccurrenceCompletions(
 			items = append(items, CompletionUser{User: user, CompletedAt: record.CompletedAt})
 		}
 		return nil
-	})
+	}, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
@@ -766,4 +870,45 @@ func todoOccursOn(item model.Todo, date time.Time) (bool, error) {
 
 	next := rule.After(from, true)
 	return !next.IsZero() && next.Before(to), nil
+}
+
+// 在同一事务内聚合CalendarCandidates和CompletionsInRange
+func (r *gormRepository) CalendarData(
+	ctx context.Context,
+	userID uint,
+	from time.Time,
+	to time.Time,
+) ([]model.Todo, []model.TodoCompletion, error) {
+	var items []model.Todo
+	var completions []model.TodoCompletion
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		//使用repo，不用r.db
+		//不能在这里调用 r.CalendarCandidates，否则它仍然使用外面的 r.db
+		txRepo := &gormRepository{db: tx}
+
+		var err error
+		items, err = txRepo.CalendarCandidates(ctx, userID, from, to)
+		if err != nil {
+			return err
+		}
+
+		todoIDs := make([]uint, 0, len(items))
+		for _, item := range items {
+			todoIDs = append(todoIDs, item.ID)
+		}
+
+		completions, err = txRepo.CompletionsInRange(
+			ctx,
+			todoIDs,
+			from,
+			to,
+		)
+		return err
+
+	}, &sql.TxOptions{ReadOnly: true}) //表示只读
+	if err != nil {
+		return nil, nil, err
+	}
+	return items, completions, nil
 }

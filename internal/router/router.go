@@ -90,6 +90,7 @@ func registerAPI(
 		//加群和退群
 		groups.POST("/:groupID/join", gh.JoinGroup)
 		groups.POST("/:groupID/quit", gh.QuitGroup)
+		//解散群组
 		groups.POST("/:groupID/dismiss", gh.DismissGroup)
 	}
 
@@ -110,6 +111,8 @@ func registerAPI(
 			th.GetOccurrenceCompletions,
 		)
 		todos.DELETE("/:id", th.DeleteTodo)
+
+		todos.PATCH("/:id/members", th.PatchRoles)
 	}
 
 	events := protected.Group("/events")

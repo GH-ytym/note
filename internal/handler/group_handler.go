@@ -140,6 +140,7 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		ID:        item.ID,
 		Name:      item.Name,
 		OwnerID:   item.OwnerID,
+		Policy:    item.Policy,
 		CreatedAt: item.CreatedAt,
 	})
 }
@@ -173,6 +174,7 @@ func (h *GroupHandler) MyGroups(c *gin.Context) {
 			ID:        item.ID,
 			Name:      item.Name,
 			OwnerID:   item.OwnerID,
+			Policy:    item.Policy,
 			CreatedAt: item.CreatedAt,
 		})
 	}

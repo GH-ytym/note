@@ -1,16 +1,20 @@
 package handler
 
-import "time"
+import (
+	"note/internal/model"
+	"time"
+)
 
 type CreateGroupRequest struct {
 	Name string `json:"name" binding:"required,max=80"`
 }
 
 type GroupResponse struct {
-	ID        uint      `json:"id"`
-	Name      string    `json:"name"`
-	OwnerID   uint      `json:"owner_id"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uint              `json:"id"`
+	Name      string            `json:"name"`
+	OwnerID   uint              `json:"owner_id"`
+	Policy    model.GroupPolicy `json:"policy"`
+	CreatedAt time.Time         `json:"created_at"`
 }
 
 // 成员列表复用公开用户资料，不返回邮箱或密码等账号信息。

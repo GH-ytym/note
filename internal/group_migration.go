@@ -16,6 +16,15 @@ func migrateGroupSchema(db *gorm.DB) error {
 		}
 
 		// 有数据的父表显式升级，避免重建 groups 时级联影响成员和 Todo。
+		if !tx.Migrator().HasColumn(&model.Group{}, "Policy") {
+			// 旧群全部保留原来的直接入群行为；CHECK 与新模型一致。
+			if err := tx.Exec(`ALTER TABLE groups
+				ADD COLUMN policy text NOT NULL DEFAULT 'public'
+				CONSTRAINT ck_groups_policy
+				CHECK (policy IN ('restricted','public','approval','personal'))`).Error; err != nil {
+				return fmt.Errorf("add groups.policy: %w", err)
+			}
+		}
 		if !tx.Migrator().HasColumn(&model.Group{}, "Code") {
 			if err := tx.Exec("ALTER TABLE groups ADD COLUMN code text NOT NULL DEFAULT ''").Error; err != nil {
 				return fmt.Errorf("add groups.code: %w", err)

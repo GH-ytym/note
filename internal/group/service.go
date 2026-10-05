@@ -96,6 +96,7 @@ func (s *service) Create(
 	item := model.Group{
 		Name:    name,
 		OwnerID: ownerID,
+		Policy:  model.Public,
 		Members: []model.GroupMember{
 			{UserID: ownerID},
 		},

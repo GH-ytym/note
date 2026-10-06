@@ -55,7 +55,7 @@ func TestAuthLogin(t *testing.T) {
 	}
 	h := handler.NewAuthHandler(auth.NewService(auth.NewGORMRepository(db)), tokens, newTestRefreshStore(t), false)
 	th := handler.NewTodoHandler(todo.NewService(todo.NewGORMRepository(db)))
-	r := router.NewWithWeb(th, nil, nil, nil, h, handler.NewGroupHandler(nil), tokens, "")
+	r := router.NewWithWeb(th, nil, nil, nil, h, handler.NewGroupHandler(nil), nil, tokens, "")
 	for _, tc := range []struct {
 		name   string
 		path   string

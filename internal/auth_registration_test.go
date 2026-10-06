@@ -44,7 +44,7 @@ func TestRegisterAndLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := handler.NewAuthHandler(auth.NewService(auth.NewGORMRepository(db)), tokens, newTestRefreshStore(t), false)
-	r := router.NewWithWeb(nil, nil, nil, nil, h, handler.NewGroupHandler(nil), tokens, "")
+	r := router.NewWithWeb(nil, nil, nil, nil, h, handler.NewGroupHandler(nil), nil, tokens, "")
 	request := func(path string, body map[string]string, status int) []byte {
 		t.Helper()
 		data, err := json.Marshal(body)

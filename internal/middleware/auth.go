@@ -11,6 +11,7 @@ import (
 
 // 统一使用这个 key，避免保存和读取时拼写不一致。
 const UserIDKey = "user_id"
+const AccessExpiresAtKey = "access_expires_at"
 
 func RequireLogin(tm *auth.TokenManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -42,6 +43,10 @@ func RequireLogin(tm *auth.TokenManager) gin.HandlerFunc {
 
 		// 4. 验证通过，把用户 ID 存进当前请求的 Context。
 		c.Set(UserIDKey, claims.UserID)
+
+		//SSE会用到
+		//SSE请求保持很久，handler需要知道什么时候结束当前user的过期登录连接
+		c.Set(AccessExpiresAtKey, claims.ExpiresAt.Time)
 
 		// 5. 继续执行后面的 handler。
 		c.Next()

@@ -43,7 +43,7 @@ export default function CalendarWindow({
   initialDate = TODAY_KEY,
 }: { initialView?: View; initialDate?: string } = {}) {
   const { settings } = useAppearance();
-  const { selected: selectedGroup, loading: groupsLoading } = useGroups();
+  const { selected: selectedGroup } = useGroups();
   const [currentMonth, setCurrentMonth] = useState(() =>
     monthFromKey(initialDate),
   );
@@ -455,7 +455,6 @@ export default function CalendarWindow({
     >
       {!mini && <GroupSidebar onSettings={() => openUtility("settings")} />}
       <div className="workspace-stack">
-        {!selectedGroup && !mini && <section className="workspace-empty" role="status"><h2>{groupsLoading ? "正在读取群组…" : "欢迎使用 Note"}</h2><p>{groupsLoading ? "稍等片刻" : "从左侧创建或加入群组，再安排日程与待办。"}</p></section>}
         <div className="month-stack">
           <section
             className={`calendar-panel view-${view} ${calendarLoading ? "is-loading" : ""}`}

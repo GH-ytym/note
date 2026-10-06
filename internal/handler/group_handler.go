@@ -294,7 +294,7 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 		return
 	}
 
-	err := h.service.JoinGroup(
+	pending, err := h.service.JoinGroup(
 		c.Request.Context(),
 		uri.GroupID,
 		userID,
@@ -314,11 +314,23 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 	case errors.Is(err, apperrors.ErrGroupInviteInvalid):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 
+	case errors.Is(err, apperrors.ErrGroupJoinForbidden):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "加入群组失败"})
 
 	default:
-		c.Status(http.StatusNoContent)
+		//需要审核才发
+		if pending != nil {
+			c.JSON(http.StatusAccepted, pending)
+			return
+		}
+
+		//pending是nil，说明已经join了
+		c.JSON(http.StatusOK, gin.H{
+			"status": "joined",
+		})
 	}
 }
 

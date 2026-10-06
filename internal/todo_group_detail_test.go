@@ -70,7 +70,7 @@ func TestTodoGetCurrentGroupMembership(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := handler.NewTodoHandler(service)
-	r := router.NewWithWeb(h, nil, nil, nil, nil, nil, tokens, "")
+	r := router.NewWithWeb(h, nil, nil, nil, nil, nil, nil, tokens, "")
 	request := func(userID uint, path string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, path, nil)

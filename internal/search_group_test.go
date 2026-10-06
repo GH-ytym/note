@@ -27,7 +27,7 @@ func groupSearchRequest(t *testing.T, db *gorm.DB) func(string, uint, int) searc
 		t.Fatal(err)
 	}
 	sh := search.NewSearchHandler(search.NewService(search.NewGORMRepository(db)))
-	r := router.NewWithWeb(nil, nil, nil, sh, nil, nil, tokens, "")
+	r := router.NewWithWeb(nil, nil, nil, sh, nil, nil, nil, tokens, "")
 	return func(path string, userID uint, want int) search.Result {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, path, nil)

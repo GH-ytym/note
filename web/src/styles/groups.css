@@ -1,8 +1,5 @@
 .calendar-shell.has-group-sidebar { display: flex; gap: 0; padding: 0; min-height: 0; background: var(--panel); }
 .has-group-sidebar > .workspace-stack { position: relative; flex: 1; width: 0; min-width: 0; grid-template-rows: minmax(0, 1fr); padding: 0; }
-.workspace-empty { position: absolute; inset: 72px 12px 12px; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--panel); border-radius: 10px; padding: 24px; text-align: center; }
-.workspace-empty h2 { font-size: 22px; }
-.workspace-empty p { font-size: 14px; color: var(--muted); line-height: 1.8; }
 .has-group-sidebar .month-stack { grid-template-rows: minmax(0, 1fr); }
 .calendar-shell.has-group-sidebar .calendar-panel { border: 0; border-radius: 0; box-shadow: none; }
 .group-sidebar { width: 222px; flex: 0 0 222px; height: 100%; display: flex; flex-direction: column; padding: 18px 12px 12px; background: var(--page); border-right: 1px solid var(--line); font-size: 13px; }

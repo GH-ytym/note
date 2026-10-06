@@ -62,7 +62,7 @@ func groupManagementRequest(t *testing.T, db *gorm.DB) func(string, string, uint
 		t.Fatal(err)
 	}
 	gh := handler.NewGroupHandler(group.NewService(group.NewGORMRepository(db)))
-	r := router.NewWithWeb(nil, nil, nil, nil, nil, gh, tokens, "")
+	r := router.NewWithWeb(nil, nil, nil, nil, nil, gh, nil, tokens, "")
 	return func(method, path string, userID uint, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -234,7 +234,7 @@ func TestGroupDismissRequiresCurrentOwner(t *testing.T) {
 	if err := repo.Quit(context.Background(), first.ID, owner.ID, &member.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Join(context.Background(), first.ID, owner.ID, "ABC123"); err != nil {
+	if _, _, err := repo.Join(context.Background(), first.ID, owner.ID, "ABC123"); err != nil {
 		t.Fatal(err)
 	}
 	// 旧群主即使重新加入，也不能凭旧身份解散。

@@ -26,7 +26,7 @@ func TestGroupCreationHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	gh := handler.NewGroupHandler(group.NewService(group.NewGORMRepository(db)))
-	r := router.NewWithWeb(nil, nil, nil, nil, nil, gh, tokens, "")
+	r := router.NewWithWeb(nil, nil, nil, nil, nil, gh, nil, tokens, "")
 	// 两个不同用户分别使用两套路由；请求体伪造 owner_id 不得改变真实群主。
 	for i, user := range []model.User{firstUser, secondUser} {
 		path := []string{"/groups", "/api/groups"}[i]

@@ -3,10 +3,14 @@ package group
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
+
 	apperrors "note/internal/errors"
 	"note/internal/model"
+	"note/internal/notification"
 
 	"gorm.io/gorm"
 )
@@ -24,7 +28,7 @@ type Repository interface {
 		userID uint,
 		code string,
 	) error
-	Join(ctx context.Context, groupID uint, userID uint, code string) error
+	Join(ctx context.Context, groupID uint, userID uint, code string) (*model.GroupJoinRequest, *model.Notification, error)
 	Quit(ctx context.Context, groupID uint, userID uint, target *uint) error
 	ListMembers(ctx context.Context, groupID, userID uint) ([]model.GroupMember, error)
 	Dismiss(ctx context.Context, groupID, userID uint) error
@@ -139,27 +143,44 @@ func (r *gormRepository) Dismiss(ctx context.Context, groupID, userID uint) erro
 	})
 }
 
-func (r *gormRepository) Join(ctx context.Context, groupID uint, userID uint, code string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 1. 找到指定群，只和这个群的当前邀请码比较
-		var item model.Group
-		//这里会拿出code
-		err := tx.Select("id", "code").First(&item, groupID).Error
-
+// JoinGroup
+// → 查询群组最新 policy
+// → 确认用户存在、是否已经入群
+// → restricted / personal：拒绝
+// → public / approval：验证六位码
+//
+//	→ public：写入成员和权限，保存群主提醒和投递任务
+//	→ approval：保存申请，保存群主审核通知和投递任务
+func (r *gormRepository) Join(
+	ctx context.Context,
+	groupID uint,
+	userID uint,
+	code string,
+) (
+	*model.GroupJoinRequest,
+	*model.Notification,
+	error,
+) {
+	//nil就是已经入群，非nil表示需要审核
+	var pending *model.GroupJoinRequest
+	var notice *model.Notification
+	//事务内闭包修改这两个东西
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var g model.Group
+		//拿到id 邀请码 加群权限和群主id
+		err := tx.Select("id", "name", "code", "policy", "owner_id").
+			First(&g, groupID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.ErrGroupNotFound
 		}
 		if err != nil {
-			return fmt.Errorf("find group before joining: %w", err)
-		}
-		if item.Code == "" || item.Code != code {
-			return apperrors.ErrGroupInviteInvalid
+			return fmt.Errorf("find joining group: %w", err)
 		}
 
-		// 2. JWT 对应的账号必须仍然存在
+		//拿到当前用户资料
 		var user model.User
-		err = tx.Select("id").First(&user, userID).Error
-
+		err = tx.Select("id", "username", "suffix", "nickname", "avatar").
+			First(&user, userID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.ErrGroupUnauthenticated
 		}
@@ -167,77 +188,151 @@ func (r *gormRepository) Join(ctx context.Context, groupID uint, userID uint, co
 			return fmt.Errorf("find joining user: %w", err)
 		}
 
-		//如果已经在群里了，应该直接返回
-		var count int64
+		var cnt int64
 		if err := tx.Model(&model.GroupMember{}).
-			Where("group_id = ? AND user_id = ?", groupID, userID).
-			Count(&count).Error; err != nil {
-			return fmt.Errorf("check existing membership: %w", err)
+			Where("group_id= ? AND user_id= ?", groupID, userID).
+			Count(&cnt).Error; err != nil {
+			return fmt.Errorf("check membership: %w", err)
 		}
-		if count > 0 {
+		//在群里就直接返回，这个时候pending依旧是nil
+		if cnt > 0 {
 			return nil
 		}
 
-		// 先写入成员关系；即使本群没有 Todo，也必须完成入群。
-		member := model.GroupMember{
-			GroupID: groupID,
-			UserID:  userID,
-		}
-		if err := tx.Omit("User").Create(&member).Error; err != nil {
-			return fmt.Errorf("create group membership: %w", err)
-		}
+		//看权限
+		switch g.Policy {
+		//如果是restricted和personal，不允许加入
+		case model.Restricted, model.Personal:
+			return apperrors.ErrGroupJoinForbidden
 
-		// 查询本群已有 Todo
-		var todos []model.Todo
-		if err := tx.Select("id", "creator_id").
-			Where("group_id = ?", groupID).
-			Find(&todos).Error; err != nil {
-			return fmt.Errorf("find group todos: %w", err)
+		case model.Public, model.Approval: //允许继续
+
+		default: //权限字符串不对
+			return fmt.Errorf("invalid group policy: %q", g.Policy)
 		}
 
-		// 给新加入的成员初始化权限。
-		permissions := make([]model.TodoMember, 0, len(todos))
+		//检查邀请码
+		if g.Code == "" || g.Code != code {
+			return apperrors.ErrGroupInviteInvalid
+		}
 
-		for _, todo := range todos {
-			role := model.TodoViewer
-			if todo.CreatorID == userID {
-				role = model.TodoEditor
+		if g.Policy == model.Public {
+			//public不需要审核，直接加入
+			if err := r.addMember(tx, groupID, userID); err != nil {
+				return err
 			}
 
-			permissions = append(permissions, model.TodoMember{
-				TodoID: todo.ID,
-				UserID: userID,
-				Role:   role,
-			})
+			//给群主保存一条通知
+			msg := model.Notification{
+				ReceiverID: g.OwnerID, //发给群主的
+				ActorID:    userID,    //当前用户发过来的
+				GroupID:    groupID,
+				Type:       model.Joined,
+				CreatedAt:  time.Now().UTC(),
+			}
+
+			if err := tx.Omit("Receiver", "Actor", "Group", "JoinRequest").
+				Create(&msg).Error; err != nil {
+				return fmt.Errorf("create group joined notification: %w", err)
+			}
+			msg.Actor = &user
+			msg.Group = &g
+			if err := enqueueNotice(tx, msg); err != nil {
+				return err
+			}
+			notice = &msg
+
+			return nil
 		}
 
-		// 空切片不插入，但仍要继续初始化 Event 权限。
-		if len(permissions) > 0 {
-			if err := tx.Omit("User").CreateInBatches(&permissions, 200).Error; err != nil {
-				return fmt.Errorf("initialize todo roles: %w", err)
-			}
-		}
-		var events []model.Event
-		if err := tx.Select("id", "creator_id").Where("group_id = ?", groupID).Find(&events).Error; err != nil {
-			return fmt.Errorf("find group events: %w", err)
-		}
-		eventPermissions := make([]model.EventMember, 0, len(events))
-		for _, event := range events {
-			role := model.EventViewer
-			if event.CreatorID == userID {
-				role = model.EventEditor
-			}
-			eventPermissions = append(eventPermissions, model.EventMember{EventID: event.ID, UserID: userID, Role: role})
-		}
-		// Todo、Event 权限和成员关系一起提交，任一步失败都回滚。
-		if len(eventPermissions) > 0 {
-			if err := tx.Omit("User").CreateInBatches(&eventPermissions, 200).Error; err != nil {
-				return fmt.Errorf("initialize event roles: %w", err)
-			}
+		//approval
+		//以当前时间点开始计时
+		now := time.Now().UTC()
+
+		//看看7天内有没有申请过而且还在审核的
+		var pre model.GroupJoinRequest
+		err = tx.Where(
+			"group_id = ? AND kind = ? AND sender_id = ? AND status = ?",
+			groupID, model.Application, userID, model.Pending,
+		).Order("id DESC").First(&pre).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("find pending application: %w", err)
 		}
 
+		//有就复用
+		if err == nil && time.Now().UTC().Before(pre.CreatedAt.Add(7*24*time.Hour)) {
+			pending = &pre
+			return nil
+		}
+
+		//没有或者过期就开个新的
+		req := model.GroupJoinRequest{
+			GroupID:    groupID,
+			Kind:       model.Application,
+			SenderID:   userID,
+			ReceiverID: g.OwnerID, //对群主发送
+			Status:     model.Pending,
+			CreatedAt:  now,
+		}
+		if err := tx.Omit("Group", "Sender", "Receiver").
+			Create(&req).Error; err != nil {
+			return fmt.Errorf("create group application: %w", err)
+		}
+
+		msg := model.Notification{
+			ReceiverID:    g.OwnerID,
+			ActorID:       userID,
+			GroupID:       groupID,
+			JoinRequestID: &req.ID,
+			Type:          model.JoinRequested, //这里需要审核
+			CreatedAt:     now,
+		}
+		if err := tx.Omit("Receiver", "Actor", "Group", "JoinRequest").
+			Create(&msg).Error; err != nil {
+			return fmt.Errorf("create group application notification: %w", err)
+		}
+
+		msg.Actor = &user
+		msg.Group = &g
+		msg.JoinRequest = &req
+		if err := enqueueNotice(tx, msg); err != nil {
+			return err
+		}
+		notice = &msg
+		//记录pending
+		pending = &req
 		return nil
 	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return pending, notice, nil
+}
+
+// enqueueNotice 使用 Join 的同一个事务保存投递任务。
+// 保存这次 Card 的 JSON 快照，后续改名、处理申请不会改写这次事件。
+func enqueueNotice(tx *gorm.DB, msg model.Notification) error {
+	card, err := notification.NewCard(msg)
+	if err != nil {
+		return fmt.Errorf("build notification outbox card: %w", err)
+	}
+	data, err := json.Marshal(card)
+	if err != nil {
+		return fmt.Errorf("encode notification outbox card: %w", err)
+	}
+
+	task := model.Outbox{
+		ReceiverID: msg.ReceiverID,
+		Name:       "notification.created",
+		Data:       string(data),
+		CreatedAt:  msg.CreatedAt,
+		// PublishedAt 保持 nil，等后台成功交给 Redis 后再填写。
+	}
+	if err := tx.Create(&task).Error; err != nil {
+		return fmt.Errorf("create notification outbox task: %w", err)
+	}
+	return nil
 }
 
 func (r *gormRepository) GetInviteCode(ctx context.Context, groupID uint, userID uint) (string, error) {
@@ -498,4 +593,78 @@ func (r *gormRepository) Quit(ctx context.Context, groupID uint, userID uint, ta
 
 		return nil
 	})
+}
+
+// 写入成员、初始化权限的函数
+// 使用调用方的事务
+func (r *gormRepository) addMember(
+	tx *gorm.DB,
+	groupID uint,
+	userID uint,
+) error {
+	member := model.GroupMember{
+		GroupID: groupID,
+		UserID:  userID,
+	}
+	if err := tx.Omit("User").Create(&member).Error; err != nil {
+		return fmt.Errorf("create group membership: %w", err)
+	}
+
+	var todos []model.Todo
+	if err := tx.Select("id", "creator_id").
+		Where("group_id = ?", groupID).
+		Find(&todos).Error; err != nil {
+		return fmt.Errorf("find group todos: %w", err)
+	}
+
+	roles := make([]model.TodoMember, 0, len(todos))
+	for _, todo := range todos {
+		role := model.TodoViewer
+		if todo.CreatorID == userID {
+			role = model.TodoEditor
+		}
+
+		roles = append(roles, model.TodoMember{
+			TodoID: todo.ID,
+			UserID: userID,
+			Role:   role,
+		})
+	}
+
+	if len(roles) > 0 {
+		if err := tx.Omit("User").
+			CreateInBatches(&roles, 200).Error; err != nil {
+			return fmt.Errorf("initialize todo roles: %w", err)
+		}
+	}
+
+	var events []model.Event
+	if err := tx.Select("id", "creator_id").
+		Where("group_id = ?", groupID).
+		Find(&events).Error; err != nil {
+		return fmt.Errorf("find group events: %w", err)
+	}
+
+	roles1 := make([]model.EventMember, 0, len(events))
+	for _, event := range events {
+		role := model.EventViewer
+		if event.CreatorID == userID {
+			role = model.EventEditor
+		}
+
+		roles1 = append(roles1, model.EventMember{
+			EventID: event.ID,
+			UserID:  userID,
+			Role:    role,
+		})
+	}
+
+	if len(roles1) > 0 {
+		if err := tx.Omit("User").
+			CreateInBatches(&roles1, 200).Error; err != nil {
+			return fmt.Errorf("initialize event roles: %w", err)
+		}
+	}
+
+	return nil
 }

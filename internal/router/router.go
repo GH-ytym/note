@@ -22,13 +22,14 @@ func NewWithWeb(
 	sh *search.SearchHandler,
 	ah *handler.AuthHandler,
 	gh *handler.GroupHandler,
+	nh *handler.NotificationHandler,
 	tm *auth.TokenManager,
 	webDir string,
 	profiles ...*handler.ProfileHandler,
 ) *gin.Engine {
 	r := gin.Default()
-	registerAPI(r, th, eh, ch, sh, ah, gh, tm)
-	registerAPI(r.Group("/api"), th, eh, ch, sh, ah, gh, tm)
+	registerAPI(r, th, eh, ch, sh, ah, gh, nh, tm)
+	registerAPI(r.Group("/api"), th, eh, ch, sh, ah, gh, nh, tm)
 	if len(profiles) > 0 && profiles[0] != nil {
 		for _, prefix := range []string{"", "/api"} {
 			users := r.Group(prefix+"/users", middleware.RequireLogin(tm))
@@ -64,6 +65,7 @@ func registerAPI(
 	sh *search.SearchHandler,
 	ah *handler.AuthHandler,
 	gh *handler.GroupHandler,
+	nh *handler.NotificationHandler,
 	tm *auth.TokenManager,
 ) {
 	// 公开接口：不需要登录。
@@ -78,9 +80,13 @@ func registerAPI(
 
 	// 受保护接口：先经过 RequireLogin。
 	protected := r.Group("")
-	//这一步后，前端请求会携带：Authorization: Bearer <登录得到的Token>
+	// RequireLogin 读取前端携带的 access token，验证后保存当前用户 ID。
 	protected.Use(middleware.RequireLogin(tm))
 
+	// 通知属于接收者；尚未入群的用户也需要查看发给自己的邀请。
+	protected.GET("/notifications", nh.List)
+	//循环写sse和接收events
+	protected.GET("/notifications/stream", nh.Stream)
 	protected.GET("/calendar", ch.GetCalendar)
 
 	groups := protected.Group("/groups")

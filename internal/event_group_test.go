@@ -34,7 +34,7 @@ func eventGroupRequest(t *testing.T, db *gorm.DB) func(string, string, uint, str
 	ts := todo.NewService(todo.NewGORMRepository(db))
 	r := router.NewWithWeb(handler.NewTodoHandler(ts), handler.NewEventHandler(es),
 		handler.NewCalendarHandler(calendar.NewService(ts, es)), nil,
-		nil, handler.NewGroupHandler(group.NewService(group.NewGORMRepository(db))), tokens, "")
+		nil, handler.NewGroupHandler(group.NewService(group.NewGORMRepository(db))), nil, tokens, "")
 	return func(method, path string, userID uint, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -252,12 +252,12 @@ func TestEventGroupJoinQuitAndDismiss(t *testing.T) {
 		t.Fatalf("quit lost event: %+v %v", loaded, err)
 	}
 	// 本群只有 Event，没有 Todo，也必须初始化 Event 权限。
-	if err := gs.Join(ctx, first.ID, outsider.ID, "ABC123"); err != nil {
+	if _, _, err := gs.Join(ctx, first.ID, outsider.ID, "ABC123"); err != nil {
 		t.Fatal(err)
 	}
 	checkEventRole(t, db, item.ID, outsider.ID, model.EventViewer)
 	checkEventRole(t, db, owned.ID, outsider.ID, model.EventViewer)
-	if err := gs.Join(ctx, first.ID, member.ID, "ABC123"); err != nil {
+	if _, _, err := gs.Join(ctx, first.ID, member.ID, "ABC123"); err != nil {
 		t.Fatal(err)
 	}
 	checkEventRole(t, db, item.ID, member.ID, model.EventEditor)
@@ -265,7 +265,7 @@ func TestEventGroupJoinQuitAndDismiss(t *testing.T) {
 	if err := es.PatchRole(ctx, member.ID, item.ID, []uint{outsider.ID}, model.EventEditor); err != nil {
 		t.Fatal(err)
 	}
-	if err := gs.Join(ctx, first.ID, outsider.ID, "ABC123"); err != nil {
+	if _, _, err := gs.Join(ctx, first.ID, outsider.ID, "ABC123"); err != nil {
 		t.Fatal(err)
 	}
 	checkEventRole(t, db, item.ID, outsider.ID, model.EventEditor)
@@ -273,7 +273,7 @@ func TestEventGroupJoinQuitAndDismiss(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkEventRole(t, db, retained.ID, outsider.ID, model.EventViewer)
-	if err := gs.Join(ctx, first.ID, outsider.ID, "ABC123"); err != nil {
+	if _, _, err := gs.Join(ctx, first.ID, outsider.ID, "ABC123"); err != nil {
 		t.Fatal(err)
 	}
 	checkEventRole(t, db, item.ID, outsider.ID, model.EventViewer)
@@ -284,7 +284,7 @@ func TestEventGroupJoinQuitAndDismiss(t *testing.T) {
 	if _, err := es.Get(ctx, owned.ID, owner.ID); !errors.Is(err, apperrors.ErrGroupAccessDenied) {
 		t.Fatalf("former owner read: %v", err)
 	}
-	if err := gs.Join(ctx, first.ID, owner.ID, "ABC123"); err != nil {
+	if _, _, err := gs.Join(ctx, first.ID, owner.ID, "ABC123"); err != nil {
 		t.Fatal(err)
 	}
 	checkEventRole(t, db, owned.ID, owner.ID, model.EventEditor)
@@ -312,7 +312,7 @@ func TestEventCreateAndRoleUpdatesRollBack(t *testing.T) {
 	db, owner, member, outsider, first, _ := groupManagementFixture(t)
 	es := event.NewService(event.NewGORMRepository(db))
 	ctx := context.Background()
-	if err := group.NewGORMRepository(db).Join(ctx, first.ID, outsider.ID, "ABC123"); err != nil {
+	if _, _, err := group.NewGORMRepository(db).Join(ctx, first.ID, outsider.ID, "ABC123"); err != nil {
 		t.Fatal(err)
 	}
 	trigger := fmt.Sprintf(`CREATE TEMP TRIGGER reject_event_create_role
@@ -371,7 +371,7 @@ func TestEventGroupJoinAndDismissRollBack(t *testing.T) {
 	if err := db.Exec(trigger).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := gs.Join(ctx, first.ID, outsider.ID, "ABC123"); err == nil {
+	if _, _, err := gs.Join(ctx, first.ID, outsider.ID, "ABC123"); err == nil {
 		t.Fatal("join succeeded despite failed event role insert")
 	}
 	var count int64
@@ -467,7 +467,8 @@ func TestEventConcurrentCreateJoinAndPatch(t *testing.T) {
 	created := make(chan createResult, 1)
 	go func() {
 		<-ready
-		joined <- group.NewGORMRepository(db).Join(ctx, first.ID, outsider.ID, "ABC123")
+		_, _, err := group.NewGORMRepository(db).Join(ctx, first.ID, outsider.ID, "ABC123")
+		joined <- err
 	}()
 	go func() {
 		<-ready

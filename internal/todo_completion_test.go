@@ -116,7 +116,7 @@ func TestTodoCompletionHTTPIdentityAndMembership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := router.NewWithWeb(handler.NewTodoHandler(service), nil, nil, nil, nil, nil, tokens, "")
+	r := router.NewWithWeb(handler.NewTodoHandler(service), nil, nil, nil, nil, nil, nil, tokens, "")
 	request := func(method string, userID uint, path, body string, status int) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))

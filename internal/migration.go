@@ -21,6 +21,15 @@ func migrateDatabase(db *gorm.DB) error {
 	if err := migrateGroupSchema(db); err != nil {
 		return fmt.Errorf("migrate group schema: %w", err)
 	}
+	if err := migrateGroupJoinSchema(db); err != nil {
+		return fmt.Errorf("migrate group join request schema: %w", err)
+	}
+	if err := migrateNotificationSchema(db); err != nil {
+		return fmt.Errorf("migrate notification schema: %w", err)
+	}
+	if err := migrateOutboxSchema(db); err != nil {
+		return fmt.Errorf("migrate outbox schema: %w", err)
+	}
 
 	if err := migrateTodoSchema(db); err != nil {
 		return err

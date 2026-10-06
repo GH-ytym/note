@@ -16,9 +16,10 @@ func TestAuthenticationRouteCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Nil handlers deliberately make any accidental execution fail the test.
-	r := NewWithWeb(nil, nil, nil, nil, nil, nil, m, "")
+	r := NewWithWeb(nil, nil, nil, nil, nil, nil, nil, m, "")
 	for _, prefix := range []string{"", "/api"} {
 		for _, route := range []struct{ method, path string }{
+			{"GET", "/notifications"},
 			{"POST", "/groups"},
 			{"GET", "/groups/1/members"}, {"POST", "/groups/1/dismiss"},
 			{"GET", "/calendar"}, {"GET", "/groups/1/search/todos"}, {"GET", "/groups/1/search/events"}, {"GET", "/groups/1/search/all"},

@@ -33,7 +33,7 @@ func TestTodoListCurrentGroupMembership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := router.NewWithWeb(handler.NewTodoHandler(service), nil, nil, nil, nil, nil, tokens, "")
+	r := router.NewWithWeb(handler.NewTodoHandler(service), nil, nil, nil, nil, nil, nil, tokens, "")
 	request := func(userID uint, want int) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/groups/%d/todos", item.ID), nil)

@@ -45,7 +45,7 @@ func TestRefreshRoutes(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 	store := auth.NewRefreshStore(client)
 	h := handler.NewAuthHandler(service, tokens, store, true)
-	r := router.NewWithWeb(nil, nil, nil, nil, h, nil, tokens, "")
+	r := router.NewWithWeb(nil, nil, nil, nil, h, nil, nil, tokens, "")
 	request := func(path, body string, cookie *http.Cookie, csrf bool) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("POST", path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")

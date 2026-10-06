@@ -13,6 +13,7 @@ import (
 	"note/internal/calendar"
 	"note/internal/event"
 	"note/internal/group"
+	"note/internal/notification"
 	"note/internal/profile"
 	"note/internal/search"
 	"os"
@@ -142,6 +143,18 @@ func Run() (runErr error) {
 	groupService := group.NewService(groupRepository)
 	groupHandler := handler.NewGroupHandler(groupService)
 
+	// 通知查询链。
+	notificationRepository := notification.NewGORMRepository(db)
+	notificationService := notification.NewService(notificationRepository)
+
+	// 整个后端进程共用一个 Hub。
+	notificationHub := notification.NewHub()
+
+	notificationHandler := handler.NewNotificationHandler(
+		notificationService,
+		notificationHub,
+	)
+
 	//todo链
 	// 静态类型是 todo.Repository；实际值是隐藏的 *todo.gormRepository。
 	todoRepository := todo.NewGORMRepository(db)
@@ -182,6 +195,7 @@ func Run() (runErr error) {
 			searchHandler,
 			authHandler,
 			groupHandler,
+			notificationHandler,
 			tokenManager,
 			os.Getenv("NOTE_WEB_DIR"),
 			profileHandler,
@@ -244,6 +258,8 @@ func Run() (runErr error) {
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
 
+	//先关闭接收循环
+	notificationHub.Close()
 	// shutdown尝试关闭；这会使监听器返回错误信号
 	//此时监听器关闭导致返回 http.ErrServerClosed，但select已经过去，没有接收者来接收serverErr了
 	//如果没写缓冲区为1，就会造成goroutine泄漏

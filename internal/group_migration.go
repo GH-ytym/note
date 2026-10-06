@@ -69,3 +69,34 @@ func migrateGroupSchema(db *gorm.DB) error {
 		return tx.Exec("CREATE INDEX IF NOT EXISTS idx_group_members_user_id ON group_members(user_id)").Error
 	})
 }
+
+func migrateGroupJoinSchema(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&model.GroupJoinRequest{}) {
+			return nil
+		}
+		// 用户、群组表已存在，只创建申请表，不递归升级父表。
+		// 表、外键和索引在同一事务中创建，失败后可在下次启动重试。
+		return tx.Migrator().CreateTable(&model.GroupJoinRequest{})
+	})
+}
+
+func migrateNotificationSchema(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&model.Notification{}) {
+			return nil
+		}
+		// 用户、群组、申请表已存在，只创建通知表，避免重建父表。
+		return tx.Migrator().CreateTable(&model.Notification{})
+	})
+}
+
+func migrateOutboxSchema(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		if tx.Migrator().HasTable(&model.Outbox{}) {
+			return nil
+		}
+		// 只建投递任务表；重复启动保留已有的待投递和已投递任务。
+		return tx.Migrator().CreateTable(&model.Outbox{})
+	})
+}

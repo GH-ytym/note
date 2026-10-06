@@ -29,7 +29,7 @@ func TestProfileRoutesUseJWTIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := router.NewWithWeb(nil, nil, nil, nil, nil, nil, manager, "", handler.NewProfileHandler(service))
+	r := router.NewWithWeb(nil, nil, nil, nil, nil, nil, nil, manager, "", handler.NewProfileHandler(service))
 	for _, prefix := range []string{"", "/api"} {
 		for _, endpoint := range []struct{ method, path string }{{"GET", "/users/me"}, {"PUT", "/users/me/avatar"}, {"DELETE", "/users/me/avatar"}} {
 			response := httptest.NewRecorder()

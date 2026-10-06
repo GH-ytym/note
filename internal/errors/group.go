@@ -14,4 +14,5 @@ var (
 	ErrGroupQuitConflict          = errors.New("当前身份与退出方式不一致，请刷新群组信息")
 	ErrGroupTransferTargetInvalid = errors.New("接任者必须是本群其他成员")
 	ErrGroupDismissDenied         = errors.New("只有当前群主可以解散群组")
+	ErrGroupJoinForbidden         = errors.New("该群组不允许主动加入")
 )

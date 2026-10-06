@@ -36,7 +36,7 @@ type Service interface {
 		groupID uint,
 		userID uint,
 		code string,
-	) error
+	) (*model.GroupJoinRequest, error)
 	QuitGroup(
 		ctx context.Context,
 		groupID uint,
@@ -187,17 +187,23 @@ func (s *service) JoinGroup(
 	groupID uint,
 	userID uint,
 	code string,
-) error {
+) (*model.GroupJoinRequest, error) {
 	if userID == 0 {
-		return apperrors.ErrGroupUnauthenticated
+		return nil, apperrors.ErrGroupUnauthenticated
 	}
 	if groupID == 0 {
-		return apperrors.ErrGroupNotFound
+		return nil, apperrors.ErrGroupNotFound
 	}
 
 	//邀请码的格式错误应该在前端就被拦下
 	////就算打入后端的请求种邀请码真的错了，进入repo一样能被拦截
-	return s.repo.Join(ctx, groupID, userID, code)
+	pending, _, err := s.repo.Join(ctx, groupID, userID, code)
+	if err != nil {
+		return nil, err
+	}
+
+	// repo 已将成员／申请和通知提交到数据库，返回入群结果给申请人。
+	return pending, nil
 }
 
 func (s *service) QuitGroup(

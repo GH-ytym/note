@@ -39,7 +39,7 @@ func TestGroupJoinInitializesMembersAndPermissions(t *testing.T) {
 			}
 
 			repo := group.NewGORMRepository(db)
-			if err := repo.Join(context.Background(), item.ID, member.ID, "ABC123"); err != nil {
+			if _, _, err := repo.Join(context.Background(), item.ID, member.ID, "ABC123"); err != nil {
 				t.Fatalf("join: %v", err)
 			}
 			var memberships []model.GroupMember
@@ -77,7 +77,7 @@ func TestGroupJoinInitializesMembersAndPermissions(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if err := repo.Join(context.Background(), item.ID, member.ID, "ABC123"); err != nil {
+			if _, _, err := repo.Join(context.Background(), item.ID, member.ID, "ABC123"); err != nil {
 				t.Fatalf("repeat join: %v", err)
 			}
 			var count int64
@@ -120,7 +120,7 @@ func TestGroupJoinRollsBackWhenPermissionInsertFails(t *testing.T) {
 	if err := db.Exec(trigger).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := group.NewGORMRepository(db).Join(context.Background(), item.ID, member.ID, "ABC123"); err == nil {
+	if _, _, err := group.NewGORMRepository(db).Join(context.Background(), item.ID, member.ID, "ABC123"); err == nil {
 		t.Fatal("join succeeded despite failed permission insertion")
 	}
 	for _, table := range []any{&model.GroupMember{}, &model.TodoMember{}} {

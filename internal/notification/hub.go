@@ -29,6 +29,7 @@ type Hub struct {
 	clients map[uint](map[chan Event]struct{}) //map[用户](这个用户的全部连接集合),
 	// struct{}本身无含义，只是表示这个连接登记在这里，具体内容都在每个chan event里面
 	//例如，h.clients[8][chA] = struct{}{}表示把chA登记为用户8的一个连接
+	//用map而不是slice，因为map的delete是O(1)
 
 	closed bool
 }
@@ -39,11 +40,13 @@ func NewHub() *Hub {
 	}
 }
 
+//通知始终保存在数据库中，以下函数不做持久化，不做重试
+
 // subscribe给当前用户增加一个连接
 // 返回接收消息的channel、取消订阅的函数和err
 // 创建用户的某个窗口的对应channel、登记它、返回channel+清理函数+error
 func (h *Hub) Subscribe(userID uint) (
-	<-chan Event, //从这里接收通知
+	<-chan Event, //从这里接收通知；虽然实际返回的是双向channel，但这里写成单向可以增加约束
 	func(), //结束连接时执行它
 	error,
 ) {
@@ -67,6 +70,7 @@ func (h *Hub) Subscribe(userID uint) (
 	h.clients[userID][ch] = struct{}{}
 
 	//取消订阅的函数
+	//要返回这个函数，因为调用方拿不到mu，也不应该知道内部结构
 	unSub := func() {
 		//闭包
 		//但和上面的lock+unlock执行时机不同
@@ -91,7 +95,8 @@ func (h *Hub) Subscribe(userID uint) (
 
 		//如果删完发现一个链接都没了，把整个空map删掉
 		if len(conns) == 0 {
-			delete(h.clients, userID) //不是整个client，是client[当前user ]
+			delete(h.clients, userID) //不是整个client，是client[当前user]
+			//这样才能对上line64
 		}
 	}
 
@@ -109,23 +114,24 @@ func (h *Hub) Send(userID uint, e Event) {
 	for ch := range conns {
 		//取出的是key，所以就是chan Event
 		select {
-		//虽然send只用调用一次，但send内部每个窗口都尝试发送一次
+		//send持有锁，如果直接ch<-e，ch满的话就会阻塞等待
+		//虽然send只用调用一次，但send内部每个窗口都尝试发送一次，因为一个用户可以开多个窗口
 		case ch <- e:
 			// 消息已进入这条连接的队列,就不用管了
 
-		default:
+		default: //带default的select是非阻塞等待；慢队列不值得再等，直接delete+close
 			// 队列已满，结束这条订阅，删连接+关channel让其他连接继续工作
 			//如果往满的channel再发送会等待；往关了的channel发东西会panic
 			// SSE handler 发现 channel 关闭后结束响应。
 			// 当前事件没有进入这条队列。客户端要重新订阅，再补收历史或重查列表。
 			// Hub 本身不保存历史，新 channel 也不会自动收到遗漏的消息。
-			delete(conns, ch)
+			delete(conns, ch) //在go里面，遍历 map 时删除当前 key 是合法的
 			close(ch)
 		}
 	}
 
 	if len(conns) == 0 {
-		delete(h.clients, userID)
+		delete(h.clients, userID) //同样的，对应line64
 	}
 }
 

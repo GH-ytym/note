@@ -237,6 +237,7 @@ func (r *gormRepository) Join(
 			}
 			msg.Actor = &user
 			msg.Group = &g
+			//把这个msg单独丢进task表，这样后续修改不会动到它
 			if err := enqueueNotice(tx, msg); err != nil {
 				return err
 			}
@@ -327,7 +328,8 @@ func enqueueNotice(tx *gorm.DB, msg model.Notification) error {
 		Name:       "notification.created",
 		Data:       string(data),
 		CreatedAt:  msg.CreatedAt,
-		// PublishedAt 保持 nil，等后台成功交给 Redis 后再填写。
+		// PublishedAt 保持 nil，等后台成功交给 Redis 后再填写
+		//因为放进表里不算发布了，真的投递出去才算
 	}
 	if err := tx.Create(&task).Error; err != nil {
 		return fmt.Errorf("create notification outbox task: %w", err)

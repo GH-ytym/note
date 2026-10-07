@@ -96,7 +96,7 @@ func (h *NotificationHandler) Stream(c *gin.Context) {
 
 	controller := http.NewResponseController(c.Writer)
 
-	//把sse写入当前窗口的http相应
+	//把sse写入当前窗口的http response
 	write := func(content string) error {
 		if err := ctx.Err(); err != nil {
 			return err

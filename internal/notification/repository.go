@@ -3,6 +3,8 @@ package notification
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"time"
 
 	"note/internal/model"
 
@@ -20,10 +22,53 @@ type Repository interface {
 		userID uint,
 		notificationID uint,
 	) (model.Notification, error)
+
+	// 查询一批尚未投递的任务
+	ListPendingOutbox(ctx context.Context) ([]model.Outbox, error)
+
+	// Redis 投递成功后，记录成功时间
+	MarkOutboxPublished(
+		ctx context.Context,
+		taskID uint,
+		publishedAt time.Time,
+	) error
 }
 
 type gormRepository struct {
 	db *gorm.DB
+}
+
+func (r *gormRepository) MarkOutboxPublished(
+	ctx context.Context,
+	taskID uint,
+	publishedAt time.Time,
+) error {
+	err := r.db.WithContext(ctx).
+		Model(&model.Outbox{}).
+		Where(
+			"id = ? AND published_at IS NULL",
+			taskID,
+		).
+		Update("published_at", publishedAt.UTC()). //现在有published_at了
+		Error
+
+	if err != nil {
+		return fmt.Errorf("mark outbox task published: %w", err)
+	}
+
+	return nil
+}
+
+func (r *gormRepository) ListPendingOutbox(ctx context.Context) ([]model.Outbox, error) {
+	ob := make([]model.Outbox, 0)
+	err := r.db.WithContext(ctx).
+		Where("published_at IS NULL"). //还没投递出去的
+		Order("id ASC").               //后台投递应当以旧任务优先，也就是id小的优先
+		Limit(100).Find(&ob).Error
+	if err != nil {
+		return nil, err
+	}
+	return ob, nil
 }
 
 func NewGORMRepository(db *gorm.DB) Repository {
@@ -32,7 +77,7 @@ func NewGORMRepository(db *gorm.DB) Repository {
 
 // 两种查询都加载卡片需要的关联资料。
 // 这个函数只组装查询，Find 或 First 才执行查询。
-// 负责preload actor group joinrequest
+// 负责preload actor group joinRequest
 // Actor 和 Group 只填充 Select 指定的字段，其余字段保持 Go 零值。
 // Receiver、JoinRequest.Sender／Receiver／Group 等关联不在这里加载。
 func preloadCardRelations(query *gorm.DB) *gorm.DB {

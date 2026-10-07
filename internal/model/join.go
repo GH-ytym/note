@@ -17,7 +17,7 @@ const (
 	Rejected  Status = "rejected"
 	Cancelled Status = "cancelled"
 )
-
+//保存申请本身
 type GroupJoinRequest struct {
 	ID uint `gorm:"primaryKey" json:"id"`
 

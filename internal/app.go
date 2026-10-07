@@ -147,8 +147,12 @@ func Run() (runErr error) {
 	notificationRepository := notification.NewGORMRepository(db)
 	notificationService := notification.NewService(notificationRepository)
 
+	// 使用现有 Redis 客户端创建发布器。
+	notificationPublisher := notification.NewRedisPublisher(redisClient)
+
 	// 整个后端进程共用一个 Hub。
 	notificationHub := notification.NewHub()
+	defer notificationHub.Close()
 
 	notificationHandler := handler.NewNotificationHandler(
 		notificationService,
@@ -207,6 +211,8 @@ func Run() (runErr error) {
 		return fmt.Errorf("listen on %s: %w", server.Addr, err)
 	}
 	server.Addr = listener.Addr().String()
+	// Serve 异常返回时也关闭连接；正常 Shutdown 后重复 Close 是安全的。
+	defer server.Close()
 
 	// 使用容量为 1 的缓冲 channel。
 
@@ -221,6 +227,24 @@ func Run() (runErr error) {
 	//收到取消信号(ctrl+c/sigterm)时，stopCtx.Done()返回的channel关闭，就不会阻塞了
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// 后台投递跟随整个服务的生命周期，不使用某次 HTTP 请求的 context。
+	workerCtx, cancelWorker := context.WithCancel(stopCtx)
+	// 只表示后台循环已经退出，不用于存放通知。
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		notification.RunOutboxWorker(
+			workerCtx,
+			notificationRepository,
+			notificationPublisher,
+		)
+	}()
+	defer func() {
+		cancelWorker()
+		// 包括 Serve 提前返回的情况，先等待 worker，再关闭 Redis 和 SQLite。
+		<-workerDone
+	}()
 
 	// Electron 关闭时会关闭子进程的 stdin。只在桌面模式启用，
 	// 普通终端运行仍然完全由 Ctrl+C 或 SIGTERM 控制。
@@ -252,6 +276,9 @@ func Run() (runErr error) {
 	case <-parentClosed:
 		log.Print("desktop parent process closed")
 	}
+
+	// Electron 退出不会取消 stopCtx，需要主动通知后台投递停止。
+	cancelWorker()
 
 	//最多等待10秒
 	//新开一个context是因为如果上面的select走的是stopCtx.Done()分支，那么此时的context已经关闭了

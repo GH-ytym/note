@@ -100,12 +100,11 @@ func registerAPI(
 		groups.GET("/:groupID/search/todos", sh.SearchTodos)
 		groups.GET("/:groupID/search/events", sh.SearchEvents)
 		groups.GET("/:groupID/search/all", sh.SearchAll)
-		//群成员获取邀请码，只有群主可以刷新。
-		groups.GET("/:groupID/invite", gh.GetInviteCode)
-		groups.POST("/:groupID/refresh", gh.RefreshInviteCode)
+		// 群号公开且固定，查询及加入仍要求登录。
 
 		//加群和退群
-		groups.POST("/:groupID/join", gh.JoinGroup)
+		groups.GET("/lookup", gh.Lookup)
+		groups.POST("/join", gh.JoinGroup)
 		groups.POST("/:groupID/quit", gh.QuitGroup)
 		//解散群组
 		groups.POST("/:groupID/dismiss", gh.DismissGroup)

@@ -8,13 +8,33 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// RedisHistoryRepository 负责读取推送历史。
+// SQLite 的 Repository 负责通知记录，两者保存的内容不同。
+type RedisHistoryRepository struct {
+	client *redis.Client
+}
+
+func NewRedisHistoryRepository(
+	client *redis.Client,
+) *RedisHistoryRepository {
+	return &RedisHistoryRepository{client: client}
+}
+
+func (r *RedisHistoryRepository) ReadAfter(
+	ctx context.Context,
+	userID uint,
+	afterID string,
+) ([]Event, error) {
+	// 只是调用查询函数
+	return ReadHistoryAfter(ctx, r.client, userID, afterID)
+}
+
 func ReadHistoryAfter(
 	ctx context.Context,
 	client *redis.Client,
 	userID uint,
-	// 当前窗口最后处理的 Event.ID（Stream ID），由重连请求带回。
-	// 它不是通知 ID 或 Outbox ID；sent 不记录窗口的接收进度。
-	afterID string,
+	afterID string, //这里是前端传过来的，因为publish的时候把streamid传过去了，前端拿到最新id就是这个afterid
+	// 对应 Stream 发给这个窗口的 Event.ID；sent 不记录窗口的接收进度。
 ) ([]Event, error) {
 	if userID == 0 || afterID == "" {
 		return nil, fmt.Errorf("missing user ID or event ID")

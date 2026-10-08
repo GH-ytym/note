@@ -234,7 +234,7 @@ func TestGroupDismissRequiresCurrentOwner(t *testing.T) {
 	if err := repo.Quit(context.Background(), first.ID, owner.ID, &member.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := repo.Join(context.Background(), first.ID, owner.ID, "ABC123"); err != nil {
+	if _, _, err := repo.Join(context.Background(), owner.ID, "ABC123"); err != nil {
 		t.Fatal(err)
 	}
 	// 旧群主即使重新加入，也不能凭旧身份解散。

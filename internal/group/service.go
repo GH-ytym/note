@@ -12,6 +12,7 @@ import (
 )
 
 type Service interface {
+	Lookup(ctx context.Context, userID uint, code string) (model.Group, error)
 	Create(
 		ctx context.Context,
 		ownerID uint,
@@ -21,19 +22,8 @@ type Service interface {
 		ctx context.Context,
 		userID uint,
 	) ([]model.Group, error)
-	GetInviteCode(
-		ctx context.Context,
-		groupID uint,
-		userID uint,
-	) (string, error)
-	RefreshInviteCode(
-		ctx context.Context,
-		groupID uint,
-		userID uint,
-	) (string, error)
 	JoinGroup(
 		ctx context.Context,
-		groupID uint,
 		userID uint,
 		code string,
 	) (*model.GroupJoinRequest, error)
@@ -86,25 +76,23 @@ func (s *service) Create(
 	if name == "" || utf8.RuneCountInString(name) > 80 {
 		return model.Group{}, apperrors.ErrGroupNameInvalid
 	}
-	//生成邀请码
-	code, err := utils.GenerateInviteCode()
+	var item model.Group
+	err := retry.Do(ctx, func() error {
+		code, err := utils.GenerateGroupCode()
+		if err != nil {
+			return err
+		}
+		// 每次重试重新构造，避免回滚后残留的主键和成员关联。
+		item = model.Group{Name: name, OwnerID: ownerID, Policy: model.Public,
+			Code: code, Members: []model.GroupMember{{UserID: ownerID}}}
+		return s.repo.Create(ctx, &item)
+	}, retry.Options{MaxAttempts: 5, ShouldRetry: func(err error) bool {
+		return errors.Is(err, apperrors.ErrGroupCodeConflict)
+	}})
 	if err != nil {
 		return model.Group{}, err
 	}
 
-	// 初始成员就是群主；GroupID 由 GORM 在创建群后自动填入。
-	item := model.Group{
-		Name:    name,
-		OwnerID: ownerID,
-		Policy:  model.Public,
-		Members: []model.GroupMember{
-			{UserID: ownerID},
-		},
-		Code: code,
-	}
-	if err := s.repo.Create(ctx, &item); err != nil {
-		return model.Group{}, err
-	}
 	return item, nil
 }
 
@@ -118,86 +106,20 @@ func (s *service) MyGroups(
 	return s.repo.ListByUserID(ctx, userID)
 }
 
-func (s *service) GetInviteCode(ctx context.Context, groupID uint, userID uint) (string, error) {
-	if groupID == 0 {
-		return "", apperrors.ErrGroupNotFound
-	}
-	if userID == 0 {
-		return "", apperrors.ErrGroupUnauthenticated
-	}
-
-	return s.repo.GetInviteCode(ctx, groupID, userID)
-}
-
-func (s *service) RefreshInviteCode(
-	ctx context.Context,
-	groupID uint,
-	userID uint,
-) (string, error) {
-	if userID == 0 {
-		return "", apperrors.ErrGroupUnauthenticated
-	}
-	if groupID == 0 {
-		return "", apperrors.ErrGroupNotFound
-	}
-
-	var code string
-
-	err := retry.Do(ctx, func() error {
-		// 每次尝试都生成新的候选码。
-		candidate, err := utils.GenerateInviteCode()
-		if err != nil {
-			return err
-		}
-
-		//重试就是这个replace
-		if err := s.repo.ReplaceInviteCode(
-			ctx,
-			groupID,
-			userID,
-			candidate,
-		); err != nil {
-			return err
-		}
-
-		code = candidate
-		return nil //所有return只是结束这一次重试
-		//当然如果return nil，整个retry同样会return nil
-	}, retry.Options{
-		//配置项
-		MaxAttempts:  5,
-		InitialDelay: 0,
-		ShouldRetry: func(err error) bool {
-			// 只在候选码与本群原码相同时重新生成。
-			return errors.Is(
-				err,
-				apperrors.ErrGroupInviteCodeConflict,
-			)
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	return code, nil
-}
-
 func (s *service) JoinGroup(
 	ctx context.Context,
-	groupID uint,
 	userID uint,
 	code string,
 ) (*model.GroupJoinRequest, error) {
 	if userID == 0 {
 		return nil, apperrors.ErrGroupUnauthenticated
 	}
-	if groupID == 0 {
-		return nil, apperrors.ErrGroupNotFound
-	}
 
-	//邀请码的格式错误应该在前端就被拦下
-	////就算打入后端的请求种邀请码真的错了，进入repo一样能被拦截
-	pending, _, err := s.repo.Join(ctx, groupID, userID, code)
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if !validGroupCode(code) {
+		return nil, apperrors.ErrGroupCodeFormat
+	}
+	pending, _, err := s.repo.Join(ctx, userID, code)
 	if err != nil {
 		return nil, err
 	}
@@ -223,4 +145,18 @@ func (s *service) QuitGroup(
 	}
 
 	return s.repo.Quit(ctx, groupID, userID, target)
+}
+
+func (s *service) Lookup(ctx context.Context, userID uint, code string) (model.Group, error) {
+	if userID == 0 {
+		return model.Group{}, apperrors.ErrGroupUnauthenticated
+	}
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if !validGroupCode(code) {
+		return model.Group{}, apperrors.ErrGroupCodeFormat
+	}
+	return s.repo.ByCode(ctx, code)
+}
+func validGroupCode(code string) bool {
+	return len(code) == 6 && strings.IndexFunc(code, func(r rune) bool { return !(r >= '0' && r <= '9' || r >= 'A' && r <= 'Z') }) < 0
 }

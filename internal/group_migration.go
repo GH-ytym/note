@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"regexp"
 
 	"note/internal/model"
 	"note/internal/utils"
@@ -31,26 +32,47 @@ func migrateGroupSchema(db *gorm.DB) error {
 			}
 		}
 
-		// 移除旧模型建立的唯一索引；仅删除模型标签不会删除数据库索引。
-		if tx.Migrator().HasIndex(&model.Group{}, "idx_groups_code") {
-			if err := tx.Migrator().DropIndex(&model.Group{}, "idx_groups_code"); err != nil {
-				return fmt.Errorf("drop unique group invite index: %w", err)
+		// 保留有效且唯一的旧码；重复码保留最早群组，其余重新分配。
+		var groups []model.Group
+		if err := tx.Select("id", "code").Order("id ASC").Find(&groups).Error; err != nil {
+			return err
+		}
+		reserved := make(map[string]bool)
+		valid := regexp.MustCompile(`^[0-9A-Z]{6}$`)
+		for _, item := range groups {
+			if valid.MatchString(item.Code) {
+				reserved[item.Code] = true
 			}
 		}
-
-		// 只给没有邀请码的旧群补码，不覆盖群主已经分享的有效邀请码。
-		var groups []model.Group
-		if err := tx.Select("id").Where("code = '' OR code IS NULL").Find(&groups).Error; err != nil {
-			return fmt.Errorf("find groups without invite codes: %w", err)
-		}
+		seen := make(map[string]bool)
 		for _, item := range groups {
-			code, err := utils.GenerateInviteCode()
-			if err != nil {
+			if valid.MatchString(item.Code) && !seen[item.Code] {
+				seen[item.Code] = true
+				continue
+			}
+			candidate := ""
+			for attempt := 0; attempt < 100; attempt++ {
+				code, err := utils.GenerateGroupCode()
+				if err != nil {
+					return err
+				}
+				if !reserved[code] {
+					candidate = code
+					break
+				}
+			}
+			if candidate == "" {
+				return fmt.Errorf("allocate unique group code")
+			}
+			if err := tx.Model(&model.Group{}).Where("id = ?", item.ID).UpdateColumn("code", candidate).Error; err != nil {
 				return err
 			}
-			if err := tx.Model(&model.Group{}).Where("id = ?", item.ID).UpdateColumn("code", code).Error; err != nil {
-				return fmt.Errorf("backfill group %d invite code: %w", item.ID, err)
-			}
+			reserved[candidate] = true
+			seen[candidate] = true
+		}
+		// 不重建父表，避免影响成员、Todo、Event 等关联。
+		if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_code ON groups(code)").Error; err != nil {
+			return err
 		}
 
 		// 显式建成员表，避免关联迁移回头重建已有的 groups。

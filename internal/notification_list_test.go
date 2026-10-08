@@ -30,7 +30,7 @@ func notificationRequest(t *testing.T, db *gorm.DB) func(string, string, uint, s
 	gh := handler.NewGroupHandler(group.NewService(group.NewGORMRepository(db)))
 	hub := notification.NewHub()
 	t.Cleanup(hub.Close)
-	nh := handler.NewNotificationHandler(notification.NewService(notification.NewGORMRepository(db)), hub)
+	nh := handler.NewNotificationHandler(notification.NewService(notification.NewGORMRepository(db), nil), hub)
 	r := router.NewWithWeb(nil, nil, nil, nil, nil, gh, nh, tokens, "")
 	return func(method, path string, userID uint, body string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -107,7 +107,7 @@ func TestGroupJoinNotificationList(t *testing.T) {
 				t.Fatal(err)
 			}
 			request := notificationRequest(t, db)
-			joined := request(http.MethodPost, fmt.Sprintf("/api/groups/%d/join", item.ID), member.ID, `{"code":"ABC123"}`)
+			joined := request(http.MethodPost, "/api/groups/join", member.ID, `{"code":"ABC123"}`)
 			if joined.Code != tc.joinStatus {
 				t.Fatalf("join: got %d, want %d: %s", joined.Code, tc.joinStatus, joined.Body.String())
 			}

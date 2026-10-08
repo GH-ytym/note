@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	apperrors "note/internal/errors"
@@ -16,19 +17,13 @@ import (
 )
 
 type Repository interface {
+	ByCode(ctx context.Context, code string) (model.Group, error)
 	Create(ctx context.Context, item *model.Group) error
 	ListByUserID(
 		ctx context.Context,
 		userID uint,
 	) ([]model.Group, error)
-	GetInviteCode(ctx context.Context, groupID uint, userID uint) (string, error)
-	ReplaceInviteCode(
-		ctx context.Context,
-		groupID uint,
-		userID uint,
-		code string,
-	) error
-	Join(ctx context.Context, groupID uint, userID uint, code string) (*model.GroupJoinRequest, *model.Notification, error)
+	Join(ctx context.Context, userID uint, code string) (*model.GroupJoinRequest, *model.Notification, error)
 	Quit(ctx context.Context, groupID uint, userID uint, target *uint) error
 	ListMembers(ctx context.Context, groupID, userID uint) ([]model.GroupMember, error)
 	Dismiss(ctx context.Context, groupID, userID uint) error
@@ -147,13 +142,12 @@ func (r *gormRepository) Dismiss(ctx context.Context, groupID, userID uint) erro
 // → 查询群组最新 policy
 // → 确认用户存在、是否已经入群
 // → restricted / personal：拒绝
-// → public / approval：验证六位码
+// → public / approval：按固定群号加入或申请
 //
 //	→ public：写入成员和权限，保存群主提醒和投递任务
 //	→ approval：保存申请，保存群主审核通知和投递任务
 func (r *gormRepository) Join(
 	ctx context.Context,
-	groupID uint,
 	userID uint,
 	code string,
 ) (
@@ -167,15 +161,17 @@ func (r *gormRepository) Join(
 	//事务内闭包修改这两个东西
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var g model.Group
-		//拿到id 邀请码 加群权限和群主id
+		//按固定群号查找群组及最新入群规则
 		err := tx.Select("id", "name", "code", "policy", "owner_id").
-			First(&g, groupID).Error
+			Where("code = ? AND policy <> ?", code, model.Personal).First(&g).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.ErrGroupNotFound
 		}
 		if err != nil {
 			return fmt.Errorf("find joining group: %w", err)
 		}
+
+		groupID := g.ID
 
 		//拿到当前用户资料
 		var user model.User
@@ -211,11 +207,6 @@ func (r *gormRepository) Join(
 
 		default: //权限字符串不对
 			return fmt.Errorf("invalid group policy: %q", g.Policy)
-		}
-
-		//检查邀请码
-		if g.Code == "" || g.Code != code {
-			return apperrors.ErrGroupInviteInvalid
 		}
 
 		if g.Policy == model.Public {
@@ -340,48 +331,6 @@ func enqueueNotice(tx *gorm.DB, msg model.Notification) error {
 	return nil
 }
 
-func (r *gormRepository) GetInviteCode(ctx context.Context, groupID uint, userID uint) (string, error) {
-	var code string
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var group model.Group
-		err := tx.First(&group, "id = ?", groupID).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return apperrors.ErrGroupNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("get group: %w", err)
-		}
-
-		//只要user在群里就可以拿到邀请码，但只有群主可以刷新
-		var cnt int64
-		if err := tx.Model(&model.GroupMember{}).
-			Where(
-				"group_id = ? AND user_id = ?",
-				groupID,
-				userID,
-			).
-			Count(&cnt).Error; err != nil {
-			return fmt.Errorf("check group membership: %w", err)
-		}
-		if cnt == 0 {
-			return apperrors.ErrGroupAccessDenied
-		}
-
-		// 旧群还没有回填邀请码时，不返回一个无效的空码。
-		if group.Code == "" {
-			return fmt.Errorf("group %d has no invite code", groupID)
-		}
-
-		// 检查全部通过后才返回邀请码。
-		code = group.Code
-		return nil
-	}, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return "", err
-	}
-	return code, err
-}
-
 func NewGORMRepository(db *gorm.DB) Repository {
 	return &gormRepository{db: db}
 }
@@ -409,6 +358,16 @@ func (r *gormRepository) Create(
 					Omit("Owner", "Members.User"). //跳过owner和members.User
 					Create(item).
 					Error; err != nil {
+					if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "UNIQUE constraint failed: groups.code") {
+						// GORM 翻译后不包含具体唯一索引，确认冲突的是另一个群的 Code。
+						var count int64
+						if check := tx.Model(&model.Group{}).Where("code = ? AND id <> ?", item.Code, item.ID).Count(&count).Error; check != nil {
+							return check
+						}
+						if count > 0 {
+							return apperrors.ErrGroupCodeConflict
+						}
+					}
 					return fmt.Errorf("create group with owner membership: %w", err)
 				}
 				return nil
@@ -437,67 +396,6 @@ func (r *gormRepository) ListByUserID(
 	}
 
 	return items, nil
-}
-
-func (r *gormRepository) ReplaceInviteCode(
-	ctx context.Context,
-	groupID uint,
-	userID uint,
-	code string,
-) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 1. 查询当前群主和邀请码。
-		var item model.Group
-		err := tx.Select("id", "owner_id", "code").
-			First(&item, groupID).Error
-
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return apperrors.ErrGroupNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("find group before refreshing invite: %w", err)
-		}
-
-		// 2. 只有群主可以刷新。
-		if item.OwnerID != userID {
-			return apperrors.ErrGroupAccessDenied
-		}
-
-		// 3. 群主必须仍在群内。
-		var count int64
-		if err := tx.Model(&model.GroupMember{}).
-			Where(
-				"group_id = ? AND user_id = ?",
-				groupID,
-				userID,
-			).
-			Count(&count).Error; err != nil {
-			return fmt.Errorf("check group membership: %w", err)
-		}
-		if count == 0 {
-			return apperrors.ErrGroupAccessDenied
-		}
-
-		// 4. 随机生成也可能恰好与原码相同，要求重新生成。
-		if code == item.Code {
-			return apperrors.ErrGroupInviteCodeConflict
-		}
-
-		// 5. 只替换邀请码；GORM 会同时维护 UpdatedAt。
-		result := tx.Model(&model.Group{}).
-			Where("id = ?", groupID).
-			Update("code", code)
-
-		// 不同群允许同码，数据库保存错误按原原因返回。
-		if result.Error != nil {
-			return fmt.Errorf("replace group invite code: %w", result.Error)
-		}
-		if result.RowsAffected == 0 {
-			return apperrors.ErrGroupNotFound
-		}
-
-		return nil
-	})
 }
 
 // 查询群组和当前群主
@@ -678,4 +576,14 @@ func (r *gormRepository) addMember(
 	}
 
 	return nil
+}
+
+// 只返回可公开查找群组的预览资料，不加载成员和群内内容。
+func (r *gormRepository) ByCode(ctx context.Context, code string) (model.Group, error) {
+	var item model.Group
+	err := r.db.WithContext(ctx).Select("id", "name", "code", "policy").Where("code = ? AND policy <> ?", code, model.Personal).First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return item, apperrors.ErrGroupNotFound
+	}
+	return item, err
 }

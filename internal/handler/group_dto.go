@@ -10,6 +10,7 @@ type CreateGroupRequest struct {
 }
 
 type GroupResponse struct {
+	Code      string            `json:"code"`
 	ID        uint              `json:"id"`
 	Name      string            `json:"name"`
 	OwnerID   uint              `json:"owner_id"`
@@ -28,14 +29,9 @@ type GroupURI struct {
 	GroupID uint `uri:"groupID" binding:"required,min=1"`
 }
 
-// 专门返回邀请信息，普通群资料响应不包含邀请码
-type GroupInviteResponse struct {
-	GroupID uint   `json:"group_id"`
-	Code    string `json:"code"`
-}
-
 // 加入群组的request
 type JoinGroupRequest struct {
+	// 固定公开群号，不是可刷新的邀请码；无需提供内部 GroupID。
 	Code string `json:"code" binding:"required"`
 }
 

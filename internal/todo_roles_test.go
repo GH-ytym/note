@@ -67,7 +67,7 @@ func TestTodoPatchRoles(t *testing.T) {
 		}
 
 		group := model.Group{
-			ID: groupID, Name: fmt.Sprintf("群%d", groupID),
+			ID: groupID, Name: fmt.Sprintf("群%d", groupID), Code: fmt.Sprintf("%06d", groupID),
 			OwnerID: userIDs[0],
 		}
 		if err := db.Create(&group).Error; err != nil {

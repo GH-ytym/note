@@ -5,18 +5,17 @@ import (
 	"sync"
 )
 
-// Event 包装一次通知推送：Card 是通知内容，Event 标识推送动作和流中的位置。
-// 这是通知推送事件，与 model.Event（日历中的日程）无关。
+// 推送消息的外层
+// Card 负责通知内容，Event 负责这次推送的身份和类型
 type Event struct {
-	// Redis Stream 条目的 ID，用于推送去重和断线恢复的 afterID。
-	// 同一个 Outbox 任务重试时复用它；与 Card.ID（通知 ID）不同。
+	// 后面使用消息流的位置，供断线恢复使用。
+	// 与 Card.ID 是两个概念
 	ID string
 
-	// 推送动作名，例如 notification.created、notification.updated。
-	// 与 Card.Type（joined、join_requested 等通知内容类别）不同。
+	// 例如 notification.created、notification.updated
 	Name string
 
-	// 一张 Card 的 JSON 字符串快照，不是数据库 Notification 或 Go Card 对象。
+	// 一张 Card 的 JSON 字符串快照
 	Data string
 }
 

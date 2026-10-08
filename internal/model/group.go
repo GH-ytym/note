@@ -5,9 +5,9 @@ import "time"
 type GroupPolicy string
 
 const (
-	Restricted GroupPolicy = "restricted" //只有群主可以邀请入群；接收者同意即入群；新成员不可以根据验证码申请加群
-	Public     GroupPolicy = "public"     //群成员均可邀请新成员入群，接收者同意即入群；新成员可以以根据验证码直接加群，群主无需审核
-	Approval   GroupPolicy = "approval"   //群成员均可邀请新成员入群，接收者同意即入群；新成员可以根据验证码申请加群，群主同意后入群
+	Restricted GroupPolicy = "restricted" //只有群主可以邀请入群；接收者同意即入群；新成员不可以根据群号申请加群
+	Public     GroupPolicy = "public"     //群成员均可邀请新成员入群，接收者同意即入群；新成员可以根据群号直接加群，群主无需审核
+	Approval   GroupPolicy = "approval"   //群成员均可邀请新成员入群，接收者同意即入群；新成员可以根据群号申请加群，群主同意后入群
 	Personal   GroupPolicy = "personal"   //单人空间，无法邀请或申请加群，无法解散、退出或删除
 )
 
@@ -39,6 +39,6 @@ type Group struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// 邀请通过 GroupID + Code 验证，不同群可以使用相同的邀请码。
-	Code string `gorm:"size:6;not null" json:"-"`
+	// 固定公开群号：六位数字或大写字母，全局唯一；不是入群凭证。
+	Code string `gorm:"size:6;not null;uniqueIndex" json:"code"`
 }

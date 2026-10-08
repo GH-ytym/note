@@ -9,7 +9,7 @@ import (
 const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const length = 6
 
-func GenerateInviteCode() (string, error) {
+func GenerateGroupCode() (string, error) {
 	code := make([]byte, length)
 
 	// 字符表有 36 个字符，随机下标范围是 [0, 36)。
@@ -18,7 +18,7 @@ func GenerateInviteCode() (string, error) {
 	for i := range code {
 		index, err := rand.Int(rand.Reader, limit)
 		if err != nil {
-			return "", fmt.Errorf("generate invite code: %w", err)
+			return "", fmt.Errorf("generate group code: %w", err)
 		}
 
 		code[i] = alphabet[index.Int64()]

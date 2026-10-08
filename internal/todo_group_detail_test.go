@@ -37,7 +37,7 @@ func TestTodoGetCurrentGroupMembership(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	otherGroup := model.Group{Name: "另一个群", OwnerID: outsider.ID}
+	otherGroup := model.Group{Name: "另一个群", OwnerID: outsider.ID, Code: "DEF456"}
 	if err := db.Create(&otherGroup).Error; err != nil {
 		t.Fatal(err)
 	}

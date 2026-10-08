@@ -63,10 +63,8 @@ export function deleteTodo(id: number) {
 export const deleteEvent = (id: number) => request<null>(`/events/${id}`, { method: "DELETE" });
 export const myGroups = () => request<Group[]>("/groups");
 export const createGroup = (name: string) => request<Group>("/groups", { method: "POST", body: JSON.stringify({ name }) });
-export const joinGroup = (id: number, code: string) => request<null>(`/groups/${id}/join`, { method: "POST", body: JSON.stringify({ code }) });
+export const joinGroup = (code: string) => request<{ status: string }>("/groups/join", { method: "POST", body: JSON.stringify({ code }) });
 export const groupMembers = (id: number) => request<GroupMember[]>(`/groups/${id}/members`);
-export const groupInvite = (id: number) => request<{group_id: number; code: string}>(`/groups/${id}/invite`);
-export const refreshGroupInvite = (id: number) => request<{group_id: number; code: string}>(`/groups/${id}/refresh`, { method: "POST" });
 export const quitGroup = (id: number, target?: number) => request<null>(`/groups/${id}/quit`, { method: "POST", body: JSON.stringify(target ? { target } : {}) });
 export const dismissGroup = (id: number) => request<null>(`/groups/${id}/dismiss`, { method: "POST" });
 export const patchMemberRoles = (kind: "todo" | "event", id: number, userIDs: number[], role: 1 | 2) => request<null>(`/${kind === "todo" ? "todos" : "events"}/${id}/members`, { method: "PATCH", body: JSON.stringify({ user_ids: userIDs, role }) });
@@ -84,3 +82,6 @@ function search(groupID: number, kind: "todos" | "events" | "all", keyword: stri
 export const searchTodo = (groupID: number, keyword: string, limit: number, page = 1, signal?: AbortSignal) => search(groupID, "todos", keyword, limit, page, signal);
 export const searchEvent = (groupID: number, keyword: string, limit: number, page = 1, signal?: AbortSignal) => search(groupID, "events", keyword, limit, page, signal);
 export const searchAll = (groupID: number, keyword: string, limit: number, page = 1, signal?: AbortSignal) => search(groupID, "all", keyword, limit, page, signal);
+
+export type GroupPreview = Pick<Group, "name" | "code" | "policy">;
+export const lookupGroup = (code: string) => request<GroupPreview>(`/groups/lookup?${new URLSearchParams({ code })}`);

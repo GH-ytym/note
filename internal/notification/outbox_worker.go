@@ -68,7 +68,7 @@ func RunOutboxWorker(
 
 		// 没有任务或本轮失败时也等待，避免不停查询或重试。
 		select {
-		case <-ticker.C: //不return
+		case <-ticker.C: //不return，这里只等待1秒
 
 		case <-ctx.Done():
 			return

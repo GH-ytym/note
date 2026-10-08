@@ -236,7 +236,7 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 	secondWindow := openNotificationTestStream(t, ctx, url, ownerToken)
 	otherUser := openNotificationTestStream(t, ctx, url, memberToken)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		fmt.Sprintf("%s/api/groups/%d/join", url, item.ID), strings.NewReader(`{"code":"ABC123"}`))
+		url+"/api/groups/join", strings.NewReader(`{"code":"ABC123"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

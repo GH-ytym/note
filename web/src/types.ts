@@ -32,7 +32,7 @@ export interface TodoDetail extends Todo {
 }
 export type MemberRole = "viewer" | "editor";
 export interface MemberPermission { user_id: number; role: MemberRole }
-export interface Group { id: number; name: string; owner_id: number; created_at: string }
+export interface Group { code: string; policy: "public" | "approval" | "restricted" | "personal"; id: number; name: string; owner_id: number; created_at: string }
 export interface GroupMember extends UserSummary { joined_at: string }
 export interface Profile extends UserSummary { avatar_upload_enabled: boolean }
 export interface CompletedUser extends UserSummary { completed_at: string }

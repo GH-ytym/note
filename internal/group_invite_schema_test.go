@@ -2,18 +2,15 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"testing"
 	"time"
 
-	apperrors "note/internal/errors"
-	"note/internal/group"
 	"note/internal/model"
 	"note/internal/todo"
 )
 
-func TestGroupInviteMigrationDropsUniqueIndexAndPreservesData(t *testing.T) {
+func TestGroupInviteMigrationPreservesUniqueIndexAndPreservesData(t *testing.T) {
 	db, owner, member, first := groupSchemaFixture(t)
 	if err := db.Model(&first).Update("code", "ABC123").Error; err != nil {
 		t.Fatal(err)
@@ -37,7 +34,7 @@ func TestGroupInviteMigrationDropsUniqueIndexAndPreservesData(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 模拟旧版本留下的真实唯一索引，而不是只检查模型标签。
-	if err := db.Exec("CREATE UNIQUE INDEX idx_groups_code ON groups(code)").Error; err != nil {
+	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_code ON groups(code)").Error; err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -45,8 +42,8 @@ func TestGroupInviteMigrationDropsUniqueIndexAndPreservesData(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if db.Migrator().HasIndex(&model.Group{}, "idx_groups_code") {
-		t.Fatal("legacy unique invite index remains")
+	if !db.Migrator().HasIndex(&model.Group{}, "idx_groups_code") {
+		t.Fatal("unique group code index missing")
 	}
 	var saved model.Group
 	if err := db.First(&saved, first.ID).Error; err != nil || saved.Code != "ABC123" {
@@ -61,36 +58,11 @@ func TestGroupInviteMigrationDropsUniqueIndexAndPreservesData(t *testing.T) {
 		t.Fatalf("migration changed group todo: %#v %v", savedTodo, err)
 	}
 
-	repo := group.NewGORMRepository(db)
-	if err := repo.ReplaceInviteCode(context.Background(), first.ID, member.ID, second.Code); !errors.Is(err, apperrors.ErrGroupAccessDenied) {
-		t.Fatalf("non-owner refreshed invite: %v", err)
+	duplicate := model.Group{Name: "duplicate", OwnerID: owner.ID, Code: first.Code}
+	if err := db.Create(&duplicate).Error; err == nil {
+		t.Fatal("duplicate group code accepted")
 	}
-	if err := repo.ReplaceInviteCode(context.Background(), first.ID, owner.ID, "ABC123"); !errors.Is(err, apperrors.ErrGroupInviteCodeConflict) {
-		t.Fatalf("same code should request regeneration: %v", err)
-	}
-	// 可以刷新成其他群的当前邀请码。
-	if err := repo.ReplaceInviteCode(context.Background(), first.ID, owner.ID, second.Code); err != nil {
-		t.Fatalf("different groups cannot share invite code: %v", err)
-	}
-	if err := migrateDatabase(db); err != nil {
-		t.Fatal(err)
-	}
-	var count int64
-	if err := db.Model(&model.Group{}).Where("code = ?", second.Code).Count(&count).Error; err != nil || count != 2 {
-		t.Fatalf("duplicate codes not preserved: %d %v", count, err)
-	}
-	// 更新失败必须保留原邀请码。
-	if err := db.Exec(`CREATE TRIGGER reject_invite_refresh BEFORE UPDATE OF code ON groups
-		BEGIN SELECT RAISE(ABORT, 'test refresh failure'); END`).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.ReplaceInviteCode(context.Background(), first.ID, owner.ID, "NEW123"); err == nil {
-		t.Fatal("expected refresh failure")
-	}
-	code, err := repo.GetInviteCode(context.Background(), first.ID, member.ID)
-	if err != nil || code != second.Code {
-		t.Fatalf("failed refresh destroyed previous code: %q %v", code, err)
-	}
+
 }
 
 func TestGroupInviteMigrationBackfillsLegacyGroups(t *testing.T) {

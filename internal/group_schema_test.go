@@ -38,7 +38,7 @@ func groupSchemaFixture(t *testing.T) (*gorm.DB, model.User, model.User, model.G
 func TestGroupSchemaMembershipAndPreload(t *testing.T) {
 	db, owner, member, first := groupSchemaFixture(t)
 	// 群名不必唯一，群的身份由 ID 区分。
-	second := model.Group{Name: first.Name, OwnerID: owner.ID}
+	second := model.Group{Name: first.Name, OwnerID: owner.ID, Code: "DEF456"}
 	if err := db.Create(&second).Error; err != nil {
 		t.Fatalf("same group name should be allowed: %v", err)
 	}

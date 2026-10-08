@@ -145,7 +145,11 @@ func Run() (runErr error) {
 
 	// 通知查询链。
 	notificationRepository := notification.NewGORMRepository(db)
-	notificationService := notification.NewService(notificationRepository)
+	notificationHistoryRepository := notification.NewRedisHistoryRepository(redisClient)
+	notificationService := notification.NewService(
+		notificationRepository,
+		notificationHistoryRepository,
+	)
 
 	// 使用现有 Redis 客户端创建发布器。
 	notificationPublisher := notification.NewRedisPublisher(redisClient)

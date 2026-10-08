@@ -140,6 +140,7 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		ID:        item.ID,
 		Name:      item.Name,
 		OwnerID:   item.OwnerID,
+		Code:      item.Code,
 		Policy:    item.Policy,
 		CreatedAt: item.CreatedAt,
 	})
@@ -174,105 +175,13 @@ func (h *GroupHandler) MyGroups(c *gin.Context) {
 			ID:        item.ID,
 			Name:      item.Name,
 			OwnerID:   item.OwnerID,
+			Code:      item.Code,
 			Policy:    item.Policy,
 			CreatedAt: item.CreatedAt,
 		})
 	}
 
 	c.JSON(http.StatusOK, result)
-}
-
-func (h *GroupHandler) GetInviteCode(c *gin.Context) {
-	userID := c.GetUint(middleware.UserIDKey)
-	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
-		return
-	}
-
-	var uri GroupURI
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "群组 ID 不合法"})
-		return
-	}
-
-	code, err := h.service.GetInviteCode(c.Request.Context(), uri.GroupID, userID)
-	switch {
-	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
-		return
-
-	case errors.Is(err, apperrors.ErrGroupNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-
-	case errors.Is(err, apperrors.ErrGroupAccessDenied):
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "只有当前群成员可以获取邀请码",
-		})
-		return
-
-	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "获取邀请码失败",
-		})
-		return
-	}
-	c.JSON(http.StatusOK, GroupInviteResponse{
-		GroupID: uri.GroupID,
-		Code:    code,
-	})
-}
-
-func (h *GroupHandler) RefreshInviteCode(c *gin.Context) {
-	userID := c.GetUint(middleware.UserIDKey)
-	if userID == 0 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
-		return
-	}
-	var uri GroupURI
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "群组 ID 不合法"})
-		return
-	}
-
-	code, err := h.service.RefreshInviteCode(
-		c.Request.Context(),
-		uri.GroupID,
-		userID,
-	)
-
-	switch {
-	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
-		return
-
-	case errors.Is(err, apperrors.ErrGroupNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-
-	case errors.Is(err, apperrors.ErrGroupAccessDenied):
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "只有仍在群内的群主可以刷新邀请码",
-		})
-		return
-
-	case errors.Is(err, apperrors.ErrGroupInviteCodeConflict):
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "暂时无法生成新邀请码，请稍后重试",
-		})
-		return
-
-	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "刷新邀请码失败",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, GroupInviteResponse{
-		GroupID: uri.GroupID,
-		Code:    code,
-	})
 }
 
 func (h *GroupHandler) JoinGroup(c *gin.Context) {
@@ -282,21 +191,14 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 		return
 	}
 
-	var uri GroupURI
-	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "群组 ID 不合法"})
-		return
-	}
-
 	var req JoinGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供邀请码"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供群号"})
 		return
 	}
 
 	pending, err := h.service.JoinGroup(
 		c.Request.Context(),
-		uri.GroupID,
 		userID,
 		req.Code,
 	)
@@ -305,14 +207,11 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "请重新登录"})
 
-	case errors.Is(err, apperrors.ErrGroupInviteCodeFormat):
+	case errors.Is(err, apperrors.ErrGroupCodeFormat):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 	case errors.Is(err, apperrors.ErrGroupNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-
-	case errors.Is(err, apperrors.ErrGroupInviteInvalid):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 
 	case errors.Is(err, apperrors.ErrGroupJoinForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
@@ -382,5 +281,21 @@ func (h *GroupHandler) QuitGroup(c *gin.Context) {
 
 	default:
 		c.Status(http.StatusNoContent)
+	}
+}
+
+func (h *GroupHandler) Lookup(c *gin.Context) {
+	item, err := h.service.Lookup(c.Request.Context(), c.GetUint(middleware.UserIDKey), c.Query("code"))
+	switch {
+	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+	case errors.Is(err, apperrors.ErrGroupCodeFormat):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, apperrors.ErrGroupNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询群组失败"})
+	default:
+		c.JSON(http.StatusOK, gin.H{"name": item.Name, "code": item.Code, "policy": item.Policy})
 	}
 }

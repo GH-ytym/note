@@ -21,10 +21,11 @@
 | 群内 Todo / Event | 已有创建、查看、编辑、删除、成员权限管理和按群组查看日历 |
 | Todo 完成记录 | 已按用户记录每次完成状态，可查看当天完成成员 |
 | 个人头像 | 已接入腾讯云 COS；配置存储后可上传、替换或移除头像 |
-| 邀请入群与同意加群 | **开发中，尚未完成，当前阻塞新 Release**；现有邀请码接口和界面只是已有基础 |
+| 邀请入群与同意加群 | **开发中，尚未完成，当前阻塞新 Release**；已有固定群号查找、加入及申请通知 |
+| 通知 | 已有通知列表、未读数量和 SSE 实时刷新；已读、审批操作和完整断点恢复待实现 |
 | 搜索 | 已按当前群组搜索 Todo / Event，并校验登录与当前群成员资格；跨群组搜索待实现 |
 
-目前的入群代码使用“群组 ID + 6 位邀请码”校验，通过后直接写入成员关系；界面已有邀请卡片、二维码和邀请码刷新入口。**邀请入群与同意加群的完整流程仍待完成，当前没有入群申请及同意／拒绝的审批流程。**
+群组使用固定、全局唯一的六位数字／大写字母 `code` 作为公开群号。登录后可输入群号预览并加入：public 直接加入，approval 创建申请并通知群主，restricted 拒绝主动申请，personal 不可查找或加入。分享链接和二维码只携带群号，不再支持刷新。**指定用户邀请和同意／拒绝审批仍待完成。**
 
 ## 功能
 
@@ -145,7 +146,7 @@ Windows 安装包没有代码签名，SmartScreen 可能显示“Windows 已保�
 
 ## 数据与存储
 
-当前源码将账号、群组、Todo、Event、成员权限和完成记录存储在 **API 所在机器的 SQLite 数据库**中；Redis 保存刷新会话，COS 保存头像。这些协作功能依赖同一个后端，各台电脑独立运行的本地数据库不会自动同步。
+当前源码将账号、群组、Todo、Event、成员权限、完成记录、入群申请、通知和 outbox 存储在 **API 所在机器的 SQLite 数据库**中；Redis 保存刷新会话、通知推送历史和投递去重记录，并广播实时事件，COS 保存头像。这些协作功能依赖同一个后端，各台电脑独立运行的本地数据库不会自动同步。
 
 | 运行方式 | SQLite 默认位置 |
 | --- | --- |
@@ -162,13 +163,16 @@ Windows 安装包没有代码签名，SmartScreen 可能显示“Windows 已保�
 | 表 | 内容 |
 | --- | --- |
 | `users` | 用户名、账号后缀、邮箱、密码哈希、昵称与头像 URL |
-| `groups` / `group_members` | 群组、群主、邀请码和成员资格 |
+| `groups` / `group_members` | 群组、群主、固定群号和成员资格 |
 | `todos` / `events` | 待办与日程、所属群组、创建者、时间、重复规则和版本 |
 | `todo_dates` / `event_dates` | 自定义重复日期 |
 | `todo_members` / `event_members` | 每条记录的成员编辑权限 |
 | `todo_completions` | 按 Todo 和日期保存完成用户及完成时间 |
+| `group_join_requests` / `notifications` / `outboxes` | 入群申请、持久化通知与后台投递任务 |
 
 周期日程按查询范围即时展开，不会为未来每一天预先插入记录。
+
+详细字段与关联见 [数据库表结构](docs/database-schema.md)。
 
 ## 技术栈与项目结构
 
@@ -184,7 +188,7 @@ note/
 ├─ internal/
 │  ├─ auth/                 注册、登录、JWT 与刷新会话
 │  ├─ middleware/           登录验证与认证请求检查
-│  ├─ group/                群组、邀请码与成员管理
+│  ├─ group/                群组、群号与成员管理
 │  ├─ profile/              用户资料、图片处理与 COS 存储
 │  ├─ todo/                 Todo、成员权限与个人完成记录
 │  ├─ event/                Event 与成员权限
@@ -195,7 +199,7 @@ note/
 │  ├─ router/               Gin 路由
 │  ├─ errors/               共享业务错误
 │  ├─ retry/                通用重试
-│  ├─ utils/                日期、颜色与邀请码工具
+│  ├─ utils/                日期、颜色与群号生成工具
 │  └─ app.go                数据库、服务组装与优雅关闭
 ├─ web/                     React 前端与界面样式
 ├─ desktop/                 Electron 主进程、preload、测试与打包配置
@@ -282,9 +286,10 @@ npm run dev --prefix web
 | `POST` | `/api/auth/logout` | 撤销当前刷新会话并清除 Cookie |
 | `GET / POST` | `/api/groups` | 查询自己的群组／创建群组 |
 | `GET` | `/api/groups/:groupID/members` | 查询群成员 |
-| `GET` | `/api/groups/:groupID/invite` | 获取当前邀请码，限群成员 |
-| `POST` | `/api/groups/:groupID/refresh` | 刷新邀请码，限群主 |
-| `POST` | `/api/groups/:groupID/join` | 当前按 `{code}` 直接入群，尚无审批 |
+| `GET` | `/api/groups/lookup?code=ABC123` | 按固定群号预览群名和加入规则，要求登录 |
+| `POST` | `/api/groups/join` | 接收 `{code}`，按最新 policy 加入或创建申请 |
+| `GET` | `/api/notifications` | 当前用户最近 50 条通知与全部未读数量 |
+| `GET` | `/api/notifications/stream` | 携带 access token 建立 SSE，JWT 到期后重新连接 |
 | `POST` | `/api/groups/:groupID/quit` | 退出；群主需提交 `{target}` 转让 |
 | `POST` | `/api/groups/:groupID/dismiss` | 解散群组，限群主 |
 | `GET` | `/api/groups/:groupID/todos`、`/api/groups/:groupID/events` | 分页查询群内 Todo / Event |

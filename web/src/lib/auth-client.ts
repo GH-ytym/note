@@ -76,6 +76,12 @@ export class AuthClient {
     });
   }
   async request<T>(path: string, options: RequestInit = {}, fetcher: typeof fetch = fetch): Promise<T> {
+    const response = await this.response(path, options, fetcher);
+    if (response.status === 204) return null as T;
+    return response.json();
+  }
+  // SSE 需要读取响应流；与普通请求共用认证和 401 刷新逻辑。
+  async response(path: string, options: RequestInit = {}, fetcher: typeof fetch = fetch): Promise<Response> {
     const user = this.user;
     if (!user) throw new APIError("请先登录", 401);
     const revision = this.revision;
@@ -100,7 +106,6 @@ export class AuthClient {
       const body = await response.json().catch(() => ({}));
       throw new APIError(body.error || "请求失败，请稍后重试", response.status);
     }
-    if (response.status === 204) return null as T;
-    return response.json();
+    return response;
   }
 }

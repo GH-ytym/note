@@ -30,7 +30,7 @@ func TestGroupJoinCreatesOutbox(t *testing.T) {
 			}
 
 			repo := group.NewGORMRepository(db)
-			pending, notice, err := repo.Join(context.Background(), item.ID, member.ID, "ABC123")
+			pending, notice, err := repo.Join(context.Background(), member.ID, "ABC123")
 			if err != nil || notice == nil {
 				t.Fatalf("join: notice=%+v err=%v", notice, err)
 			}
@@ -65,7 +65,7 @@ func TestGroupJoinCreatesOutbox(t *testing.T) {
 			assertNotificationCardFields(t, []byte(task.Data), card.RequestStatus)
 
 			// 已入群或复用待审核申请时，不再创建通知和投递任务。
-			again, repeatedNotice, err := repo.Join(context.Background(), item.ID, member.ID, "ABC123")
+			again, repeatedNotice, err := repo.Join(context.Background(), member.ID, "ABC123")
 			if err != nil || repeatedNotice != nil || (pending != nil && (again == nil || again.ID != pending.ID)) {
 				t.Fatalf("repeat join: pending=%+v notice=%+v err=%v", again, repeatedNotice, err)
 			}
@@ -132,7 +132,7 @@ func TestGroupJoinRollsBackWhenOutboxInsertFails(t *testing.T) {
 				BEGIN SELECT RAISE(ABORT, 'test outbox failure'); END`).Error; err != nil {
 				t.Fatal(err)
 			}
-			pending, notice, err := group.NewGORMRepository(db).Join(context.Background(), item.ID, member.ID, "ABC123")
+			pending, notice, err := group.NewGORMRepository(db).Join(context.Background(), member.ID, "ABC123")
 			if err == nil || !strings.Contains(err.Error(), "create notification outbox task") || pending != nil || notice != nil {
 				t.Fatalf("failed outbox insertion did not fail join: pending=%+v notice=%+v err=%v", pending, notice, err)
 			}

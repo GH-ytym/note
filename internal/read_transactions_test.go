@@ -69,10 +69,10 @@ func TestReadOnlyQueriesDoNotWaitForWriter(t *testing.T) {
 				t.Fatalf("members: %+v %v", members, err)
 			}
 		}},
-		{"invite code", func(t *testing.T, ctx context.Context) {
-			code, err := groups.GetInviteCode(ctx, item.GroupID, owner.ID)
-			if err != nil || code != "ABC123" {
-				t.Fatalf("invite: %q %v", code, err)
+		{"group code lookup", func(t *testing.T, ctx context.Context) {
+			found, err := groups.Lookup(ctx, owner.ID, "ABC123")
+			if err != nil || found.ID != item.GroupID {
+				t.Fatalf("lookup: %+v %v", found, err)
 			}
 		}},
 		{"calendar", func(t *testing.T, ctx context.Context) {

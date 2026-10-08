@@ -58,8 +58,8 @@ local streamID = redis.call("HGET", KEYS[2], ARGV[1])
 
 if not streamID then
     -- 没有写过：新增历史，由 Redis 生成事件 ID。
-    -- "*" 让 Redis 生成条目 ID，返回的 streamID 是 Event.ID。
-    -- outbox_id 是条目内部的字段；它的值是任务 ID，不是 streamID。
+    -- XADD表示往历史stream追加一条记录，"*"表示自动生成id
+    --streamID就是这次生成的id
     streamID = redis.call("XADD", KEYS[1], "*",
         "outbox_id", ARGV[1],
         "name", ARGV[2],

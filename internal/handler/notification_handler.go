@@ -148,7 +148,7 @@ func (h *NotificationHandler) Stream(c *gin.Context) {
 				return
 			}
 
-			// 把我们自己的 Event 转成 SSE 格式。
+			// 把自己的 Event 转成 SSE 格式（也叫Event）
 			var content bytes.Buffer
 			err := sse.Encode(&content, sse.Event{
 				Id:    event.ID,
@@ -164,7 +164,7 @@ func (h *NotificationHandler) Stream(c *gin.Context) {
 			}
 
 		case <-heartbeat.C:
-			// SSE 注释，不是一条业务通知。
+			// SSE 注释
 			if err := write(": ping\n\n"); err != nil {
 				return
 			}

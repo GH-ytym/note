@@ -51,6 +51,37 @@ func notificationRequest(t *testing.T, db *gorm.DB) func(string, string, uint, s
 	}
 }
 
+// 同时检查实际 JSON，避免反序列化时忽略了仍被返回的旧字段。
+func assertNotificationCardFields(t *testing.T, data []byte, wantStatus model.Status) {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"request", "request_kind", "request_id", "request_created_at"} {
+		if _, exists := fields[name]; exists {
+			t.Fatalf("card still contains removed field %q: %s", name, data)
+		}
+	}
+	status, exists := fields["request_status"]
+	if wantStatus == "" {
+		if exists {
+			t.Fatalf("ordinary notice contains request_status: %s", data)
+		}
+		return
+	}
+	if !exists {
+		t.Fatalf("application card is missing request_status: %s", data)
+	}
+	var got model.Status
+	if err := json.Unmarshal(status, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != wantStatus {
+		t.Fatalf("request_status: got %q, want %q", got, wantStatus)
+	}
+}
+
 func TestGroupJoinNotificationList(t *testing.T) {
 	for _, tc := range []struct {
 		policy     model.GroupPolicy
@@ -104,15 +135,19 @@ func TestGroupJoinNotificationList(t *testing.T) {
 					t.Fatalf("unexpected notification card: %+v", card)
 				}
 				if tc.policy == model.Public {
-					if card.Request != nil || !strings.Contains(res.Body.String(), `"request":null`) {
+					if card.RequestStatus != "" {
 						t.Fatal("public join unexpectedly contains an application")
 					}
-				} else if card.Request == nil || card.Request.ID == 0 ||
-					card.Request.Kind != model.Application || card.Request.Status != model.Pending ||
-					card.Request.SenderID != member.ID || card.Request.ReceiverID != owner.ID ||
-					card.Request.CreatedAt.IsZero() || card.Request.HandledAt != nil {
-					t.Fatalf("missing or invalid application card: %+v", card.Request)
+				} else if card.RequestStatus != model.Pending {
+					t.Fatalf("missing or invalid application status: %+v", card)
 				}
+				var response struct {
+					Items []json.RawMessage `json:"items"`
+				}
+				if err := json.Unmarshal(res.Body.Bytes(), &response); err != nil {
+					t.Fatal(err)
+				}
+				assertNotificationCardFields(t, response.Items[0], card.RequestStatus)
 
 				// 用户身份来自 JWT，请求参数不能切换到另一个人的通知列表。
 				res = request(http.MethodGet, fmt.Sprintf("%s/notifications?receiver_id=%d&user_id=%d", prefix, owner.ID, owner.ID), member.ID, "")
@@ -126,6 +161,62 @@ func TestGroupJoinNotificationList(t *testing.T) {
 				if empty.Items == nil || len(empty.Items) != 0 || empty.UnreadCount != 0 {
 					t.Fatalf("member can see owner's notices or gets null items: %+v", empty)
 				}
+			}
+		})
+	}
+}
+
+func TestNotificationListRequestStatusIndependentOfReadAt(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		status      model.Status
+		read        bool
+		unreadCount int64
+	}{
+		{"read_but_pending", model.Pending, true, 0},
+		{"accepted_but_unread", model.Accepted, false, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, owner, member, item := groupSchemaFixture(t)
+			now := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+			application := model.GroupJoinRequest{
+				GroupID: item.ID, Kind: model.Application,
+				SenderID: member.ID, ReceiverID: owner.ID, Status: tc.status,
+				CreatedAt: now.Add(-time.Hour),
+			}
+			if tc.status != model.Pending {
+				application.HandledAt = &now
+			}
+			if err := db.Omit("Group", "Sender", "Receiver").Create(&application).Error; err != nil {
+				t.Fatal(err)
+			}
+			notice := model.Notification{
+				ReceiverID: owner.ID, ActorID: member.ID, GroupID: item.ID,
+				JoinRequestID: &application.ID, Type: model.JoinRequested, CreatedAt: now,
+			}
+			if tc.read {
+				notice.ReadAt = &now
+			}
+			if err := db.Omit("Receiver", "Actor", "Group", "JoinRequest").Create(&notice).Error; err != nil {
+				t.Fatal(err)
+			}
+			request := notificationRequest(t, db)
+			res := request(http.MethodGet, "/api/notifications", owner.ID, "")
+			if res.Code != http.StatusOK {
+				t.Fatalf("list: got %d: %s", res.Code, res.Body.String())
+			}
+			var inbox notification.Inbox
+			if err := json.Unmarshal(res.Body.Bytes(), &inbox); err != nil {
+				t.Fatal(err)
+			}
+			if len(inbox.Items) != 1 || inbox.UnreadCount != tc.unreadCount {
+				t.Fatalf("unexpected inbox: %+v", inbox)
+			}
+			card := inbox.Items[0]
+			if card.ID != notice.ID || card.Type != model.JoinRequested ||
+				card.RequestStatus != tc.status || (card.ReadAt != nil) != tc.read ||
+				!card.CreatedAt.Equal(notice.CreatedAt) {
+				t.Fatalf("request status, read state or notification identity mixed up: %+v", card)
 			}
 		})
 	}

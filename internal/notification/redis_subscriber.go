@@ -108,6 +108,8 @@ func RunRedisSubscriber(
 				continue
 			}
 
+			//调用那个send持续发送
+			//send也在for循环里，这里不return
 			hub.Send(notice.ReceiverID, notice.Event)
 		}
 	}

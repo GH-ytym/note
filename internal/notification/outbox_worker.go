@@ -20,6 +20,8 @@ func PublishPending(
 
 	for _, t := range tasks {
 		//保存历史并广播
+		//一定是先保存到sql再publish，这样接收者就可以继续操作
+		//否则发送滚木了自己都不知道
 		if _, err := publisher.Publish(ctx, t); err != nil {
 			return fmt.Errorf("publish outbox %d: %w", t.ID, err)
 		}

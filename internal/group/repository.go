@@ -188,6 +188,7 @@ func (r *gormRepository) Join(
 			return fmt.Errorf("find joining user: %w", err)
 		}
 
+		//看在不在群里
 		var cnt int64
 		if err := tx.Model(&model.GroupMember{}).
 			Where("group_id= ? AND user_id= ?", groupID, userID).
@@ -199,9 +200,10 @@ func (r *gormRepository) Join(
 			return nil
 		}
 
+		//不在群里的话，就继续
 		//看权限
 		switch g.Policy {
-		//如果是restricted和personal，不允许加入
+		//如果是restricted和personal，不允许加入（只是不允许发送申请，restricted情况下群主依旧可以邀请）
 		case model.Restricted, model.Personal:
 			return apperrors.ErrGroupJoinForbidden
 
@@ -237,10 +239,11 @@ func (r *gormRepository) Join(
 			}
 			msg.Actor = &user
 			msg.Group = &g
-			//把这个msg单独丢进task表，这样后续修改不会动到它
+			//把这个msg单独丢进outbox表，后续投递是从outbox里面查，不是notification
 			if err := enqueueNotice(tx, msg); err != nil {
 				return err
 			}
+			//保存一份快照
 			notice = &msg
 
 			return nil
@@ -620,8 +623,11 @@ func (r *gormRepository) addMember(
 	}
 
 	roles := make([]model.TodoMember, 0, len(todos))
+	//给每个todo增加一条权限记录
 	for _, todo := range todos {
 		role := model.TodoViewer
+		//这里只可能是user之前退群过，但todo记录还在
+		//所以加群后这条todo对他而言依旧是creator，要不然没人能动它了
 		if todo.CreatorID == userID {
 			role = model.TodoEditor
 		}
@@ -633,6 +639,7 @@ func (r *gormRepository) addMember(
 		})
 	}
 
+	//批量写入免得频繁动sql
 	if len(roles) > 0 {
 		if err := tx.Omit("User").
 			CreateInBatches(&roles, 200).Error; err != nil {
@@ -647,9 +654,11 @@ func (r *gormRepository) addMember(
 		return fmt.Errorf("find group events: %w", err)
 	}
 
+	//给每个event增加一条权限记录
 	roles1 := make([]model.EventMember, 0, len(events))
 	for _, event := range events {
 		role := model.EventViewer
+		//跟todo一个道理
 		if event.CreatorID == userID {
 			role = model.EventEditor
 		}

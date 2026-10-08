@@ -7,35 +7,33 @@ import (
 	"note/internal/model"
 )
 
-// RequestCard 是邀请／申请的展示资料，作为 Card.Request 嵌套返回前端。
-type RequestCard struct {
-	ID         uint         `json:"id"`
-	Kind       model.Kind   `json:"kind"`
-	SenderID   uint         `json:"sender_id"`
-	ReceiverID uint         `json:"receiver_id"`
-	Status     model.Status `json:"status"`
-
-	CreatedAt time.Time  `json:"created_at"`
-	HandledAt *time.Time `json:"handled_at"`
-}
-
 // Card 是一条通知的展示数据，作为 Inbox.Items 中的一项返回前端。
 type Card struct {
-	ID   uint                   `json:"id"`
+	// Notification.ID：前端用来标识通知；不是申请 ID 或 Redis Stream ID。
+	// 后续审批可由后端根据这个通知 ID 查询关联的 JoinRequestID。
+	ID uint `json:"id"`
+	// 通知内容类别：joined 表示已经入群，join_requested 表示入群申请。
+	// 与 Event.Name（通知创建／更新）和 RequestStatus（申请处理进度）不同。
 	Type model.NotificationType `json:"type"`
 
+	// 触发这条通知的用户，不是通知接收者。
 	ActorID     uint   `json:"actor_id"`
 	ActorName   string `json:"actor_name"`
 	ActorAvatar string `json:"actor_avatar"`
 
+	// 这条通知涉及的群组，不是申请记录的 ID。
 	GroupID   uint   `json:"group_id"`
 	GroupName string `json:"group_name"`
 
-	// public 入群没有申请，这里可以为 nil。
-	Request *RequestCard `json:"request"`
+	// 关联申请／邀请的处理状态，例如 pending、accepted、rejected、cancelled。
+	// public 直接入群没有申请，此字段为空，omitempty 会省略它。
+	// 已读状态单独看 ReadAt，读过通知不代表已经处理申请。
+	RequestStatus model.Status `json:"request_status,omitempty"`
 
-	ReadAt    *time.Time `json:"read_at"`
-	CreatedAt time.Time  `json:"created_at"`
+	// nil 表示通知未读，与 RequestStatus 相互独立。
+	ReadAt *time.Time `json:"read_at"`
+	// 通知生成时间；申请过期仍按数据库 GroupJoinRequest.CreatedAt 判断。
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Inbox 是列表接口返回的完整响应，包含通知卡片和全部未读数量。
@@ -76,15 +74,7 @@ func NewCard(n model.Notification) (Card, error) {
 	}
 
 	if req := n.JoinRequest; req != nil {
-		card.Request = &RequestCard{
-			ID:         req.ID,
-			Kind:       req.Kind,
-			SenderID:   req.SenderID,
-			ReceiverID: req.ReceiverID,
-			Status:     req.Status,
-			CreatedAt:  req.CreatedAt,
-			HandledAt:  req.HandledAt,
-		}
+		card.RequestStatus = req.Status
 	}
 
 	return card, nil

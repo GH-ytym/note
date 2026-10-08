@@ -63,8 +63,8 @@ func Run() (runErr error) {
 		}
 	}()
 
-	// SQLite 同一时刻只有一个写入者。桌面应用的数据量很小，
-	// 使用一个连接可以让多个窗口的写操作在进程内自然排队。
+	// SQLite 同一时刻只有一个写入者。
+	// 使用一个连接可以让并发请求的 SQL 在进程内自然排队。
 	sqlDB.SetMaxOpenConns(1) //最多打开xxx个连接，包含正在使用的和空闲的
 	sqlDB.SetMaxIdleConns(1) //最多留下xxx个空闲连接，等下次直接复用；多余的空闲连接会关闭
 
@@ -210,41 +210,77 @@ func Run() (runErr error) {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", server.Addr, err)
 	}
+	// 订阅初始化失败时，Serve 还没有接管 listener，也要释放监听端口。
+	defer listener.Close()
 	server.Addr = listener.Addr().String()
 	// Serve 异常返回时也关闭连接；正常 Shutdown 后重复 Close 是安全的。
 	defer server.Close()
-
-	// 使用容量为 1 的缓冲 channel。
-
-	serverErr := make(chan error, 1)
-	go func() {
-		log.Printf("HTTP server listening on %s", server.Addr)
-		serverErr <- server.Serve(listener)
-	}()
-	fmt.Printf("NOTE_SERVER_URL=http://%s\n", server.Addr)
 
 	//监听关闭信号
 	//收到取消信号(ctrl+c/sigterm)时，stopCtx.Done()返回的channel关闭，就不会阻塞了
 	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// 后台投递跟随整个服务的生命周期，不使用某次 HTTP 请求的 context。
+	// 接收和投递都跟随整个后端的生命周期。
 	workerCtx, cancelWorker := context.WithCancel(stopCtx)
-	// 只表示后台循环已经退出，不用于存放通知。
+	defer cancelWorker()
+
+	// 1. 先建立订阅，等 Redis 确认成功。
+	notificationSub, err := notification.SubscribeRedis(
+		workerCtx,
+		redisClient,
+	)
+	if err != nil {
+		return fmt.Errorf("initialize notification subscriber: %w", err)
+	}
+
+	// subscriberErr：接收循环异常退出时，上报错误。
+	// subscriberDone：接收循环已经结束的信号。
+	subscriberErr := make(chan error, 1)
+	subscriberDone := make(chan struct{})
+
+	// 2. 持续接收 Redis 广播，交给同一个 notificationHub。
+	go func() {
+		defer close(subscriberDone)
+
+		if err := notification.RunRedisSubscriber(
+			workerCtx,
+			notificationSub,
+			notificationHub,
+		); err != nil {
+			// 函数内部持续循环；只有返回非 nil 错误，才向主流程上报。
+			subscriberErr <- err
+		}
+	}()
+
+	// 3. 订阅成功后，再启动 Outbox 投递。
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)
+
 		notification.RunOutboxWorker(
 			workerCtx,
 			notificationRepository,
 			notificationPublisher,
 		)
 	}()
+
+	// 退出时通知两个循环停止，并等它们结束。
+	// 然后才会执行前面注册的 Redis、SQLite 关闭操作。
 	defer func() {
 		cancelWorker()
-		// 包括 Serve 提前返回的情况，先等待 worker，再关闭 Redis 和 SQLite。
 		<-workerDone
+		<-subscriberDone
 	}()
+
+	// 订阅确认、后台循环启动后，再接受 HTTP 请求并通知桌面端启动成功。
+	// 容量为 1，关闭服务时即使主 select 已经结束，Serve 也能上报结果。
+	serverErr := make(chan error, 1)
+	go func() {
+		log.Printf("HTTP server listening on %s", server.Addr)
+		serverErr <- server.Serve(listener)
+	}()
+	fmt.Printf("NOTE_SERVER_URL=http://%s\n", server.Addr)
 
 	// Electron 关闭时会关闭子进程的 stdin。只在桌面模式启用，
 	// 普通终端运行仍然完全由 Ctrl+C 或 SIGTERM 控制。
@@ -259,25 +295,21 @@ func Run() (runErr error) {
 	}
 
 	select {
-	// 信号分支和 parentClosed 分支没有 return，执行后会继续走下面的关闭流程。
-	// serverErr 分支有 return，会直接退出当前函数。
+	// 任一分支结束等待后，都进入下面的关闭流程。
+	// 异常先保存在 runErr 中，清理完资源再返回给 main。
 	case err := <-serverErr:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			runErr = fmt.Errorf("serve HTTP: %w", err)
 		}
-		return fmt.Errorf("serve HTTP: %w", err)
-		//ctrl+c/sigterm
-		//当Done()被关闭时，可以被立即接收到，不需要拿变量接收
-		//这是 Go channel 的规则：从一个已经关闭的 channel 接收，会立即返回，不会阻塞。
-		//关闭 channel，会让所有正在等它的人，立刻收到一个“零值”，并且从此以后永远收到零值。
+	case err := <-subscriberErr:
+		runErr = fmt.Errorf("receive Redis notifications: %w", err)
 	case <-stopCtx.Done():
 		log.Print("shutdown signal received")
-		//elcetron退出
 	case <-parentClosed:
 		log.Print("desktop parent process closed")
 	}
 
-	// Electron 退出不会取消 stopCtx，需要主动通知后台投递停止。
+	// Electron 退出或后台异常不会取消 stopCtx，需要主动停止两个后台循环。
 	cancelWorker()
 
 	//最多等待10秒
@@ -294,11 +326,12 @@ func Run() (runErr error) {
 		// 10s超时后，强制关闭 HTTP 连接
 		_ = server.Close()
 
-		return fmt.Errorf("shutdown HTTP server: %w", err)
+		// 保留触发关闭的原始错误，同时报告关闭失败。
+		return errors.Join(runErr, fmt.Errorf("shutdown HTTP server: %w", err))
 	}
 
 	log.Print("HTTP server stopped")
-	return nil
+	return runErr
 }
 
 func prepareDatabasePath(databasePath string) (string, error) {

@@ -4,13 +4,13 @@ import "time"
 
 // 记录后台需要投递的事件。
 type Outbox struct {
-	// 这次投递任务的 ID，后续用于发布去重。
+	// 投递任务 ID，用于发布去重；不是 Notification.ID 或 Redis Stream ID。
 	ID uint `gorm:"primaryKey;autoIncrement"`
 
 	// 事件发给哪个用户。
 	ReceiverID uint `gorm:"not null"`
 
-	// 推送事件名，例如 notification.created。
+	// 推送动作名，例如 notification.created；与 Card.Type 的通知内容类别不同。
 	Name string `gorm:"not null"`
 
 	// 本次要发送的 Card JSON 快照，与 Event.Data 对应。

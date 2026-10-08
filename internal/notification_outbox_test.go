@@ -53,16 +53,16 @@ func TestGroupJoinCreatesOutbox(t *testing.T) {
 				t.Fatalf("unexpected card snapshot: %+v", card)
 			}
 			if policy == model.Public {
-				if pending != nil || card.Type != model.Joined || card.Request != nil {
+				if pending != nil || notice.JoinRequestID != nil || card.Type != model.Joined || card.RequestStatus != "" {
 					t.Fatalf("public join contains an application: %+v", card)
 				}
-			} else if pending == nil || card.Type != model.JoinRequested || card.Request == nil ||
-				card.Request.ID != pending.ID || card.Request.Kind != model.Application ||
-				card.Request.Status != model.Pending || card.Request.SenderID != member.ID ||
-				card.Request.ReceiverID != owner.ID || !card.Request.CreatedAt.Equal(pending.CreatedAt) ||
-				card.Request.HandledAt != nil {
-				t.Fatalf("approval join has invalid application snapshot: %+v", card.Request)
+			} else if pending == nil || notice.JoinRequestID == nil || *notice.JoinRequestID != pending.ID ||
+				card.Type != model.JoinRequested || card.RequestStatus != model.Pending ||
+				pending.Kind != model.Application || pending.SenderID != member.ID ||
+				pending.ReceiverID != owner.ID || pending.CreatedAt.IsZero() || pending.HandledAt != nil {
+				t.Fatalf("approval join has invalid application snapshot: %+v", card)
 			}
+			assertNotificationCardFields(t, []byte(task.Data), card.RequestStatus)
 
 			// 已入群或复用待审核申请时，不再创建通知和投递任务。
 			again, repeatedNotice, err := repo.Join(context.Background(), item.ID, member.ID, "ABC123")

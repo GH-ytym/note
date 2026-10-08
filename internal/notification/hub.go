@@ -5,17 +5,18 @@ import (
 	"sync"
 )
 
-// 推送消息的外层
-// Card 负责通知内容，Event 负责这次推送的身份和类型
+// Event 包装一次通知推送：Card 是通知内容，Event 标识推送动作和流中的位置。
+// 这是通知推送事件，与 model.Event（日历中的日程）无关。
 type Event struct {
-	// 后面使用消息流的位置，供断线恢复使用。
-	// 与 Card.ID 是两个概念
+	// Redis Stream 条目的 ID，用于推送去重和断线恢复的 afterID。
+	// 同一个 Outbox 任务重试时复用它；与 Card.ID（通知 ID）不同。
 	ID string
 
-	// 例如 notification.created、notification.updated
+	// 推送动作名，例如 notification.created、notification.updated。
+	// 与 Card.Type（joined、join_requested 等通知内容类别）不同。
 	Name string
 
-	// 已编码的 JSON 内容，例如一张 Card 的 JSON
+	// 一张 Card 的 JSON 字符串快照，不是数据库 Notification 或 Go Card 对象。
 	Data string
 }
 
@@ -127,6 +128,7 @@ func (h *Hub) Send(userID uint, e Event) {
 			// Hub 本身不保存历史，新 channel 也不会自动收到遗漏的消息。
 			delete(conns, ch) //在go里面，遍历 map 时删除当前 key 是合法的
 			close(ch)
+			//go的规则，对channel的关闭/移除等操作永远是让发送方执行，而不是接收方
 		}
 	}
 

@@ -271,7 +271,7 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 				t.Fatal(err)
 			}
 			if card.ID != notice.ID || card.Type != model.JoinRequested ||
-				card.GroupID != item.ID || card.ActorID != member.ID || card.RequestStatus != model.Pending {
+				card.JoinRequestID == nil || *card.JoinRequestID != pending.ID || card.GroupID != item.ID || card.ActorID != member.ID || card.RequestStatus != model.Pending {
 				t.Fatalf("wrong notification card: %+v", card)
 			}
 			assertNotificationCardFields(t, []byte(event.Data), model.Pending)

@@ -53,11 +53,11 @@ func TestGroupJoinCreatesOutbox(t *testing.T) {
 				t.Fatalf("unexpected card snapshot: %+v", card)
 			}
 			if policy == model.Public {
-				if pending != nil || notice.JoinRequestID != nil || card.Type != model.Joined || card.RequestStatus != "" {
+				if pending != nil || card.JoinRequestID != nil || notice.JoinRequestID != nil || card.Type != model.Joined || card.RequestStatus != "" {
 					t.Fatalf("public join contains an application: %+v", card)
 				}
 			} else if pending == nil || notice.JoinRequestID == nil || *notice.JoinRequestID != pending.ID ||
-				card.Type != model.JoinRequested || card.RequestStatus != model.Pending ||
+				card.JoinRequestID == nil || *card.JoinRequestID != pending.ID || card.Type != model.JoinRequested || card.RequestStatus != model.Pending ||
 				pending.Kind != model.Application || pending.SenderID != member.ID ||
 				pending.ReceiverID != owner.ID || pending.CreatedAt.IsZero() || pending.HandledAt != nil {
 				t.Fatalf("approval join has invalid application snapshot: %+v", card)

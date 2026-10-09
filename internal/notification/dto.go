@@ -10,7 +10,6 @@ import (
 // Card 是一条通知的展示数据，作为 Inbox.Items 中的一项返回前端。
 type Card struct {
 	// Notification.ID：前端用来标识通知；不是申请 ID 或 Redis Stream ID。
-	// 后续审批可由后端根据这个通知 ID 查询关联的 JoinRequestID。
 	ID uint `json:"id"`
 	// 通知内容类别：joined 表示已经入群，join_requested 表示入群申请。
 	// 与 Event.Name（通知创建／更新）和 RequestStatus（申请处理进度）不同。
@@ -25,9 +24,13 @@ type Card struct {
 	GroupID   uint   `json:"group_id"`
 	GroupName string `json:"group_name"`
 
-	// 关联申请／邀请的处理状态，例如 pending、accepted、rejected、cancelled。
+	// 关联申请／邀请的业务 ID，审核时使用；不同于本卡片的通知 ID。
+	// 普通入群提醒没有关联申请，nil 时不返回该字段。
+	JoinRequestID *uint `json:"join_request_id,omitempty"`
+
+	// 关联申请/邀请的处理状态，例如 pending、accepted、rejected、cancelled。
 	// public 直接入群没有申请，此字段为空，omitempty 会省略它。
-	// 已读状态单独看 ReadAt，读过通知不代表已经处理申请。
+	// 已读状态单独看 ReadAt
 	RequestStatus model.Status `json:"request_status,omitempty"`
 
 	// nil 表示通知未读，与 RequestStatus 相互独立。
@@ -56,15 +59,16 @@ func NewCard(n model.Notification) (Card, error) {
 	}
 
 	card := Card{
-		ID:          n.ID,
-		Type:        n.Type,
-		ActorID:     n.ActorID,
-		ActorName:   n.Actor.Nickname,
-		ActorAvatar: n.Actor.Avatar,
-		GroupID:     n.GroupID,
-		GroupName:   n.Group.Name,
-		ReadAt:      n.ReadAt,
-		CreatedAt:   n.CreatedAt,
+		ID:            n.ID,
+		Type:          n.Type,
+		ActorID:       n.ActorID,
+		ActorName:     n.Actor.Nickname,
+		ActorAvatar:   n.Actor.Avatar,
+		GroupID:       n.GroupID,
+		GroupName:     n.Group.Name,
+		JoinRequestID: n.JoinRequestID,
+		ReadAt:        n.ReadAt,
+		CreatedAt:     n.CreatedAt,
 	}
 
 	if card.ActorName == "" {

@@ -9,6 +9,7 @@ type NotificationType string
 const (
 	Joined        NotificationType = "joined"
 	JoinRequested NotificationType = "join_requested"
+	JoinReviewed  NotificationType = "join_reviewed"
 )
 
 // 保存在数据库中的通知记录，记录接收者、触发者和关联群组／申请。
@@ -29,7 +30,7 @@ type Notification struct {
 	Group   *Group `gorm:"foreignKey:GroupID;constraint:OnDelete:CASCADE" json:"-"`
 
 	// 指向这条通知对应的申请／邀请记录；后端可从通知 ID 查到这个申请 ID。
-	// public 直接入群没有申请，所以允许为 nil；Card 不再返回申请 ID。
+	// public 直接入群没有申请，所以允许为 nil；Card 中同样省略该字段。
 	JoinRequestID *uint             `gorm:"index" json:"join_request_id"`
 	JoinRequest   *GroupJoinRequest `gorm:"foreignKey:JoinRequestID;constraint:OnDelete:SET NULL" json:"-"`
 

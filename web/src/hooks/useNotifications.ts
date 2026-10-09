@@ -10,6 +10,8 @@ export interface NotificationCard {
   actor_avatar: string;
   group_id: number;
   group_name: string;
+  // 申请／邀请 ID，用于审核；id 仍是通知 ID。
+  join_request_id?: number;
   request_status?: string;
   read_at: string | null;
   created_at: string;

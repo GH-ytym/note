@@ -40,3 +40,14 @@ type QuitGroupRequest struct {
 	//nil表示不转让（普通用户就是nil）
 	Target *uint `json:"target" binding:"omitempty,min=1"`
 }
+
+// URL 使用 Card.JoinRequestID，也就是申请表的主键；不是 Card.ID。
+// 后端仍需查询申请最新状态，并验证审核人的权限。
+type ReviewGroupJoinURI struct {
+	JoinRequestID uint `uri:"joinRequestID" binding:"required,min=1"`
+}
+
+// 只表达审核决定；审核人从 JWT 获取，群组和申请人从数据库查询。
+type ReviewGroupJoinRequest struct {
+	Decision string `json:"decision" binding:"required,oneof=accept reject"`
+}

@@ -230,8 +230,8 @@ func (r *gormRepository) Join(
 			}
 			msg.Actor = &user
 			msg.Group = &g
-			//把这个msg单独丢进outbox表，后续投递是从outbox里面查，不是notification
-			if err := enqueueNotice(tx, msg); err != nil {
+			//把这个msg单独丢进outbox表，后续投递就是从outbox里面查记录
+			if err := enqueueNotice(tx, msg, "notification.created", msg.CreatedAt); err != nil {
 				return err
 			}
 			//保存一份快照
@@ -290,7 +290,7 @@ func (r *gormRepository) Join(
 		msg.Actor = &user
 		msg.Group = &g
 		msg.JoinRequest = &req
-		if err := enqueueNotice(tx, msg); err != nil {
+		if err := enqueueNotice(tx, msg, "notification.created", msg.CreatedAt); err != nil {
 			return err
 		}
 		notice = &msg
@@ -307,23 +307,27 @@ func (r *gormRepository) Join(
 
 // enqueueNotice 使用 Join 的同一个事务保存投递任务。
 // 保存这次 Card 的 JSON 快照，后续改名、处理申请不会改写这次事件。
-func enqueueNotice(tx *gorm.DB, msg model.Notification) error {
+func enqueueNotice(
+	tx *gorm.DB,
+	msg model.Notification,
+	eventName string,
+	eventTime time.Time, //其实可以直接用time.Now()，但传进来可以让同一次审核的记录使用同一个时间点
+) error {
 	card, err := notification.NewCard(msg)
 	if err != nil {
-		return fmt.Errorf("build notification outbox card: %w", err)
+		return fmt.Errorf("build notification card: %w", err)
 	}
+
 	data, err := json.Marshal(card)
 	if err != nil {
-		return fmt.Errorf("encode notification outbox card: %w", err)
+		return fmt.Errorf("encode notification card: %w", err)
 	}
 
 	task := model.Outbox{
 		ReceiverID: msg.ReceiverID,
-		Name:       "notification.created",
+		Name:       eventName,
 		Data:       string(data),
-		CreatedAt:  msg.CreatedAt,
-		// PublishedAt 保持 nil，等后台成功交给 Redis 后再填写
-		//因为放进表里不算发布了，真的投递出去才算
+		CreatedAt:  eventTime,
 	}
 	if err := tx.Create(&task).Error; err != nil {
 		return fmt.Errorf("create notification outbox task: %w", err)

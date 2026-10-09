@@ -63,6 +63,16 @@ func assertNotificationCardFields(t *testing.T, data []byte, wantStatus model.St
 			t.Fatalf("card still contains removed field %q: %s", name, data)
 		}
 	}
+	requestID, hasRequestID := fields["join_request_id"]
+	if wantStatus == "" && hasRequestID {
+		t.Fatalf("ordinary notice contains join_request_id: %s", data)
+	}
+	if wantStatus != "" {
+		var id uint
+		if !hasRequestID || json.Unmarshal(requestID, &id) != nil || id == 0 {
+			t.Fatalf("missing or invalid join_request_id: %s", data)
+		}
+	}
 	status, exists := fields["request_status"]
 	if wantStatus == "" {
 		if exists {
@@ -135,10 +145,10 @@ func TestGroupJoinNotificationList(t *testing.T) {
 					t.Fatalf("unexpected notification card: %+v", card)
 				}
 				if tc.policy == model.Public {
-					if card.RequestStatus != "" {
+					if card.RequestStatus != "" || card.JoinRequestID != nil {
 						t.Fatal("public join unexpectedly contains an application")
 					}
-				} else if card.RequestStatus != model.Pending {
+				} else if card.RequestStatus != model.Pending || card.JoinRequestID == nil {
 					t.Fatalf("missing or invalid application status: %+v", card)
 				}
 				var response struct {
@@ -214,7 +224,7 @@ func TestNotificationListRequestStatusIndependentOfReadAt(t *testing.T) {
 			}
 			card := inbox.Items[0]
 			if card.ID != notice.ID || card.Type != model.JoinRequested ||
-				card.RequestStatus != tc.status || (card.ReadAt != nil) != tc.read ||
+				card.JoinRequestID == nil || *card.JoinRequestID != application.ID || card.RequestStatus != tc.status || (card.ReadAt != nil) != tc.read ||
 				!card.CreatedAt.Equal(notice.CreatedAt) {
 				t.Fatalf("request status, read state or notification identity mixed up: %+v", card)
 			}

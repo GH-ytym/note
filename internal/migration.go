@@ -27,6 +27,9 @@ func migrateDatabase(db *gorm.DB) error {
 	if err := migrateNotificationSchema(db); err != nil {
 		return fmt.Errorf("migrate notification schema: %w", err)
 	}
+	if err := migrateNotificationStateSchema(db); err != nil {
+		return fmt.Errorf("migrate notification state schema: %w", err)
+	}
 	if err := migrateOutboxSchema(db); err != nil {
 		return fmt.Errorf("migrate outbox schema: %w", err)
 	}

@@ -19,7 +19,7 @@ func TestAuthConcurrentAccountCollision(t *testing.T) {
 		t.Fatal(err)
 	}
 	sqlDB.SetMaxOpenConns(4)
-	if err := migrateAuthSchema(db); err != nil {
+	if err := migrateDatabase(db); err != nil {
 		t.Fatal(err)
 	}
 	repo := auth.NewGORMRepository(db)
@@ -71,7 +71,7 @@ func TestAuthConcurrentSameNameRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 	sqlDB.SetMaxOpenConns(4)
-	if err := migrateAuthSchema(db); err != nil {
+	if err := migrateDatabase(db); err != nil {
 		t.Fatal(err)
 	}
 	service := auth.NewService(auth.NewGORMRepository(db))
@@ -103,5 +103,12 @@ func TestAuthConcurrentSameNameRegistration(t *testing.T) {
 	}
 	if len(suffixes) != 8 {
 		t.Fatalf("got %d unique accounts, want 8", len(suffixes))
+	}
+	var states int64
+	if err := db.Model(&model.NotificationState{}).Where("revision = 0 AND unread_count = 0").Count(&states).Error; err != nil {
+		t.Fatal(err)
+	}
+	if states != 8 {
+		t.Fatalf("got %d initial notification states, want 8", states)
 	}
 }

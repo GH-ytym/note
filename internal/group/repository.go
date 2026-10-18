@@ -231,7 +231,12 @@ func (r *gormRepository) Join(
 			msg.Actor = &user
 			msg.Group = &g
 			//把这个msg单独丢进outbox表，后续投递就是从outbox里面查记录
-			if err := enqueueNotice(tx, msg, "notification.created", msg.CreatedAt); err != nil {
+			if err := enqueueNotice(
+				tx,
+				msg,
+				"notification.created",
+				msg.CreatedAt,
+			); err != nil {
 				return err
 			}
 			//保存一份快照
@@ -290,7 +295,12 @@ func (r *gormRepository) Join(
 		msg.Actor = &user
 		msg.Group = &g
 		msg.JoinRequest = &req
-		if err := enqueueNotice(tx, msg, "notification.created", msg.CreatedAt); err != nil {
+		if err := enqueueNotice(
+			tx,
+			msg,
+			"notification.created",
+			msg.CreatedAt,
+		); err != nil {
 			return err
 		}
 		notice = &msg

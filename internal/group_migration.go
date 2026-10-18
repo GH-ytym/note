@@ -115,10 +115,28 @@ func migrateNotificationSchema(db *gorm.DB) error {
 
 func migrateOutboxSchema(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
-		if tx.Migrator().HasTable(&model.Outbox{}) {
-			return nil
+		if !tx.Migrator().HasTable(&model.Outbox{}) {
+			return tx.Migrator().CreateTable(&model.Outbox{})
 		}
-		// 只建投递任务表；重复启动保留已有的待投递和已投递任务。
-		return tx.Migrator().CreateTable(&model.Outbox{})
+
+		// 显式补列，不重建已有表；旧任务暂时使用版本 0。
+		if !tx.Migrator().HasColumn(&model.Outbox{}, "Revision") {
+			if err := tx.Exec(`ALTER TABLE outboxes
+				ADD COLUMN revision integer NOT NULL DEFAULT 0`).Error; err != nil {
+				return fmt.Errorf("add outboxes.revision: %w", err)
+			}
+		}
+
+		// 旧链路尚未分配版本，不能提前限制同一用户只有一个版本 0 的任务。
+		// 正式接入版本协议时，需同步替换本段过渡迁移。
+		if err := tx.Exec("DROP INDEX IF EXISTS idx_outbox_receiver_revision").Error; err != nil {
+			return fmt.Errorf("drop premature outbox revision index: %w", err)
+		}
+		if !tx.Migrator().HasIndex(&model.Outbox{}, "PublishedAt") {
+			if err := tx.Migrator().CreateIndex(&model.Outbox{}, "PublishedAt"); err != nil {
+				return fmt.Errorf("create outbox published index: %w", err)
+			}
+		}
+		return nil
 	})
 }

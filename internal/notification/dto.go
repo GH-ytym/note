@@ -39,10 +39,34 @@ type Card struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Inbox 是列表接口返回的完整响应，包含通知卡片和全部未读数量。
+// Inbox 是通知面板的完整快照。
+// 用于初始加载或恢复时重置面板；正常增量变化使用 Change。
 type Inbox struct {
-	Items       []Card `json:"items"`
-	UnreadCount int64  `json:"unread_count"`
+	// JSON 中输出为字符串，避免 JavaScript 大整数精度丢失
+	Revision uint64 `json:"revision,string"`
+
+	// 最近 50 条通知，按通知 ID 倒序排列
+	Items []Card `json:"items"`
+
+	// 全部未读通知数量
+	UnreadCount int64 `json:"unread_count"`
+}
+
+// Change 表示某个用户的通知面板发生的一批变化。
+// 同一批可以涉及多张通知，但只对应一个新版本。
+type Change struct {
+	// 应用这批变化之后，面板应该到达的版本。
+	Revision uint64 `json:"revision,string"`
+
+	// 新增或更新的通知，携带每张 Card 的完整内容。
+	// 同 ID 已存在则替换，不存在则作为新增候选。
+	Upserts []Card `json:"upserts"`
+
+	// 需要移除的通知 ID，使用 Notification.ID。
+	RemovedIDs []uint `json:"removed_ids"`
+
+	// 变化之后的全部未读总数
+	UnreadCount int64 `json:"unread_count"`
 }
 
 func NewCard(n model.Notification) (Card, error) {

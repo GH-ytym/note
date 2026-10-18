@@ -155,6 +155,93 @@ func TestGroupJoinRollsBackWhenOutboxInsertFails(t *testing.T) {
 	}
 }
 
+func TestOutboxLegacyMigration(t *testing.T) {
+	for _, withRevision := range []bool{false, true} {
+		name := "missing_revision"
+		if withRevision {
+			name = "premature_unique_index"
+		}
+		t.Run(name, func(t *testing.T) {
+			db := authTestDB(t)
+			if err := db.Exec(`CREATE TABLE outboxes (
+				id integer PRIMARY KEY AUTOINCREMENT,
+				receiver_id integer NOT NULL,
+				name text NOT NULL,
+				data text NOT NULL,
+				created_at datetime NOT NULL,
+				published_at datetime
+			)`).Error; err != nil {
+				t.Fatal(err)
+			}
+			if withRevision {
+				if err := db.Exec("ALTER TABLE outboxes ADD COLUMN revision integer NOT NULL DEFAULT 0").Error; err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Exec(`CREATE UNIQUE INDEX idx_outbox_receiver_revision
+					ON outboxes(receiver_id, revision)`).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			createdAt := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+			publishedAt := createdAt.Add(time.Minute)
+			tasks := []model.Outbox{
+				{ID: 7, ReceiverID: 3, Name: "notification.created", Data: `{"id":10}`, CreatedAt: createdAt},
+				{ID: 8, ReceiverID: 4, Name: "notification.created", Data: `{"id":11}`, CreatedAt: createdAt, PublishedAt: &publishedAt},
+			}
+			for _, task := range tasks {
+				if err := db.Exec(`INSERT INTO outboxes
+					(id, receiver_id, name, data, created_at, published_at)
+					VALUES (?, ?, ?, ?, ?, ?)`, task.ID, task.ReceiverID, task.Name,
+					task.Data, task.CreatedAt, task.PublishedAt).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			// 半改造的表也可能已有非零版本，升级时不能重置。
+			if withRevision {
+				tasks[1].Revision = 9
+				if err := db.Exec("UPDATE outboxes SET revision = 9 WHERE id = 8").Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			for i := 0; i < 2; i++ {
+				if err := migrateDatabase(db); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var saved []model.Outbox
+			if err := db.Order("id ASC").Find(&saved).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(saved) != len(tasks) {
+				t.Fatalf("migration changed task count: %+v", saved)
+			}
+			for i, got := range saved {
+				want := tasks[i]
+				if got.ID != want.ID || got.ReceiverID != want.ReceiverID || got.Revision != want.Revision ||
+					got.Name != want.Name || got.Data != want.Data || !got.CreatedAt.Equal(want.CreatedAt) ||
+					(got.PublishedAt == nil) != (want.PublishedAt == nil) ||
+					(got.PublishedAt != nil && !got.PublishedAt.Equal(*want.PublishedAt)) {
+					t.Fatalf("migration changed task: got %+v want %+v", got, want)
+				}
+			}
+			if !db.Migrator().HasIndex(&model.Outbox{}, "PublishedAt") {
+				t.Fatal("missing published_at index")
+			}
+			if db.Migrator().HasIndex(&model.Outbox{}, "idx_outbox_receiver_revision") {
+				t.Fatal("premature unique index still exists")
+			}
+			next := model.Outbox{ReceiverID: 3, Name: "notification.created", Data: `{"id":12}`, CreatedAt: createdAt}
+			if err := db.Create(&next).Error; err != nil {
+				t.Fatalf("insert another task for same user: %v", err)
+			}
+			if next.ID <= tasks[1].ID {
+				t.Fatalf("new task did not receive a fresh ID: %d", next.ID)
+			}
+		})
+	}
+}
+
 func TestOutboxSchemaAndRepeatMigration(t *testing.T) {
 	db, owner, member, item := groupSchemaFixture(t)
 	notice := model.Notification{ReceiverID: owner.ID, ActorID: member.ID, GroupID: item.ID, Type: model.Joined}

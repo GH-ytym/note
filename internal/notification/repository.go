@@ -37,7 +37,6 @@ type Repository interface {
 	LoadSnapshot(
 		ctx context.Context,
 		userID uint,
-		limit int,
 	) (Inbox, error)
 }
 
@@ -45,17 +44,13 @@ type gormRepository struct {
 	db *gorm.DB
 }
 
-// 加载最近 limit 条通知，以及同一时刻的版本和全部未读数
+// 加载用户全部通知，以及同一时刻的版本和全部未读数，用于初始化完整缓存。
 func (r *gormRepository) LoadSnapshot(
 	ctx context.Context,
 	userID uint,
-	limit int,
 ) (Inbox, error) {
 	if userID == 0 {
 		return Inbox{}, fmt.Errorf("userID cannot be zero")
-	}
-	if limit <= 0 {
-		return Inbox{}, fmt.Errorf("limit must be positive")
 	}
 
 	inbox := Inbox{
@@ -79,7 +74,6 @@ func (r *gormRepository) LoadSnapshot(
 			tx.Where("receiver_id = ?", userID),
 		).
 			Order("id DESC").
-			Limit(limit).
 			Find(&notices).Error; err != nil {
 			return fmt.Errorf("load notification snapshot: %w", err)
 		}

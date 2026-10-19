@@ -45,7 +45,7 @@ type Inbox struct {
 	// JSON 中输出为字符串，避免 JavaScript 大整数精度丢失
 	Revision uint64 `json:"revision,string"`
 
-	// 最近 50 条通知，按通知 ID 倒序排列
+	// 按通知 ID 倒序排列；缓存初始化加载全部，列表接口的返回范围由查询决定。
 	Items []Card `json:"items"`
 
 	// 全部未读通知数量

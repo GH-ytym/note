@@ -263,18 +263,28 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 	for _, window := range []<-chan notification.Event{firstWindow, secondWindow} {
 		select {
 		case event, ok := <-window:
-			if !ok || event.ID == "" || event.Name != "notification.created" {
+			if !ok || event.ID == "" || event.Name != "notification.change" {
 				t.Fatalf("missing notification event: %+v", event)
 			}
-			var card notification.Card
-			if err := json.Unmarshal([]byte(event.Data), &card); err != nil {
+			var change notification.Change
+			if err := json.Unmarshal([]byte(event.Data), &change); err != nil {
 				t.Fatal(err)
 			}
+			if change.Revision != 1 || change.UnreadCount != 1 || len(change.Upserts) != 1 || change.RemovedIDs == nil || len(change.RemovedIDs) != 0 {
+				t.Fatalf("wrong notification change: %+v", change)
+			}
+			card := change.Upserts[0]
 			if card.ID != notice.ID || card.Type != model.JoinRequested ||
 				card.JoinRequestID == nil || *card.JoinRequestID != pending.ID || card.GroupID != item.ID || card.ActorID != member.ID || card.RequestStatus != model.Pending {
 				t.Fatalf("wrong notification card: %+v", card)
 			}
-			assertNotificationCardFields(t, []byte(event.Data), model.Pending)
+			var payload struct {
+				Upserts []json.RawMessage `json:"upserts"`
+			}
+			if err := json.Unmarshal([]byte(event.Data), &payload); err != nil {
+				t.Fatal(err)
+			}
+			assertNotificationCardFields(t, payload.Upserts[0], model.Pending)
 			if firstEvent.ID != "" && firstEvent != event {
 				t.Fatal("two windows received different events")
 			}

@@ -103,6 +103,7 @@ func TestGroupJoinNotificationList(t *testing.T) {
 	} {
 		t.Run(string(tc.policy), func(t *testing.T) {
 			db, owner, member, item := groupSchemaFixture(t)
+			initializeJoinNotificationStates(t, db, owner, member)
 			if err := db.Model(&item).Updates(map[string]any{
 				"code": "ABC123", "policy": tc.policy,
 			}).Error; err != nil {

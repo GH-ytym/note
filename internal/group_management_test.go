@@ -230,6 +230,7 @@ func TestGroupDismissHTTPPermissionsAndCleanup(t *testing.T) {
 
 func TestGroupDismissRequiresCurrentOwner(t *testing.T) {
 	db, owner, member, _, first, _ := groupManagementFixture(t)
+	initializeJoinNotificationStates(t, db, owner, member)
 	repo := group.NewGORMRepository(db)
 	if err := repo.Quit(context.Background(), first.ID, owner.ID, &member.ID); err != nil {
 		t.Fatal(err)

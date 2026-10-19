@@ -32,10 +32,74 @@ type Repository interface {
 		taskID uint,
 		publishedAt time.Time,
 	) error
+
+	//加载缓存快照
+	LoadSnapshot(
+		ctx context.Context,
+		userID uint,
+		limit int,
+	) (Inbox, error)
 }
 
 type gormRepository struct {
 	db *gorm.DB
+}
+
+// 加载最近 limit 条通知，以及同一时刻的版本和全部未读数
+func (r *gormRepository) LoadSnapshot(
+	ctx context.Context,
+	userID uint,
+	limit int,
+) (Inbox, error) {
+	if userID == 0 {
+		return Inbox{}, fmt.Errorf("userID cannot be zero")
+	}
+	if limit <= 0 {
+		return Inbox{}, fmt.Errorf("limit must be positive")
+	}
+
+	inbox := Inbox{
+		Items: make([]Card, 0),
+	}
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 1. 读取同一份状态中的版本和未读数。
+		var state model.NotificationState
+		if err := tx.
+			Where("user_id = ?", userID).
+			First(&state).Error; err != nil {
+			return fmt.Errorf("read notification state: %w", err)
+		}
+		inbox.Revision = state.Revision
+		inbox.UnreadCount = state.UnreadCount
+
+		// 2. 加载通知以及生成 Card 所需的关联资料。
+		var notices []model.Notification
+		if err := preloadCardRelations(
+			tx.Where("receiver_id = ?", userID),
+		).
+			Order("id DESC").
+			Limit(limit).
+			Find(&notices).Error; err != nil {
+			return fmt.Errorf("load notification snapshot: %w", err)
+		}
+
+		// 3. 将数据库记录转成 Card。
+		for _, notice := range notices {
+			card, err := NewCard(notice)
+			if err != nil {
+				return err
+			}
+			inbox.Items = append(inbox.Items, card)
+		}
+
+		return nil
+	}, &sql.TxOptions{ReadOnly: true})
+
+	if err != nil {
+		return Inbox{}, err
+	}
+	return inbox, nil
 }
 
 func (r *gormRepository) MarkOutboxPublished(

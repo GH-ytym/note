@@ -53,7 +53,7 @@ func TestNotificationSchemaAndRepeatMigration(t *testing.T) {
 	}
 }
 
-func TestNotificationSchemaRequestDeletionAndGroupCascade(t *testing.T) {
+func TestNotificationSchemaRequestDeletionAndGroupRestrict(t *testing.T) {
 	db, owner, member, item := groupSchemaFixture(t)
 	request := model.GroupJoinRequest{
 		GroupID: item.ID, Kind: model.Application, SenderID: member.ID, ReceiverID: owner.ID,
@@ -79,11 +79,11 @@ func TestNotificationSchemaRequestDeletionAndGroupCascade(t *testing.T) {
 	if err := db.Model(&model.Notification{}).Count(&count).Error; err != nil || count != 2 {
 		t.Fatalf("request deletion removed notifications: count=%d err=%v", count, err)
 	}
-	if err := db.Delete(&item).Error; err != nil {
-		t.Fatal(err)
+	if err := db.Delete(&item).Error; err == nil {
+		t.Fatal("group with notifications must not be physically deleted")
 	}
-	if err := db.Model(&model.Notification{}).Count(&count).Error; err != nil || count != 0 {
-		t.Fatalf("group deletion did not clear notifications: count=%d err=%v", count, err)
+	if err := db.Model(&model.Notification{}).Count(&count).Error; err != nil || count != 2 {
+		t.Fatalf("group deletion changed notifications: count=%d err=%v", count, err)
 	}
 	if err := db.Model(&model.User{}).Count(&count).Error; err != nil || count != 2 {
 		t.Fatalf("group deletion changed users: count=%d err=%v", count, err)

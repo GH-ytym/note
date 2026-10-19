@@ -11,12 +11,35 @@ import (
 	"note/internal/group"
 	"note/internal/model"
 	"note/internal/notification"
+
+	"gorm.io/gorm"
 )
+
+func initializeJoinNotificationStates(t *testing.T, db *gorm.DB, users ...model.User) {
+	t.Helper()
+	for _, user := range users {
+		if err := db.Omit("User").Create(&model.NotificationState{UserID: user.ID}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertJoinNotificationState(t *testing.T, db *gorm.DB, userID uint, revision uint64, unread int64) {
+	t.Helper()
+	var state model.NotificationState
+	if err := db.Where("user_id = ?", userID).First(&state).Error; err != nil {
+		t.Fatal(err)
+	}
+	if state.Revision != revision || state.UnreadCount != unread {
+		t.Fatalf("unexpected notification state: %+v; want revision=%d unread=%d", state, revision, unread)
+	}
+}
 
 func TestGroupJoinCreatesOutbox(t *testing.T) {
 	for _, policy := range []model.GroupPolicy{model.Public, model.Approval} {
 		t.Run(string(policy), func(t *testing.T) {
 			db, owner, member, item := groupSchemaFixture(t)
+			initializeJoinNotificationStates(t, db, owner, member)
 			if err := db.Model(&item).Updates(map[string]any{"policy": policy, "code": "ABC123"}).Error; err != nil {
 				t.Fatal(err)
 			}
@@ -38,14 +61,20 @@ func TestGroupJoinCreatesOutbox(t *testing.T) {
 			if err := db.First(&task).Error; err != nil {
 				t.Fatal(err)
 			}
-			if task.ID == 0 || task.ReceiverID != owner.ID || task.Name != "notification.created" ||
-				task.PublishedAt != nil || !task.CreatedAt.Equal(notice.CreatedAt) {
+			if task.ID == 0 || task.ReceiverID != owner.ID || task.Name != "notification.change" || task.Revision != 1 ||
+				task.PublishedAt != nil || task.CreatedAt.IsZero() {
 				t.Fatalf("unexpected pending task: %+v", task)
 			}
-			var card notification.Card
-			if err := json.Unmarshal([]byte(task.Data), &card); err != nil {
+			var change notification.Change
+			if err := json.Unmarshal([]byte(task.Data), &change); err != nil {
 				t.Fatal(err)
 			}
+			if change.Revision != task.Revision || change.UnreadCount != 1 || len(change.Upserts) != 1 || change.RemovedIDs == nil || len(change.RemovedIDs) != 0 {
+				t.Fatalf("unexpected change: %+v", change)
+			}
+			card := change.Upserts[0]
+			assertJoinNotificationState(t, db, owner.ID, 1, 1)
+			assertJoinNotificationState(t, db, member.ID, 0, 0)
 			if card.ID != notice.ID || card.ActorID != member.ID ||
 				card.ActorName != fmt.Sprintf("%s#%05d", member.Username, member.Suffix) ||
 				card.ActorAvatar != member.Avatar || card.GroupID != item.ID || card.GroupName != item.Name ||
@@ -62,7 +91,13 @@ func TestGroupJoinCreatesOutbox(t *testing.T) {
 				pending.ReceiverID != owner.ID || pending.CreatedAt.IsZero() || pending.HandledAt != nil {
 				t.Fatalf("approval join has invalid application snapshot: %+v", card)
 			}
-			assertNotificationCardFields(t, []byte(task.Data), card.RequestStatus)
+			var payload struct {
+				Upserts []json.RawMessage `json:"upserts"`
+			}
+			if err := json.Unmarshal([]byte(task.Data), &payload); err != nil {
+				t.Fatal(err)
+			}
+			assertNotificationCardFields(t, payload.Upserts[0], card.RequestStatus)
 
 			// 已入群或复用待审核申请时，不再创建通知和投递任务。
 			again, repeatedNotice, err := repo.Join(context.Background(), member.ID, "ABC123")
@@ -77,6 +112,7 @@ func TestGroupJoinCreatesOutbox(t *testing.T) {
 			}
 
 			// 后续资料或申请状态发生变化，这次事件仍保存创建时的内容。
+			assertJoinNotificationState(t, db, owner.ID, 1, 1)
 			if err := db.Model(&item).Update("name", "新群名").Error; err != nil {
 				t.Fatal(err)
 			}
@@ -104,6 +140,7 @@ func TestGroupJoinRollsBackWhenOutboxInsertFails(t *testing.T) {
 	for _, policy := range []model.GroupPolicy{model.Public, model.Approval} {
 		t.Run(string(policy), func(t *testing.T) {
 			db, owner, member, item := groupSchemaFixture(t)
+			initializeJoinNotificationStates(t, db, owner, member)
 			if err := db.Model(&item).Updates(map[string]any{"policy": policy, "code": "ABC123"}).Error; err != nil {
 				t.Fatal(err)
 			}
@@ -133,9 +170,11 @@ func TestGroupJoinRollsBackWhenOutboxInsertFails(t *testing.T) {
 				t.Fatal(err)
 			}
 			pending, notice, err := group.NewGORMRepository(db).Join(context.Background(), member.ID, "ABC123")
-			if err == nil || !strings.Contains(err.Error(), "create notification outbox task") || pending != nil || notice != nil {
+			if err == nil || !strings.Contains(err.Error(), "test outbox failure") || pending != nil || notice != nil {
 				t.Fatalf("failed outbox insertion did not fail join: pending=%+v notice=%+v err=%v", pending, notice, err)
 			}
+			assertJoinNotificationState(t, db, owner.ID, 0, 0)
+			assertJoinNotificationState(t, db, member.ID, 0, 0)
 			for _, table := range []any{&model.GroupMember{}, &model.TodoMember{}, &model.EventMember{}} {
 				var count int64
 				if err := db.Model(table).Where("user_id = ?", member.ID).Count(&count).Error; err != nil || count != 0 {

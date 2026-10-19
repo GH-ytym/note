@@ -17,6 +17,7 @@ func TestFixedGroupCodeLookupAndJoin(t *testing.T) {
 	for _, policy := range []model.GroupPolicy{model.Public, model.Approval, model.Restricted, model.Personal} {
 		t.Run(string(policy), func(t *testing.T) {
 			db, owner, member, item := groupSchemaFixture(t)
+			initializeJoinNotificationStates(t, db, owner, member)
 			if err := db.Model(&item).Updates(map[string]any{"code": "ABC123", "policy": policy}).Error; err != nil {
 				t.Fatal(err)
 			}

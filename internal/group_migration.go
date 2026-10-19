@@ -106,6 +106,38 @@ func migrateGroupJoinSchema(db *gorm.DB) error {
 func migrateNotificationSchema(db *gorm.DB) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		if tx.Migrator().HasTable(&model.Notification{}) {
+			var foreignKeys []struct {
+				From     string
+				OnDelete string
+			}
+			if err := tx.Raw("PRAGMA foreign_key_list(notifications)").Scan(&foreignKeys).Error; err != nil {
+				return err
+			}
+			for _, fk := range foreignKeys {
+				if fk.From == "group_id" && fk.OnDelete == "RESTRICT" {
+					return nil
+				}
+			}
+			// SQLite 外键变化需要重建表；保存迁移器不会保留的索引和触发器。
+			var objects []struct{ SQL string }
+			if err := tx.Raw(`SELECT sql FROM sqlite_master
+				WHERE tbl_name = 'notifications' AND type IN ('index', 'trigger')
+				AND sql IS NOT NULL`).Scan(&objects).Error; err != nil {
+				return err
+			}
+			if tx.Migrator().HasConstraint(&model.Notification{}, "Group") {
+				if err := tx.Migrator().DropConstraint(&model.Notification{}, "Group"); err != nil {
+					return fmt.Errorf("drop notification group cascade: %w", err)
+				}
+			}
+			if err := tx.Migrator().CreateConstraint(&model.Notification{}, "Group"); err != nil {
+				return err
+			}
+			for _, object := range objects {
+				if err := tx.Exec(object.SQL).Error; err != nil {
+					return fmt.Errorf("restore notification schema object: %w", err)
+				}
+			}
 			return nil
 		}
 		// 用户、群组、申请表已存在，只创建通知表，避免重建父表。

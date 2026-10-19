@@ -25,9 +25,9 @@ type Notification struct {
 	ActorID uint  `gorm:"not null" json:"actor_id"`
 	Actor   *User `gorm:"foreignKey:ActorID;constraint:OnDelete:RESTRICT" json:"-"`
 
-	//发送的群组
+	// 关联群组不能因物理删除而带走通知；解散需先实现失效处理。
 	GroupID uint   `gorm:"not null;index" json:"group_id"`
-	Group   *Group `gorm:"foreignKey:GroupID;constraint:OnDelete:CASCADE" json:"-"`
+	Group   *Group `gorm:"foreignKey:GroupID;constraint:OnDelete:RESTRICT" json:"-"`
 
 	// 指向这条通知对应的申请／邀请记录；后端可从通知 ID 查到这个申请 ID。
 	// public 直接入群没有申请，所以允许为 nil；Card 中同样省略该字段。

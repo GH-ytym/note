@@ -231,6 +231,7 @@ func TestEventGroupHTTPPermissionsAndIsolation(t *testing.T) {
 
 func TestEventGroupJoinQuitAndDismiss(t *testing.T) {
 	db, owner, member, outsider, first, second := groupManagementFixture(t)
+	initializeJoinNotificationStates(t, db, owner, member, outsider)
 	es := event.NewService(event.NewGORMRepository(db))
 	gs := group.NewGORMRepository(db)
 	ctx := context.Background()
@@ -310,6 +311,7 @@ func TestEventGroupJoinQuitAndDismiss(t *testing.T) {
 
 func TestEventCreateAndRoleUpdatesRollBack(t *testing.T) {
 	db, owner, member, outsider, first, _ := groupManagementFixture(t)
+	initializeJoinNotificationStates(t, db, owner, member, outsider)
 	es := event.NewService(event.NewGORMRepository(db))
 	ctx := context.Background()
 	if _, _, err := group.NewGORMRepository(db).Join(ctx, outsider.ID, "ABC123"); err != nil {
@@ -450,6 +452,7 @@ func TestEventUpdateRechecksMembershipAndRole(t *testing.T) {
 
 func TestEventConcurrentCreateJoinAndPatch(t *testing.T) {
 	db, owner, _, outsider, first, _ := groupManagementFixture(t)
+	initializeJoinNotificationStates(t, db, owner, outsider)
 	pool, err := db.DB()
 	if err != nil {
 		t.Fatal(err)

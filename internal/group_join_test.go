@@ -15,6 +15,7 @@ func TestGroupJoinInitializesMembersAndPermissions(t *testing.T) {
 	for _, withTodos := range []bool{false, true} {
 		t.Run(fmt.Sprintf("with_todos=%t", withTodos), func(t *testing.T) {
 			db, owner, member, item := groupSchemaFixture(t)
+			initializeJoinNotificationStates(t, db, owner, member)
 			if err := db.Model(&item).Update("code", "ABC123").Error; err != nil {
 				t.Fatal(err)
 			}

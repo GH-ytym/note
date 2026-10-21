@@ -34,11 +34,6 @@ type cacheKeys struct {
 	live    string //频道
 }
 
-type CacheState struct {
-	Revision    uint64
-	UnreadCount int64
-}
-
 func notificationCacheKeys(userID uint) cacheKeys {
 	prefix := fmt.Sprintf("note:notifications:v2:{%d}", userID)
 
@@ -325,7 +320,7 @@ func (r *RedisCache) ApplyChange(
 	}
 
 	// 每张卡片追加两个参数
-	//ID  完整 Card JSON
+	//ID+完整 Card JSON
 	for _, card := range change.Upserts {
 		// ID 被用作 ZSet 分数，限制在整数可精确表示的范围。
 		if card.ID == 0 || uint64(card.ID) > uint64(1<<53-1) {

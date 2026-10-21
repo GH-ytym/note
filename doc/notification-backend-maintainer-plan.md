@@ -8,6 +8,25 @@
 
 ## 0. 每次继续前先读：用户约束
 
+### 2026-10-19 当前执行基线（优先于下文早期方案和历史记录）
+
+- 用户已确定：主线不引入 RabbitMQ；SQLite 事务 Outbox → Worker → Redis 缓存/历史/广播 → Hub/SSE。MQ 只保留为独立学习资料，不是上线依赖。
+- Redis items/order 缓存全部仍存在的通知，读取时分页；不是最近 50 条窗口。history 单独有限保留变化记录。
+- 不兼容旧通知协议；允许阶段性旧链路失效，但不能把模块测试通过描述为应用链路可用。
+- 先完成缓存与可靠发送/恢复，再继续审核和邀请业务。群解散支线暂缓，见 https://github.com/GH-ytym/note/issues/9 。
+- 已实现并有模块测试：Join → EnqueueChange；LoadSnapshot 全量读取且直接读 state.UnreadCount；InitSnapshot 仅首次建立；ApplyChange 更新缓存、XADD 历史（当前最多1000条）、PUBLISH 广播、重复/缺口判断及 applying_revision 异常标记；新订阅器 → Hub，多窗口和用户隔离。
+- 未接线：app.go 仍构造旧 RedisPublisher 并启动旧 Worker，新订阅器只订阅 v2，当前请求到 SSE 不闭环。列表接口仍查 SQL、COUNT、Limit(50)，未使用新缓存。
+- 尚未实现：安全恢复安装、epoch、reset、缓存分页读取、SSE 游标补发、在线漏消息校正、旧数据计数校准、版本唯一约束的最终迁移。
+- delivery.go 的 Deliver 方法已删除，但 SnapshotLoader/ChangeCache 接口、Delivery 结构和构造函数仍保留；不是已完成的恢复或投递实现。
+- InitSnapshot 尚不能修复部分 key 残留；ApplyChange 的 HLEN/ZCARD 仅为基础检查，不能检测等量损坏或 items/order 同时丢失。applying_revision 只能阻止继续使用未完成写入，不会自动恢复。
+- 下一步只实现并测试缓存恢复模块：观察状态/代次 → 一致 SQL 快照 → 条件安装新 epoch、清理旧历史并设置基线 → 发布 reset。元数据缺失和并发重建需要资格/令牌校验，不能只比较 revision，也不能让普通 Get/Set 替代原子安装。
+- reset 协议需与订阅器及后续客户端协议一起定义；全量 Redis 快照不意味着向客户端推送全部通知。Worker 只有在增量应用完成或合格重建覆盖任务且建立恢复基线后才能标记任务完成。
+- Go 层分离恢复与事件应用职责；Redis 内部更新缓存/历史/广播仍作为同一次脚本处理。先验收恢复，再接 Worker、新启动流程；之后接分页读取与完整 SSE 恢复。
+
+2026-10-21 进度补充：已实现 beginRebuild（5 秒资格、原子读取 state 是否存在及全部字段）与 endRebuild（比较 token 后释放）。已验证同用户并发竞争、用户隔离、过期持有者不能释放新资格、旧状态读取及错误类型拒绝。尚未实现条件安装快照、epoch/reset 和恢复协调入口，不能视为 Rebuild 已完成。本轮通过 `go test ./internal/notification -count=1` 与 `go test ./internal -run '^TestNotificationSnapshot' -count=1`，未宣称全仓库或应用推送链路通过。测试由助手编写运行，业务实现继续按用户手写、分段讲解的方式推进。
+
+以下 B0～B8 表与 RabbitMQ/旧兼容章节保留早期设计背景；与本节冲突时按本节执行，不重新引入已取消组件。
+
 - 用户是初学者，**只写后端，不负责前端**。
 - 后续采用“助手解释并贴代码，用户自己写”的方式。没有新的明确授权，不替用户直接修改 Go、前端或配置代码。
 - 文档维护、源码阅读和必要验证可以进行。贴过的代码不代表用户已经写入，必须先核对实际文件。

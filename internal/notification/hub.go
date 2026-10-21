@@ -5,18 +5,17 @@ import (
 	"sync"
 )
 
-// 推送消息的外层
-// Card 负责通知内容，Event 负责这次推送的身份和类型
+// Event 是 Redis 广播、Hub 和 SSE 共用的传输消息，不是数据库模型。
+// ID/Name/Data 分别对应 SSE 的 id/event/data。
 type Event struct {
-	// 后面使用消息流的位置，供断线恢复使用。
-	// 与 Card.ID 是两个概念
-	ID string
+	// Redis Stream 的事件位置，不是通知 ID 或 Change.Revision。
+	ID string `json:"id"`
 
-	// 例如 notification.created、notification.updated
-	Name string
+	// 新链路当前使用 notification.change。
+	Name string `json:"name"`
 
-	// 一张 Card 的 JSON 字符串快照
-	Data string
+	// 完整 Change 的 JSON 字符串。
+	Data string `json:"data"`
 }
 
 var ErrHubClosed = errors.New("notification hub closed")

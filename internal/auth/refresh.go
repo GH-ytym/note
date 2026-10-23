@@ -70,12 +70,7 @@ func (s *RefreshStore) Issue(
 
 // 重新登录先写入新会话，再删除旧会话；写入失败不会破坏旧会话。
 // 此脚本和 Rotate 一样面向单实例 Redis。
-var replaceRefreshScript = redis.NewScript(`
-local created = redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2], "NX")
-if not created then return 0 end
-if ARGV[3] == "1" then redis.call("DEL", KEYS[2]) end
-return 1
-`)
+var replaceRefreshScript = redis.NewScript(replaceRefreshLua)
 
 // 重新输入账密登录，则需要动redis
 func (s *RefreshStore) Replace(ctx context.Context, oldRaw string, userID uint) (string, error) {
@@ -143,29 +138,7 @@ func (s *RefreshStore) Lookup(
 // 3. 删除旧令牌。
 
 // 两个请求同时刷新同一令牌时，只有一个能够成功。
-var rotateRefreshScript = redis.NewScript(`
-local uid = redis.call("GET", KEYS[1])
-
-if not uid or uid ~= ARGV[1] then
-	return 0
-end
-
-local created = redis.call(
-	"SET",
-	KEYS[2],
-	uid,
-	"EX",
-	ARGV[2],
-	"NX"
-)
-
-if not created then
-	return -1
-end
-
-redis.call("DEL", KEYS[1])
-return 1
-`)
+var rotateRefreshScript = redis.NewScript(rotateRefreshLua)
 
 // 刷新凭证
 func (s *RefreshStore) Rotate(

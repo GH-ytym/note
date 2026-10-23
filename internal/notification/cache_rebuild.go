@@ -34,64 +34,9 @@ func rebuildKey(userID uint) string {
 	)
 }
 
-var begin = redis.NewScript(`
--- KEYS[1]：重建资格 key
--- KEYS[2]：缓存 state key
---
--- ARGV[1]：本次 token
--- ARGV[2]：资格有效期，毫秒
+var begin = redis.NewScript(beginRebuildLua)
 
---如果被卡住key了直接返回
-if redis.call("EXISTS", KEYS[1])==1 then
-return{"busy"}
-end
-
---读取state类型
-local kind=redis.call("TYPE",KEYS[2]).ok
---要么是不存在要么是hash
-if kind~="none" and kind~="hash" then
-return redis.error_reply("invalid cache state")
-end
-
---保存当前state
-local e="0"
-local old={}
-
---如果有kind那么exist应该是1
-if kind == "hash" then
-e="1"
-old=redis.call("HGETALL", KEYS[2])
-end
-
--- 设置本次重建资格和ttl
---ttl挂在rebuild上面
-local ok = redis.call(
-    "SET", KEYS[1], ARGV[1],
-    "NX", "PX", ARGV[2]
-)
-
-if not ok then
-    return {"busy"}
-end
-
--- 返回取得资格时的缓存状态。
-return {"ok", e, old}
-`)
-
-var release = redis.NewScript(`
--- KEYS[1]：重建资格 key
--- ARGV[1]：本次重建的 token
-
--- 先检查资格是否仍属于本次重建
-local token = redis.call("GET", KEYS[1])
-
-if token ~= ARGV[1] then
-    return 0
-end
-
--- 属于自己才允许删除
-return redis.call("DEL", KEYS[1])
-`)
+var release = redis.NewScript(endRebuildLua)
 
 func (r *RedisCache) beginRebuild(ctx context.Context, uid uint) (*lease, error) {
 	if uid == 0 {

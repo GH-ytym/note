@@ -8,6 +8,8 @@ end
 local old = cjson.decode(ARGV[3])
 local kind = redis.call("TYPE", KEYS[2]).ok
 
+--当前 state 必须和开始时记录的 state 完全一致
+--检查state有没有被改过
 if ARGV[2] == "0" then
     -- 开始时不存在，现在也必须不存在。
     if kind ~= "none" then
@@ -21,6 +23,7 @@ elseif ARGV[2] == "1" then
 
     local n = 0
 
+    --检查old内容是否被改过
     for key, val in pairs(old) do
         if redis.call("HGET", KEYS[2], key) ~= val then
             return 0

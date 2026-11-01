@@ -72,7 +72,7 @@ func (h *Hub) Subscribe(userID uint) (
 	//要返回这个函数，因为调用方拿不到mu，也不应该知道内部结构
 	unSub := func() {
 		//闭包
-		//但和上面的lock+unlock执行时机不同
+		//但和上面的lock+unlock执行时机不同（整个函数会被defer）
 		h.mu.Lock()
 		defer h.mu.Unlock()
 

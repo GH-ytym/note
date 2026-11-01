@@ -22,6 +22,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/alicebob/miniredis/v2/server"
+	"github.com/redis/go-redis/v9"
 )
 
 const noteAppTestSecret = "test-only-secret-0123456789abcdef"
@@ -192,6 +193,10 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 	if err := db.Create(&model.GroupMember{GroupID: item.ID, UserID: owner.ID}).Error; err != nil {
 		t.Fatal(err)
 	}
+	secondMember := model.User{Username: "second-applicant", Suffix: 23456, Email: "second-applicant@test.local", PasswordHash: "test", Nickname: "second"}
+	if err := db.Create(&secondMember).Error; err != nil {
+		t.Fatal(err)
+	}
 	var databases []struct{ Name, File string }
 	if err := db.Raw("PRAGMA database_list").Scan(&databases).Error; err != nil {
 		t.Fatal(err)
@@ -235,69 +240,122 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 	firstWindow := openNotificationTestStream(t, ctx, url, ownerToken)
 	secondWindow := openNotificationTestStream(t, ctx, url, ownerToken)
 	otherUser := openNotificationTestStream(t, ctx, url, memberToken)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		url+"/api/groups/join", strings.NewReader(`{"code":"ABC123"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Authorization", "Bearer "+memberToken)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusAccepted {
-		t.Fatalf("join application: %s", res.Status)
-	}
-	var pending model.GroupJoinRequest
-	if err := json.NewDecoder(res.Body).Decode(&pending); err != nil {
-		t.Fatal(err)
-	}
-	var notice model.Notification
-	if err := db.Where("join_request_id = ? AND receiver_id = ?", pending.ID, owner.ID).
-		First(&notice).Error; err != nil {
-		t.Fatal(err)
-	}
-	var firstEvent notification.Event
-	for _, window := range []<-chan notification.Event{firstWindow, secondWindow} {
-		select {
-		case event, ok := <-window:
-			if !ok || event.ID == "" || event.Name != "notification.change" {
-				t.Fatalf("missing notification event: %+v", event)
+	client := redis.NewClient(&redis.Options{Addr: redisServer.Addr(), MaxRetries: -1})
+	t.Cleanup(func() { _ = client.Close() })
+	var epoch string
+	for i, applicant := range []model.User{member, secondMember} {
+		memberToken, err = tokens.Generate(applicant.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			url+"/api/groups/join", strings.NewReader(`{"code":"ABC123"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+memberToken)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusAccepted {
+			t.Fatalf("join application: %s", res.Status)
+		}
+		var pending model.GroupJoinRequest
+		if err := json.NewDecoder(res.Body).Decode(&pending); err != nil {
+			t.Fatal(err)
+		}
+		var notice model.Notification
+		if err := db.Where("join_request_id = ? AND receiver_id = ?", pending.ID, owner.ID).
+			First(&notice).Error; err != nil {
+			t.Fatal(err)
+		}
+		var firstEvent notification.Event
+		for _, window := range []<-chan notification.Event{firstWindow, secondWindow} {
+			select {
+			case event, ok := <-window:
+				if !ok || event.ID == "" || event.Name != map[bool]string{true: "notification.reset", false: "notification.change"}[i == 0] {
+					t.Fatalf("missing notification event: %+v", event)
+				}
+				if i == 0 {
+					var reset struct {
+						Epoch    string `json:"epoch"`
+						Revision uint64 `json:"revision,string"`
+					}
+					if err := json.Unmarshal([]byte(event.Data), &reset); err != nil {
+						t.Fatal(err)
+					}
+					if reset.Epoch == "" || reset.Revision != 1 {
+						t.Fatalf("invalid reset: %+v", reset)
+					}
+					if epoch != "" && epoch != reset.Epoch {
+						t.Fatal("windows received different epochs")
+					}
+					epoch = reset.Epoch
+					if firstEvent.ID != "" && firstEvent != event {
+						t.Fatal("windows received different resets")
+					}
+					firstEvent = event
+					continue
+				}
+				var change notification.Change
+				if err := json.Unmarshal([]byte(event.Data), &change); err != nil {
+					t.Fatal(err)
+				}
+				if change.Revision != 2 || change.UnreadCount != 2 || len(change.Upserts) != 1 || change.RemovedIDs == nil || len(change.RemovedIDs) != 0 {
+					t.Fatalf("wrong notification change: %+v", change)
+				}
+				card := change.Upserts[0]
+				if card.ID != notice.ID || card.Type != model.JoinRequested ||
+					card.JoinRequestID == nil || *card.JoinRequestID != pending.ID || card.GroupID != item.ID || card.ActorID != applicant.ID || card.RequestStatus != model.Pending {
+					t.Fatalf("wrong notification card: %+v", card)
+				}
+				var payload struct {
+					Upserts []json.RawMessage `json:"upserts"`
+				}
+				if err := json.Unmarshal([]byte(event.Data), &payload); err != nil {
+					t.Fatal(err)
+				}
+				assertNotificationCardFields(t, payload.Upserts[0], model.Pending)
+				if firstEvent.ID != "" && firstEvent != event {
+					t.Fatal("two windows received different events")
+				}
+				firstEvent = event
+			case <-ctx.Done():
+				t.Fatal("notification did not reach SSE")
 			}
-			var change notification.Change
-			if err := json.Unmarshal([]byte(event.Data), &change); err != nil {
-				t.Fatal(err)
-			}
-			if change.Revision != 1 || change.UnreadCount != 1 || len(change.Upserts) != 1 || change.RemovedIDs == nil || len(change.RemovedIDs) != 0 {
-				t.Fatalf("wrong notification change: %+v", change)
-			}
-			card := change.Upserts[0]
-			if card.ID != notice.ID || card.Type != model.JoinRequested ||
-				card.JoinRequestID == nil || *card.JoinRequestID != pending.ID || card.GroupID != item.ID || card.ActorID != member.ID || card.RequestStatus != model.Pending {
-				t.Fatalf("wrong notification card: %+v", card)
-			}
-			var payload struct {
-				Upserts []json.RawMessage `json:"upserts"`
-			}
-			if err := json.Unmarshal([]byte(event.Data), &payload); err != nil {
-				t.Fatal(err)
-			}
-			assertNotificationCardFields(t, payload.Upserts[0], model.Pending)
-			if firstEvent.ID != "" && firstEvent != event {
-				t.Fatal("two windows received different events")
-			}
-			firstEvent = event
-		case <-ctx.Done():
-			t.Fatal("notification did not reach SSE")
+		}
+		var task model.Outbox
+		if err := db.Where("receiver_id = ? AND revision = ?", owner.ID, i+1).First(&task).Error; err != nil {
+			t.Fatal(err)
+		}
+		waitOutboxPublished(t, db, task.ID)
+		prefix := fmt.Sprintf("note:notifications:v2:{%d}", owner.ID)
+		if got := client.HGet(ctx, prefix+":state", "epoch").Val(); got != epoch {
+			t.Fatalf("epoch changed: %s", got)
+		}
+		data, err := client.HGet(ctx, prefix+":items", fmt.Sprint(notice.ID)).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var card notification.Card
+		if err := json.Unmarshal([]byte(data), &card); err != nil {
+			t.Fatal(err)
+		}
+		if card.ID != notice.ID || card.ActorID != applicant.ID || card.RequestStatus != model.Pending {
+			t.Fatalf("cached card: %+v", card)
+		}
+		rows, err := client.XRange(ctx, prefix+":history", "-", "+").Result()
+		if err != nil || len(rows) != i+1 {
+			t.Fatalf("history: %+v %v", rows, err)
+		}
+		if rows[i].ID != firstEvent.ID || rows[i].Values["data"] != firstEvent.Data {
+			t.Fatal("SSE differs from history")
 		}
 	}
-	var task model.Outbox
-	if err := db.First(&task).Error; err != nil {
-		t.Fatal(err)
-	}
-	waitOutboxPublished(t, db, task.ID)
+
 	// SSE 仍在线时关闭父进程的 stdin，验证正常清理而非等待连接超时。
 	_ = app.stdin.Close()
 	if err := app.wait(t); err != nil {

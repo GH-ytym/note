@@ -32,25 +32,25 @@ local orderType = keyType(KEYS[3])
 local historyType = keyType(KEYS[4])
 
 if itemsType ~= "none" and itemsType ~= "hash" then
-    return redis.error_reply("invalid items key type")
+    return "rebuild"
 end
 if orderType ~= "none" and orderType ~= "zset" then
-    return redis.error_reply("invalid order key type")
+    return "rebuild"
 end
 if historyType ~= "none" and historyType ~= "stream" then
-    return redis.error_reply("invalid history key type")
+    return "rebuild"
 end
 
 -- 如果发现上一次写入的未完成标记，就要返回
 if redis.call("HEXISTS", KEYS[1], "applying_revision") == 1 then
-    return redis.error_reply("notification cache needs rebuild")
+    return "rebuild"
 end
 
 local current = redis.call("HGET", KEYS[1], "revision")
 local unread = redis.call("HGET", KEYS[1], "unread_count")
 
 if not current or not unread then
-    return redis.error_reply("incomplete cache state")
+    return "rebuild"
 end
 
 local function validInteger(value)
@@ -58,12 +58,12 @@ local function validInteger(value)
 end
 
 if not validInteger(current) or not validInteger(unread) then
-    return redis.error_reply("invalid cache state")
+    return "rebuild"
 end
 
 -- 基础完整性检查
 if redis.call("HLEN", KEYS[2]) ~= redis.call("ZCARD", KEYS[3]) then
-    return redis.error_reply("incomplete notification cache")
+    return "rebuild"
 end
 
 -- 2. 检查版本。

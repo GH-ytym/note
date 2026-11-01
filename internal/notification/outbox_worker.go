@@ -10,7 +10,7 @@ import (
 func PublishPending(
 	ctx context.Context,
 	repo Repository,
-	publisher *RedisPublisher,
+	delivery *Delivery,
 ) error {
 	//查询未投递的任务
 	tasks, err := repo.ListPendingOutbox(ctx)
@@ -19,14 +19,22 @@ func PublishPending(
 	}
 
 	for _, t := range tasks {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		//保存历史并广播
 		//一定是先保存到sql再publish，这样接收者就可以继续操作
 		//否则发送滚木了自己都不知道
-		if _, err := publisher.Publish(ctx, t); err != nil {
-			return fmt.Errorf("publish outbox %d: %w", t.ID, err)
+		ok, err := delivery.Deliver(ctx, t)
+		if err != nil {
+			return fmt.Errorf("Deliver: %w", err)
+		}
+		if !ok {
+			//本轮直接结束，反正会有下一轮
+			return nil
 		}
 
-		//redis成功了，才算标记投递成功
+		//redis成功了才能把任务标记投递成功
 		if err := repo.MarkOutboxPublished(ctx, t.ID, time.Now()); err != nil {
 			return fmt.Errorf("mark outbox %d: %w", t.ID, err)
 		}
@@ -39,7 +47,7 @@ func PublishPending(
 func RunOutboxWorker(
 	ctx context.Context,
 	repo Repository,
-	publisher *RedisPublisher,
+	delivery *Delivery,
 ) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -52,8 +60,11 @@ func RunOutboxWorker(
 
 		// 每轮都要重新创建 context；上一轮结束后就释放它。
 		// PublishPending 必须在循环里面，才能持续处理后来新增的任务。
-		roundCtx, roundCancel := context.WithTimeout(ctx, 5*time.Second)
-		err := PublishPending(roundCtx, repo, publisher)
+		roundCtx, roundCancel := context.WithTimeout(
+			ctx,
+			5*time.Second,
+		)
+		err := PublishPending(roundCtx, repo, delivery)
 		roundCancel()
 
 		// 服务关闭时正常退出，不把取消记录成投递失败。

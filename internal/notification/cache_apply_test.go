@@ -176,15 +176,38 @@ func TestApplyChangeMissingGapAndCorruption(t *testing.T) {
 				if err != nil || result != ApplyGap {
 					t.Fatalf("gap: %s %v", result, err)
 				}
-			default:
+			case "state_type":
 				if err == nil {
 					t.Fatalf("expected error, got %s", result)
+				}
+			default:
+				if err != nil || result != ApplyRebuild {
+					t.Fatalf("expected rebuild, got %s %v", result, err)
 				}
 			}
 			if s.Dump() != before {
 				t.Fatal("rejected change modified Redis")
 			}
 			assertNoApplyBroadcast(t, ctx, c, sub)
+			if result == ApplyRebuild {
+				repo := snapshotFunc(func(context.Context, uint) (Inbox, error) {
+					return Inbox{Revision: 9, UnreadCount: 1, Items: []Card{{ID: 103}}}, nil
+				})
+				rev, ok, err := NewRebuilder(repo, cache).Rebuild(ctx, 42)
+				if err != nil || !ok || rev != 9 {
+					t.Fatalf("rebuild: %d %v %v", rev, ok, err)
+				}
+				if c.Exists(ctx, rebuildKey(42)).Val() != 0 {
+					t.Fatal("rebuild lease not released")
+				}
+				if c.HLen(ctx, k.items).Val() != 1 || !c.HExists(ctx, k.items, "103").Val() {
+					t.Fatal("snapshot did not replace damaged cache")
+				}
+				result, err = cache.ApplyChange(ctx, 42, Change{Revision: 10})
+				if err != nil || result != ApplyApplied {
+					t.Fatalf("apply after rebuild: %s %v", result, err)
+				}
+			}
 		})
 	}
 }
@@ -257,8 +280,23 @@ func TestApplyChangeHistoryFailureRequiresRebuild(t *testing.T) {
 	if c.HGet(ctx, k.state, "revision").Val() != "8" || c.XLen(ctx, k.history).Val() != 1 {
 		t.Fatal("failed append advanced revision or history")
 	}
-	if _, err := cache.ApplyChange(ctx, 42, change); err == nil || !strings.Contains(err.Error(), "needs rebuild") {
-		t.Fatalf("retry did not require recovery: %v", err)
+	if result, err := cache.ApplyChange(ctx, 42, change); err != nil || result != ApplyRebuild {
+		t.Fatalf("retry did not require recovery: %s %v", result, err)
 	}
 	assertNoApplyBroadcast(t, ctx, c, sub)
+}
+
+type snapshotFunc func(context.Context, uint) (Inbox, error)
+
+func (f snapshotFunc) LoadSnapshot(ctx context.Context, uid uint) (Inbox, error) {
+	return f(ctx, uid)
+}
+
+func TestApplyChangeRedisFailureIsNotRebuild(t *testing.T) {
+	ctx, s, _, cache, _ := applyFixture(t)
+	s.SetError("ERR injected Redis failure")
+	result, err := cache.ApplyChange(ctx, 42, Change{Revision: 1})
+	if err == nil || result != "" {
+		t.Fatalf("Redis failure must remain an error: %s %v", result, err)
+	}
 }

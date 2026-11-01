@@ -15,15 +15,24 @@
 - 不兼容旧通知协议；允许阶段性旧链路失效，但不能把模块测试通过描述为应用链路可用。
 - 先完成缓存与可靠发送/恢复，再继续审核和邀请业务。群解散支线暂缓，见 https://github.com/GH-ytym/note/issues/9 。
 - 已实现并有模块测试：Join → EnqueueChange；LoadSnapshot 全量读取且直接读 state.UnreadCount；InitSnapshot 仅首次建立；ApplyChange 更新缓存、XADD 历史（当前最多1000条）、PUBLISH 广播、重复/缺口判断及 applying_revision 异常标记；新订阅器 → Hub，多窗口和用户隔离。
-- 未接线：app.go 仍构造旧 RedisPublisher 并启动旧 Worker，新订阅器只订阅 v2，当前请求到 SSE 不闭环。列表接口仍查 SQL、COUNT、Limit(50)，未使用新缓存。
-- 尚未实现：安全恢复安装、epoch、reset、缓存分页读取、SSE 游标补发、在线漏消息校正、旧数据计数校准、版本唯一约束的最终迁移。
-- delivery.go 的 Deliver 方法已删除，但 SnapshotLoader/ChangeCache 接口、Delivery 结构和构造函数仍保留；不是已完成的恢复或投递实现。
+- 已接线并通过应用测试：app.go 创建 RedisCache/Rebuilder/Delivery，Worker 调用 Deliver；真实应用进程通过 HTTP 入群，在冷缓存下产生 reset，后续申请产生 change，经 v2 订阅器、Hub 到两个 SSE 连接。列表接口仍查 SQL、COUNT、Limit(50)，未使用新缓存。测试使用临时 SQLite 和 miniredis，不代表浏览器重新同步或真实 Redis 部署已验收。
+- 已实现恢复模块：beginRebuild/endRebuild、条件安装 installSnapshot、Rebuild 协调入口；安装会建立 epoch/base_revision/base_id 并记录、广播 reset。订阅器已支持校验 reset 并原样转发 Hub，模块测试覆盖零版本、多窗口、用户隔离与非法正文。已接入投递层和 Worker；客户端重同步仍未完成，不能视为完整恢复协议完成。
+- 尚未实现：缓存分页读取、SSE 游标补发、在线漏消息校正、旧数据计数校准、版本唯一约束的最终迁移。
+- Deliver 已实现：先 ApplyChange，missing/gap/rebuild 才调用 Rebuild；安装成功且快照版本覆盖任务才完成。Worker 仅对 true,nil 标记 Outbox；false,nil 或 error 保留任务至后续轮次。
 - InitSnapshot 尚不能修复部分 key 残留；ApplyChange 的 HLEN/ZCARD 仅为基础检查，不能检测等量损坏或 items/order 同时丢失。applying_revision 只能阻止继续使用未完成写入，不会自动恢复。
-- 下一步只实现并测试缓存恢复模块：观察状态/代次 → 一致 SQL 快照 → 条件安装新 epoch、清理旧历史并设置基线 → 发布 reset。元数据缺失和并发重建需要资格/令牌校验，不能只比较 revision，也不能让普通 Get/Set 替代原子安装。
+- 当前已完成新发送链路的阶段验收，下一步实现 Redis 分页读取，再实现 SSE 恢复与在线校正。缓存有效性检查尚不完整，读取与恢复时需继续补齐；旧格式 Outbox 的升级处理仍待完成，不可据新库测试宣布旧库可直接上线。
 - reset 协议需与订阅器及后续客户端协议一起定义；全量 Redis 快照不意味着向客户端推送全部通知。Worker 只有在增量应用完成或合格重建覆盖任务且建立恢复基线后才能标记任务完成。
 - Go 层分离恢复与事件应用职责；Redis 内部更新缓存/历史/广播仍作为同一次脚本处理。先验收恢复，再接 Worker、新启动流程；之后接分页读取与完整 SSE 恢复。
 
 2026-10-21 进度补充：已实现 beginRebuild（5 秒资格、原子读取 state 是否存在及全部字段）与 endRebuild（比较 token 后释放）。已验证同用户并发竞争、用户隔离、过期持有者不能释放新资格、旧状态读取及错误类型拒绝。尚未实现条件安装快照、epoch/reset 和恢复协调入口，不能视为 Rebuild 已完成。本轮通过 `go test ./internal/notification -count=1` 与 `go test ./internal -run '^TestNotificationSnapshot' -count=1`，未宣称全仓库或应用推送链路通过。测试由助手编写运行，业务实现继续按用户手写、分段讲解的方式推进。
+
+2026-10-26 进度补充（覆盖上面 10-21 的未完成状态）：条件安装与 Rebuild 已提交；Lua 已拆文件并由 go:embed 嵌入。本轮新增 ApplyRebuild 结果，可修复的缓存异常不再混同 Redis 执行错误；state 类型错误仍明确拒绝。测试验证损坏检查不修改或广播、调用现有 Rebuild 后可以继续应用变化、Redis 执行错误不会被当作重建结果。通知模块测试通过。详细提交回顾、参考来源和差异见 [本轮复核](notification-review-2026-10-26.md)。
+
+2026-10-30 进度补充：迁移旧 Worker 测试，保留“发布成功但标记失败”的重投验证；新增资格竞争、SQL 加载失败、Redis 执行/安装失败、安装冲突及快照版本落后时不标记任务的测试。真实 app 测试验证冷缓存 reset、后续 change、多窗口一致、用户隔离及关闭清理。业务代码本轮未改，未提交或推送。
+
+本轮整体检查：`go test -p 1 ./internal/... ./cmd/api -count=1` 仅 `TestEventGroupJoinQuitAndDismiss` 失败，原因仍是群物理删除的外键约束（已暂缓的解散支线）；其他测试通过。新 Worker 和应用 SSE 测试通过，不等于完整后端全绿或客户端恢复已完成。
+
+2026-11-01 进度补充：已实现 Page、pgArgs、read_page.lua 和 RedisCache.ReadPage，按通知 ID 游标倒序分页；测试覆盖第一页、后续页、末尾空页和非法卡片 JSON。读取模块尚未接入 Service/HTTP，列表接口仍走 SQL；items/order 同时丢失等完整性缺口仍待补齐，SSE 恢复尚未完成。
 
 以下 B0～B8 表与 RabbitMQ/旧兼容章节保留早期设计背景；与本节冲突时按本节执行，不重新引入已取消组件。
 

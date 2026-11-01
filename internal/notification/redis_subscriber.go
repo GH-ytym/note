@@ -106,28 +106,47 @@ func RunRedisSubscriber(
 				continue
 			}
 
-			if event.ID == "" ||
-				event.Name != "notification.change" {
+			if event.ID == "" {
 				log.Printf("invalid notification event")
 				continue
 			}
 
-			// 3. 检查里面确实是有效的 Change。
-			var change Change
-			if err := json.Unmarshal(
-				[]byte(event.Data),
-				&change,
-			); err != nil {
-				log.Printf("decode notification change: %v", err)
-				continue
-			}
+			switch event.Name {
+			case "notification.change":
+				// 3. 检查里面确实是有效的 Change。
+				var change Change
+				if err := json.Unmarshal(
+					[]byte(event.Data),
+					&change,
+				); err != nil {
+					log.Printf("decode notification change: %v", err)
+					continue
+				}
 
-			if change.Revision == 0 ||
-				change.Revision > uint64(1<<63-1) ||
-				change.UnreadCount < 0 ||
-				change.Upserts == nil ||
-				change.RemovedIDs == nil {
-				log.Printf("invalid notification change")
+				if change.Revision == 0 ||
+					change.Revision > uint64(1<<63-1) ||
+					change.UnreadCount < 0 ||
+					change.Upserts == nil ||
+					change.RemovedIDs == nil {
+					log.Printf("invalid notification change")
+					continue
+				}
+			case "notification.reset":
+				var reset struct {
+					Epoch    string  `json:"epoch"`
+					Revision *uint64 `json:"revision,string"`
+				}
+				if err := json.Unmarshal([]byte(event.Data), &reset); err != nil {
+					log.Printf("decode notification reset: %v", err)
+					continue
+				}
+				if reset.Epoch == "" || reset.Revision == nil ||
+					*reset.Revision > uint64(1<<63-1) {
+					log.Printf("invalid notification reset")
+					continue
+				}
+			default:
+				log.Printf("unknown notification event: %q", event.Name)
 				continue
 			}
 

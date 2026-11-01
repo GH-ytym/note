@@ -151,8 +151,17 @@ func Run() (runErr error) {
 		notificationHistoryRepository,
 	)
 
-	// 使用现有 Redis 客户端创建发布器。
-	notificationPublisher := notification.NewRedisPublisher(redisClient)
+	cache := notification.NewRedisCache(redisClient)
+
+	rebuild := notification.NewRebuilder(
+		notificationRepository,
+		cache,
+	)
+
+	delivery := notification.NewDelivery(
+		cache,
+		rebuild,
+	)
 
 	// 整个后端进程共用一个 Hub。
 	notificationHub := notification.NewHub()
@@ -265,7 +274,7 @@ func Run() (runErr error) {
 		notification.RunOutboxWorker(
 			workerCtx,
 			notificationRepository,
-			notificationPublisher,
+			delivery,
 		)
 	}()
 

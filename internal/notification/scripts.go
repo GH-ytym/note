@@ -19,3 +19,6 @@ var installSnapshotLua string
 
 //go:embed lua/publish_notice.lua
 var publishNoticeLua string
+
+//go:embed lua/read_page.lua
+var readPageLua string

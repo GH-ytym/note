@@ -16,6 +16,7 @@ const (
 	ApplyIgnored ApplyResult = "ignored" // 重复或旧消息
 	ApplyMissing ApplyResult = "missing" // 缓存不存在
 	ApplyGap     ApplyResult = "gap"     // 中间缺少版本
+	ApplyRebuild ApplyResult = "rebuild" // 缓存不完整，需要重建
 )
 
 var applyChangeScript = redis.NewScript(applyChangeLua)
@@ -112,7 +113,7 @@ func (r *RedisCache) ApplyChange(
 
 	result := ApplyResult(value)
 	switch result {
-	case ApplyApplied, ApplyIgnored, ApplyMissing, ApplyGap:
+	case ApplyApplied, ApplyIgnored, ApplyMissing, ApplyGap, ApplyRebuild:
 		return result, nil
 	default:
 		return "", fmt.Errorf("unexpected apply result: %q", value)

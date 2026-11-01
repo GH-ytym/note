@@ -72,6 +72,20 @@ func TestNewRedisSubscriberFanoutAndValidation(t *testing.T) {
 		publish(notificationCacheKeys(42).live, string(data))
 	}
 	publish(notificationCacheKeys(42).live, "not json")
+	for _, body := range []string{
+		`not json`, `null`, `{}`, `{"epoch":"new"}`,
+		`{"epoch":"new","revision":null}`,
+		`{"epoch":"","revision":"0"}`,
+		`{"epoch":"new","revision":0}`,
+		`{"epoch":"new","revision":"-1"}`,
+		`{"epoch":"new","revision":"9223372036854775808"}`,
+	} {
+		data, err := json.Marshal(Event{ID: "1-0", Name: "notification.reset", Data: body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		publish(notificationCacheKeys(42).live, string(data))
+	}
 	data, err := json.Marshal(valid)
 	if err != nil {
 		t.Fatal(err)
@@ -106,10 +120,48 @@ func TestNewRedisSubscriberFanoutAndValidation(t *testing.T) {
 			t.Fatal("valid event did not reach Hub")
 		}
 	}
-	select {
-	case event := <-other:
-		t.Fatalf("cross-user notification: %+v", event)
-	default:
+	// 使用实际安装脚本广播 reset，验证零版本和非零版本都能到达两个窗口。
+	for _, uid := range []uint{43, 42} {
+		ls, err := cache.beginRebuild(ctx, uid)
+		if err != nil || ls == nil {
+			t.Fatalf("begin rebuild: %v %v", ls, err)
+		}
+		inbox := Inbox{}
+		if uid == 42 {
+			inbox.Revision = 2
+		}
+		if ok, err := cache.installSnapshot(ctx, ls, inbox); err != nil || !ok {
+			t.Fatalf("install snapshot: %v %v", ok, err)
+		}
+		if _, err := cache.endRebuild(ctx, ls); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := c.XRange(ctx, notificationCacheKeys(uid).history, "-", "+").Result()
+		if err != nil || len(rows) != 1 {
+			t.Fatalf("reset history: %+v %v", rows, err)
+		}
+		want := Event{ID: rows[0].ID, Name: "notification.reset", Data: rows[0].Values["data"].(string)}
+		windows := []<-chan Event{other}
+		if uid == 42 {
+			windows = []<-chan Event{first, second}
+		}
+		for _, window := range windows {
+			select {
+			case got := <-window:
+				if got != want {
+					t.Fatalf("wrong reset or cross-user event: %+v, want %+v", got, want)
+				}
+			case <-ctx.Done():
+				t.Fatal("reset did not reach Hub")
+			}
+		}
+	}
+	for _, window := range []<-chan Event{first, second, other} {
+		select {
+		case event := <-window:
+			t.Fatalf("unexpected extra or cross-user event: %+v", event)
+		default:
+		}
 	}
 }
 

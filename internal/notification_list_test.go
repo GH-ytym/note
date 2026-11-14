@@ -18,10 +18,12 @@ import (
 	"note/internal/notification"
 	"note/internal/router"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
-func notificationRequest(t *testing.T, db *gorm.DB) func(string, string, uint, string) *httptest.ResponseRecorder {
+func notificationRequest(t *testing.T, db *gorm.DB, clients ...*redis.Client) func(string, string, uint, string) *httptest.ResponseRecorder {
 	t.Helper()
 	tokens, err := auth.NewTokenManager("test-only-secret-0123456789abcdef", time.Minute)
 	if err != nil {
@@ -30,7 +32,21 @@ func notificationRequest(t *testing.T, db *gorm.DB) func(string, string, uint, s
 	gh := handler.NewGroupHandler(group.NewService(group.NewGORMRepository(db)))
 	hub := notification.NewHub()
 	t.Cleanup(hub.Close)
-	nh := handler.NewNotificationHandler(notification.NewService(notification.NewGORMRepository(db), nil), hub)
+	if err := migrateNotificationStateSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	var client *redis.Client
+	if len(clients) != 0 {
+		client = clients[0]
+	} else {
+		s := miniredis.RunT(t)
+		client = redis.NewClient(&redis.Options{Addr: s.Addr(), MaxRetries: -1})
+		t.Cleanup(func() { _ = client.Close() })
+	}
+	cache := notification.NewRedisCache(client)
+	rebuild := notification.NewRebuilder(notification.NewGORMRepository(db), cache)
+	reader := notification.NewReader(cache, rebuild)
+	nh := handler.NewNotificationHandler(notification.NewService(reader, notification.NewGORMRepository(db)), hub)
 	r := router.NewWithWeb(nil, nil, nil, nil, nil, gh, nh, tokens, "")
 	return func(method, path string, userID uint, body string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -131,7 +147,7 @@ func TestGroupJoinNotificationList(t *testing.T) {
 				if res.Header().Get("Cache-Control") != "no-store" {
 					t.Fatal("notification response allows browser caching")
 				}
-				var inbox notification.Inbox
+				var inbox notification.Page
 				if err := json.Unmarshal(res.Body.Bytes(), &inbox); err != nil {
 					t.Fatal(err)
 				}
@@ -165,7 +181,7 @@ func TestGroupJoinNotificationList(t *testing.T) {
 				if res.Code != http.StatusOK {
 					t.Fatalf("member inbox: got %d: %s", res.Code, res.Body.String())
 				}
-				var empty notification.Inbox
+				var empty notification.Page
 				if err := json.Unmarshal(res.Body.Bytes(), &empty); err != nil {
 					t.Fatal(err)
 				}
@@ -216,7 +232,7 @@ func TestNotificationListRequestStatusIndependentOfReadAt(t *testing.T) {
 			if res.Code != http.StatusOK {
 				t.Fatalf("list: got %d: %s", res.Code, res.Body.String())
 			}
-			var inbox notification.Inbox
+			var inbox notification.Page
 			if err := json.Unmarshal(res.Body.Bytes(), &inbox); err != nil {
 				t.Fatal(err)
 			}
@@ -255,11 +271,11 @@ func TestNotificationListLimitAndUnreadCount(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("list: got %d: %s", res.Code, res.Body.String())
 	}
-	var inbox notification.Inbox
+	var inbox notification.Page
 	if err := json.Unmarshal(res.Body.Bytes(), &inbox); err != nil {
 		t.Fatal(err)
 	}
-	if len(inbox.Items) != 50 || inbox.UnreadCount != 51 {
+	if len(inbox.Items) != 20 || inbox.UnreadCount != 51 {
 		t.Fatalf("list limit incorrectly limits unread count: items=%d unread=%d", len(inbox.Items), inbox.UnreadCount)
 	}
 	for i, card := range inbox.Items {
@@ -267,11 +283,39 @@ func TestNotificationListLimitAndUnreadCount(t *testing.T) {
 			t.Fatalf("card %d: got ID %d, want %d", i, card.ID, notices[50-i].ID)
 		}
 	}
+	if inbox.Epoch == "" || inbox.Next != notices[31].ID {
+		t.Fatalf("first page metadata: %+v", inbox)
+	}
+	seen := len(inbox.Items)
+	for inbox.Next != 0 {
+		res = request(http.MethodGet, fmt.Sprintf("/api/notifications?before=%d&limit=20", inbox.Next), owner.ID, "")
+		if res.Code != http.StatusOK {
+			t.Fatalf("next page: %d %s", res.Code, res.Body.String())
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &inbox); err != nil {
+			t.Fatal(err)
+		}
+		if inbox.UnreadCount != 51 || len(inbox.Items) == 0 {
+			t.Fatalf("next page: %+v", inbox)
+		}
+		for _, card := range inbox.Items {
+			if seen >= 51 || card.ID != notices[50-seen].ID {
+				t.Fatalf("duplicate or skipped card: %+v", card)
+			}
+			seen++
+		}
+		if seen > 51 {
+			t.Fatal("pagination did not terminate")
+		}
+	}
+	if seen != 51 {
+		t.Fatalf("read %d cards, want 51", seen)
+	}
 	res = request(http.MethodGet, "/api/notifications", member.ID, "")
 	if res.Code != http.StatusOK {
 		t.Fatalf("member inbox: got %d: %s", res.Code, res.Body.String())
 	}
-	var memberInbox notification.Inbox
+	var memberInbox notification.Page
 	if err := json.Unmarshal(res.Body.Bytes(), &memberInbox); err != nil {
 		t.Fatal(err)
 	}
@@ -302,5 +346,66 @@ func TestNotificationRepositoryRecipientBoundary(t *testing.T) {
 		loaded.Actor.Email != "" || loaded.Actor.PasswordHash != "" || !loaded.Actor.CreatedAt.IsZero() ||
 		loaded.Group.ID != item.ID || loaded.Group.Name != item.Name || loaded.Group.OwnerID != 0 {
 		t.Fatalf("unexpected projected associations: %+v", loaded)
+	}
+}
+
+func TestNotificationPageParametersAndCache(t *testing.T) {
+	db, owner, _, _ := groupSchemaFixture(t)
+	s := miniredis.RunT(t)
+	c := redis.NewClient(&redis.Options{Addr: s.Addr(), MaxRetries: -1})
+	t.Cleanup(func() { _ = c.Close() })
+	request := notificationRequest(t, db, c)
+	for _, query := range []string{"before=abc", "before=-1", "before=9007199254740992", "before=", "limit=abc", "limit=-1", "limit=0", "limit=101", "limit="} {
+		res := request(http.MethodGet, "/api/notifications?"+query, owner.ID, "")
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("query %s: %d %s", query, res.Code, res.Body.String())
+		}
+	}
+	if len(s.Keys()) != 0 {
+		t.Fatal("invalid parameters triggered cache work")
+	}
+	if res := request(http.MethodGet, "/api/notifications", 0, ""); res.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated: %d", res.Code)
+	}
+	ctx := context.Background()
+	key := fmt.Sprintf("note:notifications:v2:{%d}:rebuild", owner.ID)
+	if err := c.Set(ctx, key, "other-rebuilder", time.Minute).Err(); err != nil {
+		t.Fatal(err)
+	}
+	res := request(http.MethodGet, "/api/notifications", owner.ID, "")
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("busy cache: %d %s", res.Code, res.Body.String())
+	}
+	if err := c.Del(ctx, key).Err(); err != nil {
+		t.Fatal(err)
+	}
+	res = request(http.MethodGet, "/api/notifications?limit=100", owner.ID, "")
+	var page notification.Page
+	if res.Code != http.StatusOK || json.Unmarshal(res.Body.Bytes(), &page) != nil || page.Epoch == "" || page.Items == nil || len(page.Items) != 0 || page.Next != 0 {
+		t.Fatalf("cold empty page: %d %s", res.Code, res.Body.String())
+	}
+	queries := 0
+	const callback = "test:notification_hot_reads"
+	if err := db.Callback().Query().Before("gorm:query").Register(callback, func(*gorm.DB) { queries++ }); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(callback) })
+	res = request(http.MethodGet, "/api/notifications", owner.ID, "")
+	if res.Code != http.StatusOK || queries != 0 {
+		t.Fatalf("hot page: status=%d SQL queries=%d", res.Code, queries)
+	}
+	state := fmt.Sprintf("note:notifications:v2:{%d}:state", owner.ID)
+	if err := c.HSet(ctx, state, "applying_revision", "1").Err(); err != nil {
+		t.Fatal(err)
+	}
+	res = request(http.MethodGet, "/api/notifications", owner.ID, "")
+	var repaired notification.Page
+	if res.Code != http.StatusOK || json.Unmarshal(res.Body.Bytes(), &repaired) != nil || repaired.Epoch == page.Epoch || queries == 0 {
+		t.Fatalf("repair: status=%d SQL queries=%d body=%s", res.Code, queries, res.Body.String())
+	}
+	s.SetError("ERR injected failure")
+	res = request(http.MethodGet, "/api/notifications", owner.ID, "")
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("Redis failure disguised as success: %d", res.Code)
 	}
 }

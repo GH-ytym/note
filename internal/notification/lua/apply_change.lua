@@ -3,8 +3,7 @@
 -- 1=state
 -- 2=items
 -- 3=order
--- 4=history
--- 5=live
+-- 4=live
 --
 -- ARGV：
 -- 1=新版本
@@ -29,15 +28,11 @@ end
 
 local itemsType = keyType(KEYS[2])
 local orderType = keyType(KEYS[3])
-local historyType = keyType(KEYS[4])
 
 if itemsType ~= "none" and itemsType ~= "hash" then
     return "rebuild"
 end
 if orderType ~= "none" and orderType ~= "zset" then
-    return "rebuild"
-end
-if historyType ~= "none" and historyType ~= "stream" then
     return "rebuild"
 end
 
@@ -105,14 +100,6 @@ for i = position, #ARGV do
     redis.call("ZREM", KEYS[3], id)
 end
 
--- 6. 保存变化历史，暂时保留最近1000条。
-local streamID = redis.call("XADD", KEYS[4],
-    "MAXLEN", "1000",
-    "*",
-    "revision", incoming,
-    "name", "notification.change",
-    "data", ARGV[5]
-)
 
 -- 7. 保存最新版本和绝对未读数。
 redis.call("HSET", KEYS[1],
@@ -122,12 +109,11 @@ redis.call("HSET", KEYS[1],
 
 -- 8. 广播；data 保持 Go 编码的 JSON 字符串。
 local message = cjson.encode({
-    id = streamID,
     name = "notification.change",
     data = ARGV[5]
 })
 
-redis.call("PUBLISH", KEYS[5], message)
+redis.call("PUBLISH", KEYS[4], message)
 
 -- 9. 全部完成，清除标记。
 redis.call("HDEL", KEYS[1], "applying_revision")

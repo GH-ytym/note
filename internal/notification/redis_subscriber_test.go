@@ -50,7 +50,7 @@ func TestNewRedisSubscriberFanoutAndValidation(t *testing.T) {
 			t.Error("subscriber did not stop")
 		}
 	})
-	valid := Event{ID: "1-0", Name: "notification.change", Data: `{"revision":"1","upserts":[],"removed_ids":[],"unread_count":0}`}
+	valid := Event{Name: "notification.change", Data: `{"revision":"1","upserts":[],"removed_ids":[],"unread_count":0}`}
 	publish := func(channel string, payload any) {
 		t.Helper()
 		if err := c.Publish(ctx, channel, payload).Err(); err != nil {
@@ -58,12 +58,11 @@ func TestNewRedisSubscriberFanoutAndValidation(t *testing.T) {
 		}
 	}
 	for _, bad := range []Event{
-		{ID: "", Name: valid.Name, Data: valid.Data},
-		{ID: "1-0", Name: "notification.created", Data: valid.Data},
-		{ID: "1-0", Name: valid.Name, Data: "not json"},
-		{ID: "1-0", Name: valid.Name, Data: `{"revision":"0","upserts":[],"removed_ids":[],"unread_count":0}`},
-		{ID: "1-0", Name: valid.Name, Data: `{"revision":"1","upserts":null,"removed_ids":[],"unread_count":0}`},
-		{ID: "1-0", Name: valid.Name, Data: `{"revision":"1","upserts":[],"removed_ids":[],"unread_count":-1}`},
+		{Name: "notification.created", Data: valid.Data},
+		{Name: valid.Name, Data: "not json"},
+		{Name: valid.Name, Data: `{"revision":"0","upserts":[],"removed_ids":[],"unread_count":0}`},
+		{Name: valid.Name, Data: `{"revision":"1","upserts":null,"removed_ids":[],"unread_count":0}`},
+		{Name: valid.Name, Data: `{"revision":"1","upserts":[],"removed_ids":[],"unread_count":-1}`},
 	} {
 		data, err := json.Marshal(bad)
 		if err != nil {
@@ -80,7 +79,7 @@ func TestNewRedisSubscriberFanoutAndValidation(t *testing.T) {
 		`{"epoch":"new","revision":"-1"}`,
 		`{"epoch":"new","revision":"9223372036854775808"}`,
 	} {
-		data, err := json.Marshal(Event{ID: "1-0", Name: "notification.reset", Data: body})
+		data, err := json.Marshal(Event{Name: "notification.reset", Data: body})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,15 +100,11 @@ func TestNewRedisSubscriberFanoutAndValidation(t *testing.T) {
 	if result, err := cache.ApplyChange(ctx, 42, change); err != nil || result != ApplyApplied {
 		t.Fatalf("apply: %s %v", result, err)
 	}
-	rows, err := c.XRange(ctx, notificationCacheKeys(42).history, "-", "+").Result()
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("history: %+v %v", rows, err)
-	}
 	wantData, err := json.Marshal(change)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Event{ID: rows[0].ID, Name: valid.Name, Data: string(wantData)}
+	want := Event{Name: valid.Name, Data: string(wantData)}
 	for _, window := range []<-chan Event{first, second} {
 		select {
 		case got := <-window:
@@ -136,11 +131,6 @@ func TestNewRedisSubscriberFanoutAndValidation(t *testing.T) {
 		if _, err := cache.endRebuild(ctx, ls); err != nil {
 			t.Fatal(err)
 		}
-		rows, err := c.XRange(ctx, notificationCacheKeys(uid).history, "-", "+").Result()
-		if err != nil || len(rows) != 1 {
-			t.Fatalf("reset history: %+v %v", rows, err)
-		}
-		want := Event{ID: rows[0].ID, Name: "notification.reset", Data: rows[0].Values["data"].(string)}
 		windows := []<-chan Event{other}
 		if uid == 42 {
 			windows = []<-chan Event{first, second}
@@ -148,8 +138,12 @@ func TestNewRedisSubscriberFanoutAndValidation(t *testing.T) {
 		for _, window := range windows {
 			select {
 			case got := <-window:
-				if got != want {
-					t.Fatalf("wrong reset or cross-user event: %+v, want %+v", got, want)
+				var body struct {
+					Epoch    string
+					Revision uint64 `json:"revision,string"`
+				}
+				if got.Name != "notification.reset" || json.Unmarshal([]byte(got.Data), &body) != nil || body.Epoch != c.HGet(ctx, notificationCacheKeys(uid).state, "epoch").Val() || body.Revision != inbox.Revision {
+					t.Fatalf("wrong reset: %+v", got)
 				}
 			case <-ctx.Done():
 				t.Fatal("reset did not reach Hub")

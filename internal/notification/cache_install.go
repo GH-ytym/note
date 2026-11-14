@@ -14,8 +14,10 @@ import (
 
 var install = redis.NewScript(installSnapshotLua)
 
-// 使用本次重建资格，尝试安装完整快照。
+// installSnapshot 使用本次重建资格，尝试安装完整快照。
 // inbox 必须是取得资格后，为 l.userID 加载的数据库快照。
+// 安装前比较 token 和旧 state，避免覆盖期间发生的新写入；冲突或资格过期返回 false, nil。
+// 成功时替换缓存、生成新 epoch，并写入和广播 reset。
 func (r *RedisCache) installSnapshot(
 	ctx context.Context,
 	l *lease,
@@ -65,8 +67,7 @@ func (r *RedisCache) installSnapshot(
 		k.state,              // KEYS[2]：缓存状态
 		k.items,              // KEYS[3]：通知卡片
 		k.order,              // KEYS[4]：排序
-		k.history,            // KEYS[5]：变化历史
-		k.live,               // KEYS[6]：广播频道
+		k.live,               // KEYS[5]：广播频道
 	}
 
 	// 4. 固定参数。

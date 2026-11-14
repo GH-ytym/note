@@ -2,7 +2,7 @@ package internal
 
 import (
 	"context"
-	"encoding/json"
+
 	"errors"
 	"testing"
 	"time"
@@ -105,10 +105,6 @@ func TestOutboxWorkerRetriesAndPublishesNewTasks(t *testing.T) {
 		t.Fatal("worker did not attempt the first task immediately")
 	}
 	waitOutboxPublished(t, db, first.ID)
-	const historyKey = "note:notifications:v2:{8}:history"
-	if count, err := client.XLen(context.Background(), historyKey).Result(); err != nil || count != 1 {
-		t.Fatalf("retry duplicated history: count=%d err=%v", count, err)
-	}
 
 	// 在第一轮之后才写入第二个任务，验证 worker 会继续查询和投递。
 	second := model.Outbox{
@@ -119,22 +115,6 @@ func TestOutboxWorkerRetriesAndPublishesNewTasks(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitOutboxPublished(t, db, second.ID)
-	if count, err := client.XLen(context.Background(), historyKey).Result(); err != nil || count != 2 {
-		t.Fatalf("new task history: count=%d err=%v", count, err)
-	}
-	rows, err := client.XRange(context.Background(), historyKey, "-", "+").Result()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, row := range rows {
-		var change notification.Change
-		if err := json.Unmarshal([]byte(row.Values["data"].(string)), &change); err != nil {
-			t.Fatal(err)
-		}
-		if change.Revision != uint64(i+1) || row.Values["name"] != "notification.change" {
-			t.Fatalf("wrong history: %+v", row)
-		}
-	}
 	if got := client.HGet(context.Background(), "note:notifications:v2:{8}:state", "unread_count").Val(); got != "2" {
 		t.Fatalf("retry changed unread count: %s", got)
 	}

@@ -83,8 +83,10 @@ func registerAPI(
 	// RequireLogin 读取前端携带的 access token，验证后保存当前用户 ID。
 	protected.Use(middleware.RequireLogin(tm))
 
-	// 通知属于接收者；尚未入群的用户也需要查看发给自己的邀请。
+	// 从redis分页读取通知（在线的时候）
 	protected.GET("/notifications", nh.List)
+	//离线重连，走数据库查完整通知快照
+	protected.GET("/notifications/snapshot", nh.Snapshot)
 	//循环写sse和接收events
 	protected.GET("/notifications/stream", nh.Stream)
 	protected.GET("/calendar", ch.GetCalendar)

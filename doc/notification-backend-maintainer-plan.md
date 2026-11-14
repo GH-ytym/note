@@ -8,19 +8,34 @@
 
 ## 0. 每次继续前先读：用户约束
 
-### 2026-10-19 当前执行基线（优先于下文早期方案和历史记录）
+### 2026-11-14 当前执行基线
+
+以下内容优先于下文历史记录，包括旧的全量重连、ready 和 Stream 历史回放方案。
+
+- SQLite 事务 Outbox → Worker → Redis 缓存与实时广播 → Hub/SSE。保留 lease、epoch、revision 和缓存重建；Redis Stream 历史及事件 ID 已删除。
+- SSE 首次连接和重连先登记 Hub，再通过数据库 LoadPage 查询最新 20 张卡片、业务版本及全部未读数，以 notification.snapshot 发送。当前 Stream 已直接发送快照。
+- Stream 按连接维护 rev，跳过已覆盖的 change，发送连续版本；版本缺口和 Redis reset 触发第一页快照刷新，发送前检查快照版本下限。
+- 每个连接每 60 秒查询数据库 Revision，发现落后后刷新快照；版本查询失败保留连接等待下轮。查询超时 5 秒，写入超时 10 秒且不超过 JWT 到期时间；心跳 15 秒。刷新快照失败结束连接。
+- LoadPage 使用 id 游标分页，读取状态和卡片处于同一个只读事务；已增加 (receiver_id, id) 索引迁移。普通列表仍走 Redis 分页。LoadSnapshot 保留用于完整缓存重建，HTTP snapshot 接口目前也仍返回全量，前端重连应使用 SSE 首条分页快照。
+- 2026-11-14 定时校正测试覆盖无广播时落后恢复、追平后不重复刷新、版本一致、临时错误后重试、断开取消、JWT 到期取消、查询超时和刷新失败退出。测试使用 testing/synctest 推进真实定时分支的虚拟时间。
+- 已通过 handler 与 notification 包全量测试，以及 internal 中通知、Outbox、Stream 和应用推送相关测试。测试替身验证定时状态机，SQLite/miniredis 应用测试验证现有链路；浏览器联调及真实部署未验收。
+- 前端交接见 [通知 SSE 接入说明](notification-frontend-handoff.md)。前端需替换快照、丢弃旧页和旧请求，分页与增量合并仍需按该文档联调。
+- 下一阶段为通知已读业务，将已读修改、未读数、revision 和 Outbox 放在同一事务。审核、邀请及旧数据迁移仍待推进，群解散暂缓。
+- 后续性能问题包括每连接轮询的数据库负载，以及 Redis 全量缓存重建开销。
+
+### 2026-10-19 历史执行记录
 
 - 用户已确定：主线不引入 RabbitMQ；SQLite 事务 Outbox → Worker → Redis 缓存/历史/广播 → Hub/SSE。MQ 只保留为独立学习资料，不是上线依赖。
 - Redis items/order 缓存全部仍存在的通知，读取时分页；不是最近 50 条窗口。history 单独有限保留变化记录。
 - 不兼容旧通知协议；允许阶段性旧链路失效，但不能把模块测试通过描述为应用链路可用。
 - 先完成缓存与可靠发送/恢复，再继续审核和邀请业务。群解散支线暂缓，见 https://github.com/GH-ytym/note/issues/9 。
 - 已实现并有模块测试：Join → EnqueueChange；LoadSnapshot 全量读取且直接读 state.UnreadCount；InitSnapshot 仅首次建立；ApplyChange 更新缓存、XADD 历史（当前最多1000条）、PUBLISH 广播、重复/缺口判断及 applying_revision 异常标记；新订阅器 → Hub，多窗口和用户隔离。
-- 已接线并通过应用测试：app.go 创建 RedisCache/Rebuilder/Delivery，Worker 调用 Deliver；真实应用进程通过 HTTP 入群，在冷缓存下产生 reset，后续申请产生 change，经 v2 订阅器、Hub 到两个 SSE 连接。列表接口仍查 SQL、COUNT、Limit(50)，未使用新缓存。测试使用临时 SQLite 和 miniredis，不代表浏览器重新同步或真实 Redis 部署已验收。
+- 已接线并通过应用测试：app.go 创建 RedisCache/Rebuilder/Delivery，Worker 调用 Deliver；真实应用进程通过 HTTP 入群，在冷缓存下产生 reset，后续申请产生 change，经 v2 订阅器、Hub 到两个 SSE 连接。列表接口已接 Reader，优先读取 Redis 分页，缓存不可用时尝试一次 SQL 重建后再读。测试使用临时 SQLite 和 miniredis，不代表浏览器重新同步或真实 Redis 部署已验收。
 - 已实现恢复模块：beginRebuild/endRebuild、条件安装 installSnapshot、Rebuild 协调入口；安装会建立 epoch/base_revision/base_id 并记录、广播 reset。订阅器已支持校验 reset 并原样转发 Hub，模块测试覆盖零版本、多窗口、用户隔离与非法正文。已接入投递层和 Worker；客户端重同步仍未完成，不能视为完整恢复协议完成。
-- 尚未实现：缓存分页读取、SSE 游标补发、在线漏消息校正、旧数据计数校准、版本唯一约束的最终迁移。
+- 尚未实现：SSE 游标补发、在线漏消息校正、旧数据计数校准、版本唯一约束的最终迁移。
 - Deliver 已实现：先 ApplyChange，missing/gap/rebuild 才调用 Rebuild；安装成功且快照版本覆盖任务才完成。Worker 仅对 true,nil 标记 Outbox；false,nil 或 error 保留任务至后续轮次。
 - InitSnapshot 尚不能修复部分 key 残留；ApplyChange 的 HLEN/ZCARD 仅为基础检查，不能检测等量损坏或 items/order 同时丢失。applying_revision 只能阻止继续使用未完成写入，不会自动恢复。
-- 当前已完成新发送链路的阶段验收，下一步实现 Redis 分页读取，再实现 SSE 恢复与在线校正。缓存有效性检查尚不完整，读取与恢复时需继续补齐；旧格式 Outbox 的升级处理仍待完成，不可据新库测试宣布旧库可直接上线。
+- 当前已完成新发送链路和 Redis 列表分页的阶段验收，后续实现 SSE 恢复与在线校正。缓存有效性检查尚不完整，读取与恢复时需继续补齐；旧格式 Outbox 的升级处理仍待完成，不可据新库测试宣布旧库可直接上线。
 - reset 协议需与订阅器及后续客户端协议一起定义；全量 Redis 快照不意味着向客户端推送全部通知。Worker 只有在增量应用完成或合格重建覆盖任务且建立恢复基线后才能标记任务完成。
 - Go 层分离恢复与事件应用职责；Redis 内部更新缓存/历史/广播仍作为同一次脚本处理。先验收恢复，再接 Worker、新启动流程；之后接分页读取与完整 SSE 恢复。
 
@@ -33,6 +48,8 @@
 本轮整体检查：`go test -p 1 ./internal/... ./cmd/api -count=1` 仅 `TestEventGroupJoinQuitAndDismiss` 失败，原因仍是群物理删除的外键约束（已暂缓的解散支线）；其他测试通过。新 Worker 和应用 SSE 测试通过，不等于完整后端全绿或客户端恢复已完成。
 
 2026-11-01 进度补充：已实现 Page、pgArgs、read_page.lua 和 RedisCache.ReadPage，按通知 ID 游标倒序分页；测试覆盖第一页、后续页、末尾空页和非法卡片 JSON。读取模块尚未接入 Service/HTTP，列表接口仍走 SQL；items/order 同时丢失等完整性缺口仍待补齐，SSE 恢复尚未完成。
+
+2026-11-08 进度补充：Reader、Service、Handler、app 的列表接线完成。补回 ErrCacheUnavailable → HTTP 503；迁移旧 SQL 列表测试并补测默认 20 条、51 条完整翻页、全量未读数、JWT 用户隔离、非法参数 400、未认证 401、重建竞争 503、冷缓存重建、热读取不查询 SQL、未完成写入触发重建、Redis 故障不伪装成功。上述测试通过；整体后端测试仍仅群解散外键用例失败。history 恢复计划不变；item_count 尚未实现，两个数据 key 同时丢失仍可能误判为空，不把本轮验收描述为覆盖全部缓存损坏。
 
 以下 B0～B8 表与 RabbitMQ/旧兼容章节保留早期设计背景；与本节冲突时按本节执行，不重新引入已取消组件。
 

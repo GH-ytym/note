@@ -9,6 +9,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// ApplyResult 表示增量应用的业务结果；Missing、Gap、Rebuild 由调用方安排恢复。
+// Redis 执行失败则通过 error 返回，不属于这些业务结果。
 type ApplyResult string
 
 const (
@@ -21,6 +23,9 @@ const (
 
 var applyChangeScript = redis.NewScript(applyChangeLua)
 
+// ApplyChange 尝试将一个用户的一批变化应用到缓存，并广播事件。
+// Applied 表示应用成功，Ignored 表示当前缓存已覆盖该版本；其余结果需要恢复缓存。
+// 本方法不查数据库、不调用重建，也不标记 Outbox；由 Delivery 决定后续流程。
 func (r *RedisCache) ApplyChange(
 	ctx context.Context,
 	userID uint,
@@ -102,7 +107,6 @@ func (r *RedisCache) ApplyChange(
 			keys.state,
 			keys.items,
 			keys.order,
-			keys.history,
 			keys.live,
 		},
 		args...,

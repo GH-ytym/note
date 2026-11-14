@@ -27,6 +27,9 @@ func migrateDatabase(db *gorm.DB) error {
 	if err := migrateNotificationSchema(db); err != nil {
 		return fmt.Errorf("migrate notification schema: %w", err)
 	}
+	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_notifications_receiver_id ON notifications(receiver_id, id)").Error; err != nil {
+		return fmt.Errorf("create notification page index: %w", err)
+	}
 	if err := migrateNotificationStateSchema(db); err != nil {
 		return fmt.Errorf("migrate notification state schema: %w", err)
 	}

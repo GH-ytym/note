@@ -65,6 +65,12 @@ type Change struct {
 	// 需要移除的通知 ID，使用 Notification.ID。
 	RemovedIDs []uint `json:"removed_ids"`
 
+	// 本次实际从未读变为已读的通知 ID。
+	ReadIDs []uint `json:"read_ids,omitempty"`
+
+	// 本批通知的已读时间，有 ReadIDs 时必须提供。
+	ReadAt *time.Time `json:"read_at,omitempty"`
+
 	// 变化之后的全部未读总数
 	UnreadCount int64 `json:"unread_count"`
 }

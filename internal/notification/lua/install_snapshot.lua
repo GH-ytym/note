@@ -64,9 +64,9 @@ local data = cjson.encode({
     revision = rev
 })
 
--- 5. 删除旧缓存和旧历史。
+-- 5. 删除旧缓存。
 -- 不删除 KEYS[1]，重建资格仍由 endRebuild 释放。
-redis.call("DEL", KEYS[2], KEYS[3], KEYS[4], KEYS[5])
+redis.call("DEL", KEYS[2], KEYS[3], KEYS[4])
 
 -- 写入未完成标记；后续任一步失败，都不能把缓存当作有效。
 redis.call("HSET", KEYS[2], "applying_revision", rev)
@@ -84,30 +84,20 @@ for i = 1, count do
     pos = pos + 2
 end
 
--- 7. 在新的历史中记录恢复基线。
-local id = redis.call("XADD", KEYS[5], "*",
-    "revision", rev,
-    "name", "notification.reset",
-    "data", data
-)
-
 -- 8. 保存新缓存状态。
 redis.call("HSET", KEYS[2],
-    "epoch", ARGV[4],
-    "revision", rev,
-    "unread_count", ARGV[6],
-    "base_revision", rev,
-    "base_id", id
+        "epoch", ARGV[4],
+        "revision", rev,
+        "unread_count", ARGV[6]
 )
 
 -- 9. 通知在线连接：缓存已重建，需要重新同步。
 local msg = cjson.encode({
-    id = id,
     name = "notification.reset",
     data = data
 })
 
-redis.call("PUBLISH", KEYS[6], msg)
+redis.call("PUBLISH", KEYS[5], msg)
 
 -- 10. 全部完成，清除未完成标记。
 redis.call("HDEL", KEYS[2], "applying_revision")

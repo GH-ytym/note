@@ -12,7 +12,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// 建立新频道的订阅并等待 Redis 确认
+// SubscribeRedis 建立 v2 广播频道的模式订阅并等待 Redis 确认。
+// 成功后由 RunRedisSubscriber 持续消费；这里不读取 history。
 func SubscribeRedis(
 	ctx context.Context,
 	client *redis.Client,
@@ -66,7 +67,9 @@ func receiverFromChannel(channel string) (uint, error) {
 	return userID, nil
 }
 
-// 持续接收新广播，转交给对应用户的 Hub 连接。
+// RunRedisSubscriber 持续接收 change 和 reset 广播，转交给对应用户的 Hub 连接。
+// 应用启动时为订阅运行此循环，不是每个浏览器各启动一次；退出时关闭 sub。
+// 它只转发实时事件，不修改缓存，也不自动补发断线期间的历史。
 func RunRedisSubscriber(
 	ctx context.Context,
 	sub *redis.PubSub,
@@ -106,10 +109,6 @@ func RunRedisSubscriber(
 				continue
 			}
 
-			if event.ID == "" {
-				log.Printf("invalid notification event")
-				continue
-			}
 
 			switch event.Name {
 			case "notification.change":

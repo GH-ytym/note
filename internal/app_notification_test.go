@@ -155,8 +155,22 @@ func openNotificationTestStream(
 		t.Fatalf("open notification stream: %s", res.Status)
 	}
 	scanner := bufio.NewScanner(res.Body)
-	if !scanner.Scan() || scanner.Text() != ": connected" {
-		t.Fatalf("missing SSE connection confirmation: %v", scanner.Err())
+	var initial notification.Event
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event:") {
+			initial.Name = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		}
+		if strings.HasPrefix(line, "data:") {
+			initial.Data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		}
+		if line == "" && initial.Name != "" {
+			break
+		}
+	}
+	var page notification.SnapshotPage
+	if initial.Name != "notification.snapshot" || json.Unmarshal([]byte(initial.Data), &page) != nil {
+		t.Fatalf("missing initial snapshot: %+v", initial)
 	}
 	events := make(chan notification.Event, 2)
 	go func() {
@@ -166,12 +180,12 @@ func openNotificationTestStream(
 			line := scanner.Text()
 			switch {
 			case strings.HasPrefix(line, "id:"):
-				event.ID = strings.TrimSpace(strings.TrimPrefix(line, "id:"))
+				return
 			case strings.HasPrefix(line, "event:"):
 				event.Name = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 			case strings.HasPrefix(line, "data:"):
 				event.Data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			case line == "" && event.ID != "":
+			case line == "" && event.Name != "":
 				select {
 				case events <- event:
 				case <-ctx.Done():
@@ -276,25 +290,18 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 		for _, window := range []<-chan notification.Event{firstWindow, secondWindow} {
 			select {
 			case event, ok := <-window:
-				if !ok || event.ID == "" || event.Name != map[bool]string{true: "notification.reset", false: "notification.change"}[i == 0] {
+				if !ok || event.Name != map[bool]string{true: "notification.snapshot", false: "notification.change"}[i == 0] {
 					t.Fatalf("missing notification event: %+v", event)
 				}
 				if i == 0 {
-					var reset struct {
-						Epoch    string `json:"epoch"`
-						Revision uint64 `json:"revision,string"`
-					}
-					if err := json.Unmarshal([]byte(event.Data), &reset); err != nil {
+					var page notification.SnapshotPage
+					if err := json.Unmarshal([]byte(event.Data), &page); err != nil {
 						t.Fatal(err)
 					}
-					if reset.Epoch == "" || reset.Revision != 1 {
-						t.Fatalf("invalid reset: %+v", reset)
+					if page.Revision != 1 || page.UnreadCount != 1 || len(page.Items) != 1 || page.Items[0].ID != notice.ID {
+						t.Fatalf("invalid reset snapshot: %+v", page)
 					}
-					if epoch != "" && epoch != reset.Epoch {
-						t.Fatal("windows received different epochs")
-					}
-					epoch = reset.Epoch
-					if firstEvent.ID != "" && firstEvent != event {
+					if firstEvent.Name != "" && firstEvent != event {
 						t.Fatal("windows received different resets")
 					}
 					firstEvent = event
@@ -319,7 +326,7 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 					t.Fatal(err)
 				}
 				assertNotificationCardFields(t, payload.Upserts[0], model.Pending)
-				if firstEvent.ID != "" && firstEvent != event {
+				if firstEvent.Name != "" && firstEvent != event {
 					t.Fatal("two windows received different events")
 				}
 				firstEvent = event
@@ -333,9 +340,10 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 		}
 		waitOutboxPublished(t, db, task.ID)
 		prefix := fmt.Sprintf("note:notifications:v2:{%d}", owner.ID)
-		if got := client.HGet(ctx, prefix+":state", "epoch").Val(); got != epoch {
+		if got := client.HGet(ctx, prefix+":state", "epoch").Val(); got == "" || (epoch != "" && got != epoch) {
 			t.Fatalf("epoch changed: %s", got)
 		}
+		epoch = client.HGet(ctx, prefix+":state", "epoch").Val()
 		data, err := client.HGet(ctx, prefix+":items", fmt.Sprint(notice.ID)).Result()
 		if err != nil {
 			t.Fatal(err)
@@ -346,13 +354,6 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 		}
 		if card.ID != notice.ID || card.ActorID != applicant.ID || card.RequestStatus != model.Pending {
 			t.Fatalf("cached card: %+v", card)
-		}
-		rows, err := client.XRange(ctx, prefix+":history", "-", "+").Result()
-		if err != nil || len(rows) != i+1 {
-			t.Fatalf("history: %+v %v", rows, err)
-		}
-		if rows[i].ID != firstEvent.ID || rows[i].Values["data"] != firstEvent.Data {
-			t.Fatal("SSE differs from history")
 		}
 	}
 

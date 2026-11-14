@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 func TestInstallSnapshot(t *testing.T) {
@@ -30,9 +28,6 @@ func TestInstallSnapshot(t *testing.T) {
 		if err := c.client.HSet(ctx, k.items, "99", "old card").Err(); err != nil {
 			t.Fatal(err)
 		}
-		if err := c.client.XAdd(ctx, &redis.XAddArgs{Stream: k.history, Values: map[string]any{"name": "old"}}).Err(); err != nil {
-			t.Fatal(err)
-		}
 		sub := c.client.Subscribe(ctx, k.live)
 		defer sub.Close()
 		if _, err := sub.Receive(ctx); err != nil {
@@ -48,7 +43,7 @@ func TestInstallSnapshot(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if state["revision"] != "12" || state["unread_count"] != "1" || state["base_revision"] != "12" || state["base_id"] == "" || state["epoch"] == "" || state["epoch"] == "old" {
+		if state["revision"] != "12" || state["unread_count"] != "1" || state["epoch"] == "" || state["epoch"] == "old" {
 			t.Fatalf("state=%v", state)
 		}
 		if _, found := state["applying_revision"]; found {
@@ -75,13 +70,6 @@ func TestInstallSnapshot(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(ids, []string{"101", "102"}) {
 			t.Fatalf("order=%v err=%v", ids, err)
 		}
-		rows, err := c.client.XRange(ctx, k.history, "-", "+").Result()
-		if err != nil || len(rows) != 1 {
-			t.Fatalf("history=%v err=%v", rows, err)
-		}
-		if rows[0].ID != state["base_id"] || rows[0].Values["name"] != "notification.reset" {
-			t.Fatal("wrong baseline")
-		}
 		msgCtx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 		msg, err := sub.ReceiveMessage(msgCtx)
@@ -96,7 +84,7 @@ func TestInstallSnapshot(t *testing.T) {
 		if err := json.Unmarshal([]byte(event.Data), &reset); err != nil {
 			t.Fatal(err)
 		}
-		if event.ID != state["base_id"] || event.Name != "notification.reset" || reset["epoch"] != state["epoch"] || reset["revision"] != "12" {
+		if event.Name != "notification.reset" || reset["epoch"] != state["epoch"] || reset["revision"] != "12" {
 			t.Fatalf("event=%+v data=%v", event, reset)
 		}
 		if got := c.client.Get(ctx, rebuildKey(7)).Val(); got != l.token {
@@ -111,7 +99,7 @@ func TestInstallSnapshot(t *testing.T) {
 			t.Fatalf("installed=%v err=%v", ok, err)
 		}
 		k := notificationCacheKeys(7)
-		if c.client.HGet(ctx, k.state, "revision").Val() != "0" || c.client.XLen(ctx, k.history).Val() != 1 {
+		if c.client.HGet(ctx, k.state, "revision").Val() != "0" {
 			t.Fatal("missing empty snapshot baseline")
 		}
 	})
@@ -145,9 +133,6 @@ func TestInstallSnapshot(t *testing.T) {
 			}
 			if after := c.client.HGetAll(ctx, k.state).Val(); !reflect.DeepEqual(before, after) {
 				t.Fatalf("state changed: %v -> %v", before, after)
-			}
-			if c.client.Exists(ctx, k.history).Val() != 0 {
-				t.Fatal("rejected install wrote history")
 			}
 		})
 	}

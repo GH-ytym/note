@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Rebuilder 协调重建资格、数据库完整快照和 Redis 安装，不负责 Outbox 完成标记。
 type Rebuilder struct {
 	repo  SnapshotLoader
 	cache *RedisCache
@@ -22,6 +23,11 @@ func NewRebuilder(
 	}
 }
 
+// Rebuild 尝试一次完整缓存重建，不在内部循环重试。
+// 返回值依次是已安装的业务版本、是否安装成功、执行错误。
+// 资格忙、过期或状态冲突时返回 0, false, nil；只有成功才返回快照版本。
+// 取得资格后，无论读取或安装是否成功，都会尝试释放资格。
+//
 // beginRebuild
 //
 //	↓ 取得资格后
@@ -47,7 +53,7 @@ func (r *Rebuilder) Rebuild(ctx context.Context, uid uint,
 		return 0, false, nil
 	}
 
-	//总之要记得释放
+	//总之要记得释放资格
 	defer func() {
 		//使用独立的短超时
 		ctx1, cancel := context.WithTimeout(context.Background(), 1*time.Second)

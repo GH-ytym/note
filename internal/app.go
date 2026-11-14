@@ -145,11 +145,6 @@ func Run() (runErr error) {
 
 	// 通知查询链。
 	notificationRepository := notification.NewGORMRepository(db)
-	notificationHistoryRepository := notification.NewRedisHistoryRepository(redisClient)
-	notificationService := notification.NewService(
-		notificationRepository,
-		notificationHistoryRepository,
-	)
 
 	cache := notification.NewRedisCache(redisClient)
 
@@ -157,6 +152,9 @@ func Run() (runErr error) {
 		notificationRepository,
 		cache,
 	)
+
+	reader := notification.NewReader(cache, rebuild)
+	notificationService := notification.NewService(reader, notificationRepository)
 
 	delivery := notification.NewDelivery(
 		cache,

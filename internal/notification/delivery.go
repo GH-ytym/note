@@ -7,11 +7,13 @@ import (
 	"note/internal/model"
 )
 
+// SnapshotLoader 提供一个用户的完整数据库快照，供 Rebuilder 使用。
 // 只依赖投递所需的方法，方便测试。
 type SnapshotLoader interface {
 	LoadSnapshot(ctx context.Context, userID uint) (Inbox, error)
 }
 
+// ChangeCache 是 Delivery 所需的增量缓存写入能力。
 type ChangeCache interface {
 	ApplyChange(
 		ctx context.Context,
@@ -20,6 +22,7 @@ type ChangeCache interface {
 	) (ApplyResult, error)
 }
 
+// CacheRebuilder 提供单次重建能力；返回已安装版本、安装成功标志和执行错误。
 type CacheRebuilder interface {
 	Rebuild(
 		ctx context.Context,
@@ -27,6 +30,8 @@ type CacheRebuilder interface {
 	) (uint64, bool, error)
 }
 
+// Delivery 处理单条 Outbox，协调增量应用与必要的重建。
+// 重试调度和 Outbox 完成标记由外层 Worker 负责。
 type Delivery struct {
 	cache   ChangeCache
 	rebuild CacheRebuilder
@@ -42,6 +47,10 @@ func NewDelivery(
 	}
 }
 
+// Deliver 返回当前缓存是否已经覆盖这条任务对应的业务版本。
+// true 允许 Worker 标记任务完成，不表示各个浏览器都已经收到消息。
+// false, nil 表示本次恢复未完成；error 表示执行失败。两者都不能标记任务完成。
+//
 // 解析 Outbox 中的 Change
 //
 //	↓

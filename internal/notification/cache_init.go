@@ -14,6 +14,7 @@ var script0 = redis.NewScript(initSnapshotLua)
 // InitSnapshot 在缓存完全不存在时，安装一份通知快照
 // 返回 true 表示本次成功建立缓存；false 表示已有数据但没有写入
 // inbox 必须属于 userID，且列表、版本、未读数来自同一个数据库快照,调用方负责满足这个条件
+// 这是早期初始化入口，不生成 epoch 或 reset 事件；当前恢复链路使用 Rebuild。
 func (r *RedisCache) InitSnapshot(
 	ctx context.Context,
 	userID uint,
@@ -65,7 +66,6 @@ func (r *RedisCache) InitSnapshot(
 			keys.state,
 			keys.items,
 			keys.order,
-			keys.history,
 		},
 		args...,
 	).Int()

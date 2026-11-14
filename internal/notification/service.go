@@ -2,70 +2,90 @@ package notification
 
 import (
 	"context"
-	"fmt"
 	apperrors "note/internal/errors"
 )
 
+// Service 是通知列表的业务入口，分页读取和恢复由 Reader 完成。
 type Service interface {
-	List(ctx context.Context, userID uint) (Inbox, error)
-
-	HistoryAfter(
+	List(
 		ctx context.Context,
 		userID uint,
-		afterID string,
-	) ([]Event, error)
+		before uint,
+		limit uint,
+	) (Page, error)
+
+	Snapshot(
+		ctx context.Context,
+		uid uint,
+	) (Inbox, error)
+
+	SnapshotPage(
+		ctx context.Context,
+		uid uint,
+		before uint,
+		limit uint,
+	) (SnapshotPage, error)
+
+	Revision(ctx context.Context, uid uint) (uint64, error)
 }
 
 type service struct {
-	repo    Repository
-	history *RedisHistoryRepository
+	reader *Reader
+	repo   Repository
 }
 
-func NewService(
-	repo Repository,
-	history *RedisHistoryRepository,
-) Service {
+func NewService(reader *Reader, repo Repository) Service {
 	return &service{
-		repo:    repo,
-		history: history,
+		reader: reader,
+		repo:   repo,
 	}
 }
 
-func (s *service) List(ctx context.Context, userID uint) (Inbox, error) {
-	if userID == 0 {
-		return Inbox{}, apperrors.ErrNotificationUnauthenticated
-	}
-	notices, unreadCnt, err := s.repo.ListByReceiverID(ctx, userID)
-	if err != nil {
-		return Inbox{}, err
-	}
-
-	//转化为前端卡片
-	cards := make([]Card, 0, len(notices))
-	for _, n := range notices {
-		card, err := NewCard(n)
-		if err != nil {
-			return Inbox{}, err
-		}
-		cards = append(cards, card)
-	}
-	return Inbox{
-		Items:       cards,
-		UnreadCount: unreadCnt,
-	}, nil
-}
-
-func (s *service) HistoryAfter(
+// 用redis的
+func (s *service) List(
 	ctx context.Context,
 	userID uint,
-	afterID string,
-) ([]Event, error) {
+	before uint,
+	limit uint,
+) (Page, error) {
 	if userID == 0 {
-		return nil, apperrors.ErrNotificationUnauthenticated
+		return Page{}, apperrors.ErrNotificationUnauthenticated
 	}
-	if s.history == nil {
-		return nil, fmt.Errorf("notification history is not configured")
+	return s.reader.List(ctx, userID, before, limit)
+}
+
+// 用数据库的
+func (s *service) Snapshot(
+	ctx context.Context,
+	uid uint,
+) (Inbox, error) {
+	if uid == 0 {
+		return Inbox{}, apperrors.ErrNotificationUnauthenticated
+	}
+	return s.repo.LoadSnapshot(ctx, uid)
+}
+
+// SnapshotPage 从数据库读取一页通知，以及当前用户的版本和全部未读数。
+func (s *service) SnapshotPage(
+	ctx context.Context,
+	uid uint,
+	before uint,
+	limit uint,
+) (SnapshotPage, error) {
+	if uid == 0 {
+		return SnapshotPage{}, apperrors.ErrNotificationUnauthenticated
 	}
 
-	return s.history.ReadAfter(ctx, userID, afterID)
+	return s.repo.LoadPage(ctx, uid, before, limit)
+}
+
+func (s *service) Revision(
+	ctx context.Context,
+	uid uint,
+) (uint64, error) {
+	if uid == 0 {
+		return 0, apperrors.ErrNotificationUnauthenticated
+	}
+
+	return s.repo.Revision(ctx, uid)
 }

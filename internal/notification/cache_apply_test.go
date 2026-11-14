@@ -3,7 +3,7 @@ package notification
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
 	"reflect"
 	"strconv"
 	"strings"
@@ -43,7 +43,7 @@ func assertNoApplyBroadcast(t *testing.T, ctx context.Context, c *redis.Client, 
 	}
 }
 
-func TestApplyChangeCacheHistoryAndBroadcast(t *testing.T) {
+func TestApplyChangeCacheAndBroadcast(t *testing.T) {
 	ctx, _, c, cache, sub := applyFixture(t)
 	k := notificationCacheKeys(42)
 	const base = uint64(1<<53 + 1)
@@ -91,14 +91,7 @@ func TestApplyChangeCacheHistoryAndBroadcast(t *testing.T) {
 			t.Fatalf("card: %+v want %+v", saved, card)
 		}
 	}
-	rows, err := c.XRange(ctx, k.history, "-", "+").Result()
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("history: %+v %v", rows, err)
-	}
 	wantJSON, _ := json.Marshal(change)
-	if rows[0].Values["data"] != string(wantJSON) || rows[0].Values["revision"] != strconv.FormatUint(change.Revision, 10) || rows[0].Values["name"] != "notification.change" {
-		t.Fatalf("history payload: %+v", rows[0])
-	}
 	message, err := sub.ReceiveMessage(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -107,11 +100,11 @@ func TestApplyChangeCacheHistoryAndBroadcast(t *testing.T) {
 	if err := json.Unmarshal([]byte(message.Payload), &event); err != nil {
 		t.Fatal(err)
 	}
-	if message.Channel != k.live || event.ID != rows[0].ID || event.Name != "notification.change" || event.Data != string(wantJSON) {
-		t.Fatalf("broadcast/history mismatch: %+v %+v", message, event)
+	if message.Channel != k.live || event.Name != "notification.change" || event.Data != string(wantJSON) {
+		t.Fatalf("broadcast mismatch: %+v %+v", message, event)
 	}
 	other := notificationCacheKeys(43)
-	if c.HGet(ctx, other.state, "revision").Val() != "7" || c.HLen(ctx, other.items).Val() != 1 || c.Exists(ctx, other.history).Val() != 0 {
+	if c.HGet(ctx, other.state, "revision").Val() != "7" || c.HLen(ctx, other.items).Val() != 1 {
 		t.Fatal("modified another user's cache")
 	}
 	// 重试及迟到旧事件既不改状态，也不重复留下历史或广播。
@@ -121,14 +114,14 @@ func TestApplyChangeCacheHistoryAndBroadcast(t *testing.T) {
 			t.Fatalf("retry: %s %v", result, err)
 		}
 	}
-	if c.XLen(ctx, k.history).Val() != 1 || !c.HExists(ctx, k.items, "101").Val() || c.HGet(ctx, k.state, "unread_count").Val() != "1" {
-		t.Fatal("ignored change mutated cache/history")
+	if !c.HExists(ctx, k.items, "101").Val() || c.HGet(ctx, k.state, "unread_count").Val() != "1" {
+		t.Fatal("ignored change mutated cache")
 	}
 	assertNoApplyBroadcast(t, ctx, c, sub)
 }
 
 func TestApplyChangeMissingGapAndCorruption(t *testing.T) {
-	for _, name := range []string{"missing", "gap", "state_type", "items_type", "order_type", "history_type", "incomplete_state", "invalid_revision", "invalid_unread", "missing_order", "unfinished_duplicate"} {
+	for _, name := range []string{"missing", "gap", "state_type", "items_type", "order_type", "incomplete_state", "invalid_revision", "invalid_unread", "missing_order", "unfinished_duplicate"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, s, c, cache, sub := applyFixture(t)
 			k := notificationCacheKeys(42)
@@ -148,8 +141,6 @@ func TestApplyChangeMissingGapAndCorruption(t *testing.T) {
 				setupErr = c.Set(ctx, k.items, "wrong", 0).Err()
 			case "order_type":
 				setupErr = c.Set(ctx, k.order, "wrong", 0).Err()
-			case "history_type":
-				setupErr = c.Set(ctx, k.history, "wrong", 0).Err()
 			case "incomplete_state":
 				setupErr = c.HDel(ctx, k.state, "unread_count").Err()
 			case "invalid_revision":
@@ -212,18 +203,13 @@ func TestApplyChangeMissingGapAndCorruption(t *testing.T) {
 	}
 }
 
-func TestApplyChangeEmptyCacheDeleteAndHistoryLimit(t *testing.T) {
+func TestApplyChangeEmptyCacheDelete(t *testing.T) {
 	ctx, _, c, cache, sub := applyFixture(t)
 	k := notificationCacheKeys(42)
 	if ok, err := cache.InitSnapshot(ctx, 42, Inbox{Revision: 8}); err != nil || !ok {
 		t.Fatalf("init: %v %v", ok, err)
 	}
 	// 先准备满额历史，验证追加时裁剪历史不会裁剪当前通知。
-	for i := 1; i <= 1000; i++ {
-		if err := c.XAdd(ctx, &redis.XAddArgs{Stream: k.history, ID: fmt.Sprintf("%d-0", i), Values: map[string]any{"data": "old"}}).Err(); err != nil {
-			t.Fatal(err)
-		}
-	}
 	for i, change := range []Change{
 		{Revision: 9, UnreadCount: 1, Upserts: []Card{{ID: 101}}},
 		{Revision: 10, UnreadCount: 0, RemovedIDs: []uint{101, 999}},
@@ -232,11 +218,8 @@ func TestApplyChangeEmptyCacheDeleteAndHistoryLimit(t *testing.T) {
 		if err != nil || result != ApplyApplied {
 			t.Fatalf("apply: %s %v", result, err)
 		}
-		if c.XLen(ctx, k.history).Val() != 1000 {
-			t.Fatal("history limit not enforced")
-		}
 		if i == 0 && !c.HExists(ctx, k.items, "101").Val() {
-			t.Fatal("history trimming removed current card")
+			t.Fatal("current card missing")
 		}
 		msg, err := sub.ReceiveMessage(ctx)
 		if err != nil {
@@ -252,36 +235,6 @@ func TestApplyChangeEmptyCacheDeleteAndHistoryLimit(t *testing.T) {
 	}
 	if c.HLen(ctx, k.items).Val() != 0 || c.ZCard(ctx, k.order).Val() != 0 || c.HGet(ctx, k.state, "unread_count").Val() != "0" {
 		t.Fatal("delete last card failed")
-	}
-	assertNoApplyBroadcast(t, ctx, c, sub)
-}
-
-func TestApplyChangeHistoryFailureRequiresRebuild(t *testing.T) {
-	ctx, _, c, cache, sub := applyFixture(t)
-	k := notificationCacheKeys(42)
-	if ok, err := cache.InitSnapshot(ctx, 42, Inbox{Revision: 8}); err != nil || !ok {
-		t.Fatalf("init: %v %v", ok, err)
-	}
-	// Stream ID 达到最大值后，XADD * 无法继续生成 ID。
-	// 故障发生在卡片写入之后，用来验证 Lua 不会自动回滚。
-	if err := c.XAdd(ctx, &redis.XAddArgs{
-		Stream: k.history, ID: "18446744073709551615-18446744073709551615",
-		Values: map[string]any{"data": "old"},
-	}).Err(); err != nil {
-		t.Fatal(err)
-	}
-	change := Change{Revision: 9, UnreadCount: 1, Upserts: []Card{{ID: 101}}}
-	if _, err := cache.ApplyChange(ctx, 42, change); err == nil {
-		t.Fatal("expected history append failure")
-	}
-	if !c.HExists(ctx, k.items, "101").Val() || c.HGet(ctx, k.state, "applying_revision").Val() != "9" {
-		t.Fatal("partial write was not marked for recovery")
-	}
-	if c.HGet(ctx, k.state, "revision").Val() != "8" || c.XLen(ctx, k.history).Val() != 1 {
-		t.Fatal("failed append advanced revision or history")
-	}
-	if result, err := cache.ApplyChange(ctx, 42, change); err != nil || result != ApplyRebuild {
-		t.Fatalf("retry did not require recovery: %s %v", result, err)
 	}
 	assertNoApplyBroadcast(t, ctx, c, sub)
 }

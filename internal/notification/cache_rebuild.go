@@ -38,6 +38,9 @@ var begin = redis.NewScript(beginRebuildLua)
 
 var release = redis.NewScript(endRebuildLua)
 
+// beginRebuild 尝试取得短期重建资格，同时记录当时 state 的存在性和全部字段。
+// 已有其他重建者时立即返回 nil, nil，不等待或自旋。资格不阻止 ApplyChange 写入，
+// 因此 installSnapshot 还要比较旧 state；old 不需要包含全部通知卡片。
 func (r *RedisCache) beginRebuild(ctx context.Context, uid uint) (*lease, error) {
 	if uid == 0 {
 		return nil, errors.New("invalid user id")
@@ -135,6 +138,8 @@ func (r *RedisCache) beginRebuild(ctx context.Context, uid uint) (*lease, error)
 
 }
 
+// endRebuild 仅在 token 仍属于本次 lease 时删除资格 key。
+// 返回 false, nil 表示资格已不存在或已换持有者；不会误删其他重建者的资格。
 func (r *RedisCache) endRebuild(
 	ctx context.Context,
 	l *lease,

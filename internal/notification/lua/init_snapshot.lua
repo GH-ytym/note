@@ -3,7 +3,6 @@
 -- 1 = state
 -- 2 = items
 -- 3 = order
--- 4 = history
 --
 -- ARGV：
 -- 1 = revision
@@ -12,7 +11,7 @@
 
 -- 首次初始化才写入
 -- 已有任何相关数据，都交给后续的更新或重建流程处理
-if redis.call("EXISTS", KEYS[1], KEYS[2], KEYS[3], KEYS[4]) > 0 then
+if redis.call("EXISTS", KEYS[1], KEYS[2], KEYS[3]) > 0 then
     return 0
 end
 

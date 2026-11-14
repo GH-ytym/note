@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Repository 提供通知数据库查询、完整快照和 Outbox 状态操作，不操作 Redis。
 type Repository interface {
 	ListByReceiverID(
 		ctx context.Context,
@@ -38,13 +39,23 @@ type Repository interface {
 		ctx context.Context,
 		userID uint,
 	) (Inbox, error)
+
+	LoadPage(
+		ctx context.Context,
+		uid uint,
+		before uint,
+		limit uint,
+	) (SnapshotPage, error)
+
+	Revision(ctx context.Context, uid uint) (uint64, error)
 }
 
 type gormRepository struct {
 	db *gorm.DB
 }
 
-// 加载用户全部通知，以及同一时刻的版本和全部未读数，用于初始化完整缓存。
+// LoadSnapshot 加载用户全部通知，以及同一时刻的版本和全部未读数，用于初始化完整缓存。
+// 数据来自同一个只读事务；未读数读取 NotificationState，不在这里重新 COUNT 通知。
 func (r *gormRepository) LoadSnapshot(
 	ctx context.Context,
 	userID uint,
@@ -117,6 +128,8 @@ func (r *gormRepository) MarkOutboxPublished(
 	return nil
 }
 
+// ListPendingOutbox 按 ID 升序读取最多 100 条 published_at 为空的任务。
+// 查询不会领取或标记任务，因此失败后未标记的任务仍可被下一轮读到。
 func (r *gormRepository) ListPendingOutbox(ctx context.Context) ([]model.Outbox, error) {
 	ob := make([]model.Outbox, 0)
 	err := r.db.WithContext(ctx).
@@ -207,4 +220,24 @@ func (r *gormRepository) ByIDForReceiver(
 	}
 
 	return item, nil
+}
+
+// Revision 查询当前用户的通知业务版本，供在线连接检查是否落后。
+func (r *gormRepository) Revision(
+	ctx context.Context,
+	uid uint,
+) (uint64, error) {
+	if uid == 0 {
+		return 0, fmt.Errorf("invalid uid")
+	}
+
+	var state model.NotificationState
+	if err := r.db.WithContext(ctx).
+		Select("revision").
+		Where("user_id = ?", uid).
+		First(&state).Error; err != nil {
+		return 0, fmt.Errorf("read notification revision: %w", err)
+	}
+
+	return state.Revision, nil
 }

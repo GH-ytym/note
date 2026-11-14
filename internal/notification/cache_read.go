@@ -11,6 +11,12 @@ import (
 
 var scriptLua = redis.NewScript(readPageLua)
 
+// ReadPage 在同一个 Lua 脚本中读取一页通知及 epoch、revision 等元数据。
+// before 为 0 时读取第一页，否则只读 ID 小于 before 的通知；limit 范围为 1 到 100。
+// 返回 true 表示这一页可用（包括空列表）；false, nil 表示缓存缺失或需要重建。
+// 本方法不重建、不查询数据库；各次分页请求之间仍可能发生业务更新。
+//
+// 分页读取itmes
 func (r *RedisCache) ReadPage(
 	ctx context.Context,
 	uid uint,

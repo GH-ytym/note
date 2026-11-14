@@ -21,7 +21,7 @@ func TestHubSlowConnectionCanSubscribeAgain(t *testing.T) {
 
 	// 慢窗口不接收；快窗口每次都读取，只有慢窗口的队列会满。
 	for i := 1; i <= cap(slow)+1; i++ {
-		event := Event{ID: strconv.Itoa(i), Name: "notification.created", Data: `{}`}
+		event := Event{Name: "notification.change", Data: strconv.Itoa(i)}
 		hub.Send(8, event)
 		select {
 		case got, ok := <-fast:
@@ -36,7 +36,7 @@ func TestHubSlowConnectionCanSubscribeAgain(t *testing.T) {
 	for i := 1; i <= cap(slow); i++ {
 		select {
 		case got, ok := <-slow:
-			if !ok || got.ID != strconv.Itoa(i) {
+			if !ok || got.Data != strconv.Itoa(i) {
 				t.Fatalf("unexpected buffered event %d: %+v ok=%t", i, got, ok)
 			}
 		default:
@@ -68,7 +68,7 @@ func TestHubSlowConnectionCanSubscribeAgain(t *testing.T) {
 	default:
 	}
 	// 新订阅恢复接收后续事件；缺少的历史需要另外补收。
-	event := Event{ID: "34", Name: "notification.created", Data: `{}`}
+	event := Event{Name: "notification.change", Data: "34"}
 	hub.Send(8, event)
 	for _, connection := range []<-chan Event{fast, reconnected} {
 		select {

@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// PublishPending 按 ID 顺序串行处理一批未发布的 Outbox，每条完成后单独标记。
+// 遇到错误或 Deliver 返回 false 就结束本轮，未标记的任务会被后续轮次再次查到。
+// 一条任务包含一个用户的一个 Change，里面可以有多张通知卡片。
 func PublishPending(
 	ctx context.Context,
 	repo Repository,
@@ -22,7 +25,7 @@ func PublishPending(
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		//保存历史并广播
+		// 业务事务已提交，现在将 Outbox 中的变化投递到 Redis。
 		//一定是先保存到sql再publish，这样接收者就可以继续操作
 		//否则发送滚木了自己都不知道
 		ok, err := delivery.Deliver(ctx, t)
@@ -42,8 +45,9 @@ func PublishPending(
 	return nil
 }
 
-// 在 ctx 取消之前持续投递，每轮串行执行。
+// RunOutboxWorker 在 ctx 取消之前持续投递，每轮串行执行。
 // 第一次立即投递，之后通过定时器等待下一轮。
+// 定时器间隔为一秒，每轮共用五秒超时；本轮失败只记录日志，后续轮次继续处理。
 func RunOutboxWorker(
 	ctx context.Context,
 	repo Repository,

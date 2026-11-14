@@ -6,20 +6,19 @@ import (
 )
 
 // Event 是 Redis 广播、Hub 和 SSE 共用的传输消息，不是数据库模型。
-// ID/Name/Data 分别对应 SSE 的 id/event/data。
+// Name 和 Data 对应 SSE 的 event 和 data。
 type Event struct {
-	// Redis Stream 的事件位置，不是通知 ID 或 Change.Revision。
-	ID string `json:"id"`
-
-	// 新链路当前使用 notification.change。
+	// 新链路使用 notification.change 和 notification.reset。
 	Name string `json:"name"`
 
-	// 完整 Change 的 JSON 字符串。
+	// change 时是完整 Change 的 JSON 字符串，reset 时是 epoch 和 revision 的 JSON。
 	Data string `json:"data"`
 }
 
 var ErrHubClosed = errors.New("notification hub closed")
 
+// Hub 在当前进程中维护“用户 → 多个连接队列”的映射，不保存持久化历史。
+// 每个浏览器窗口独立订阅；一个窗口消费消息不会取走其他窗口的消息。
 type Hub struct {
 	mu sync.Mutex
 
@@ -41,7 +40,7 @@ func NewHub() *Hub {
 
 //通知始终保存在数据库中，以下函数不做持久化，不做重试
 
-// subscribe给当前用户增加一个连接
+// Subscribe 给当前用户增加一个连接。
 // 返回接收消息的channel、取消订阅的函数和err
 // 创建用户的某个窗口的对应channel、登记它、返回channel+清理函数+error
 func (h *Hub) Subscribe(userID uint) (
@@ -102,7 +101,8 @@ func (h *Hub) Subscribe(userID uint) (
 	return ch, unSub, nil //只返回本窗口的channel
 }
 
-// send将消息放入当前user的所有连接
+// Send 将消息放入当前 user 的所有连接队列，不等待浏览器确认。
+// 队列满时关闭并移除该连接，不影响其他连接或 Redis 缓存；遗漏消息需要另行恢复。
 // 用户没有在线连接时，直接结束；通知仍保存在数据库中
 func (h *Hub) Send(userID uint, e Event) {
 	h.mu.Lock()
@@ -122,7 +122,7 @@ func (h *Hub) Send(userID uint, e Event) {
 			// 队列已满，结束这条订阅，删连接+关channel让其他连接继续工作
 			//如果往满的channel再发送会等待；往关了的channel发东西会panic
 			// SSE handler 发现 channel 关闭后结束响应。
-			// 当前事件没有进入这条队列。客户端要重新订阅，再补收历史或重查列表。
+			// 当前事件没有进入这条队列。客户端要重新订阅，再读取数据库快照。
 			// Hub 本身不保存历史，新 channel 也不会自动收到遗漏的消息。
 			delete(conns, ch) //在go里面，遍历 map 时删除当前 key 是合法的
 			close(ch)
@@ -135,7 +135,7 @@ func (h *Hub) Send(userID uint, e Event) {
 	}
 }
 
-// 在服务关闭时结束全部订阅，并拒绝新的订阅
+// Close 在服务关闭时结束全部订阅，并拒绝新的订阅。
 func (h *Hub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()

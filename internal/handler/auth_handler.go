@@ -105,6 +105,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	// 原子替换 Redis 会话，成功后才覆盖浏览器 Cookie（一定是先写redis再写cookie）
+
+	//生成refresh token，不管之前有没有
 	//这里忽略错误，因为第一次登录不会创建cookie，oldraw这个时候是""
 	//cookie过期了这里也是""
 	oldRaw, _ := c.Cookie("note_refresh")

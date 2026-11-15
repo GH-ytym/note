@@ -50,7 +50,7 @@ func TestGroupInviteMigrationPreservesUniqueIndexAndPreservesData(t *testing.T) 
 		t.Fatalf("migration changed existing invite: %#v %v", saved, err)
 	}
 	var memberCount int64
-	if err := db.Model(&model.GroupMember{}).Count(&memberCount).Error; err != nil || memberCount != 3 {
+	if err := db.Model(&model.GroupMember{}).Where("group_id IN (SELECT id FROM groups WHERE policy <> ?)", model.Personal).Count(&memberCount).Error; err != nil || memberCount != 3 {
 		t.Fatalf("migration lost group members: %d %v", memberCount, err)
 	}
 	var savedTodo model.Todo
@@ -87,7 +87,7 @@ func TestGroupInviteMigrationBackfillsLegacyGroups(t *testing.T) {
 		t.Fatal(err)
 	}
 	var groups []model.Group
-	if err := db.Order("id").Find(&groups).Error; err != nil || len(groups) != 2 {
+	if err := db.Where("policy <> ?", model.Personal).Order("id").Find(&groups).Error; err != nil || len(groups) != 2 {
 		t.Fatalf("legacy groups missing: %#v %v", groups, err)
 	}
 	pattern := regexp.MustCompile(`^[0-9A-Z]{6}$`)

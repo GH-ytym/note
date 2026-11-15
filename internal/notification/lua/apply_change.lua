@@ -77,9 +77,39 @@ end
 local upsertCount = tonumber(ARGV[4])
 local position = 6
 
+-- 已读事件只携带 ID 和时间。先准备所有卡片，缺失时交给数据库重建。
+--解析 ARGV[5] 中的 Change
+--    ↓
+--遍历 read_ids，从 items 取出卡片
+--    ↓
+--卡片缺失或格式异常 → 返回 rebuild
+--    ↓
+--准备好替换 read_at 后的卡片 JSON
+local change = cjson.decode(ARGV[5])
+local reads = {}
+if change.read_ids then
+    for _, id in ipairs(change.read_ids) do
+        local key = string.format("%.0f", id)
+        local card = redis.call("HGET", KEYS[2], key)
+        if not card then
+            return "rebuild"
+        end
+        local valid, decoded = pcall(cjson.decode, card)
+        if not valid or type(decoded) ~= "table" or decoded.id ~= id then
+            return "rebuild"
+        end
+        decoded.read_at = change.read_at
+        reads[#reads + 1] = {key, cjson.encode(decoded)}
+    end
+end
+
 -- 3. 标记开始应用。
 --先留下applying标记（未完成）
 redis.call("HSET", KEYS[1], "applying_revision", incoming)
+
+for _, row in ipairs(reads) do
+    redis.call("HSET", KEYS[2], row[1], row[2])
+end
 
 -- 4. 新增或更新卡片。
 for i = 1, upsertCount do

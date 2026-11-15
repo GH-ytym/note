@@ -13,6 +13,8 @@ import (
 
 // Repository 提供通知数据库查询、完整快照和 Outbox 状态操作，不操作 Redis。
 type Repository interface {
+	// MarkRead 将选中的通知批量标为已读，实际变化只推进一次版本。
+	MarkRead(ctx context.Context, uid uint, ids []uint) error
 	ListByReceiverID(
 		ctx context.Context,
 		userID uint,

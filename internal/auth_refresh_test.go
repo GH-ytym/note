@@ -136,6 +136,9 @@ func TestRefreshRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Where("owner_id = ? AND policy = ?", user.ID, model.Personal).Delete(&model.Group{}).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Delete(&model.User{}, user.ID).Error; err != nil {
 		t.Fatal(err)
 	}

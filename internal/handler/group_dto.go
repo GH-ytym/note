@@ -6,7 +6,8 @@ import (
 )
 
 type CreateGroupRequest struct {
-	Name string `json:"name" binding:"required,max=80"`
+	Policy model.GroupPolicy `json:"policy"`
+	Name   string            `json:"name" binding:"required,max=80"`
 }
 
 type GroupResponse struct {

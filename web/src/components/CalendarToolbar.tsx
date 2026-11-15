@@ -1,10 +1,13 @@
+import { useContext, useEffect, useRef } from "react";
+import { InboxContext } from "./Workspace";
 import {
   CaretLeft,
   CaretRight,
   ArrowsIn,
   Crosshair,
-  GearSix,
   Plus,
+  Check,
+  X,
 } from "@phosphor-icons/react";
 import WindowControls from "./WindowControls";
 import useWindowDrag from "../hooks/useWindowDrag";
@@ -13,7 +16,7 @@ import type { PickerState } from "../desktop";
 interface Props {
   search: React.ReactNode;
   title: string; view: View; onView: (view: View) => void; onMove: (amount: number) => void;
-  onToday: () => void; onCreate: () => void; onSettings: () => void;
+  onToday: () => void; onCreate: () => void;
   picker: PickerState | null; onFinish: () => void; dayStyle: DayStyle;
   onDayStyle: (style: DayStyle) => void; onMini: () => void;
 }
@@ -26,15 +29,18 @@ export default function CalendarToolbar({
   onMove,
   onToday,
   onCreate,
-  onSettings,
   picker,
   dayStyle,
   onDayStyle,
   onMini,
+  onFinish,
 }: Props) {
+  const cancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (picker) cancel.current?.focus(); }, [!!picker]);
   const drag = useWindowDrag();
+  const inWorkspace = useContext(InboxContext) !== null;
   return (
-    <header className="calendar-header" {...drag}>
+    <header className="calendar-header" {...(inWorkspace ? {} : drag)}>
       <span className="title-accent" aria-hidden="true" />
       <h1>{title}</h1>
       <div className="month-controls">
@@ -50,7 +56,7 @@ export default function CalendarToolbar({
         </button>
       </div>
       {picker ? (
-        <span className="picker-instruction">{picker.field === "endDate" ? "选择结束日期" : "选择开始前日期"}</span>
+        <div className="picker-actions"><span className="picker-instruction">{picker.field === "endDate" ? "选择结束日期" : "选择开始日期"}</span><button ref={cancel} type="button" aria-label="取消日期选择" title="取消日期选择" onClick={onFinish}><X size={18} /></button><button className="picker-confirm" type="button" aria-label="完成日期选择" title="完成日期选择" onClick={onFinish}><Check size={18} /></button></div>
       ) : (
         <>
           <div
@@ -58,6 +64,7 @@ export default function CalendarToolbar({
             role="group"
             aria-label="日历视图"
           >
+            <span className="view-slider" aria-hidden="true" style={{ transform: `translateX(${["year", "month", "week", "day"].indexOf(view) * 30}px)` }} />
             {([
               ["year", "年"],
               ["month", "月"],
@@ -77,7 +84,8 @@ export default function CalendarToolbar({
           {search}
           {view === "day" && (
             <div className="day-view-options">
-              {([["timeline", "时间轴"], ["clock", "时钟"], ["tags", "标签"]] as const).map(([mode, label]) => (
+              <span className="view-slider" aria-hidden="true" style={{ transform: `translateX(${["year", "month", "week", "day"].indexOf(view) * 30}px)` }} />
+            {([["timeline", "时间轴"], ["clock", "时钟"], ["tags", "标签"]] as const).map(([mode, label]) => (
                 <label className="day-style-toggle" key={mode}>
                   <input type="checkbox" checked={dayStyle === mode} onChange={() => onDayStyle(mode)} />{label}
                 </label>
@@ -94,13 +102,10 @@ export default function CalendarToolbar({
             <button onClick={onCreate} title="新建" aria-label="新建">
               <Plus size={18} />
             </button>
-            <button onClick={onSettings} title="设置" aria-label="设置">
-              <GearSix size={18} />
-            </button>
           </div>
         </>
       )}
-      <WindowControls variant={picker ? "collapse" : "hide-app"} />
+      {!inWorkspace && <WindowControls variant={picker ? "collapse" : "hide-app"} />}
     </header>
   );
 }

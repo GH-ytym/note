@@ -85,6 +85,7 @@ func registerAPI(
 
 	// 从redis分页读取通知（在线的时候）
 	protected.GET("/notifications", nh.List)
+	protected.POST("/notifications/read", nh.MarkRead)
 	//离线重连，走数据库查完整通知快照
 	protected.GET("/notifications/snapshot", nh.Snapshot)
 	//循环写sse和接收events

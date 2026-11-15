@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	apperrors "note/internal/errors"
+	"note/internal/group"
 	"note/internal/model"
 
 	"gorm.io/gorm"
@@ -67,7 +68,7 @@ func (r *gormRepository) Create(
 		if err := tx.Omit("User").Create(&state).Error; err != nil {
 			return fmt.Errorf("initialize user notification state: %w", err)
 		}
-		return nil
+		return group.EnsurePersonal(tx, user.ID)
 	})
 }
 

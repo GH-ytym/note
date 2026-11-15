@@ -75,7 +75,7 @@ func (r *gormRepository) ListMembers(ctx context.Context, groupID, userID uint) 
 func (r *gormRepository) Dismiss(ctx context.Context, groupID, userID uint) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var item model.Group
-		err := tx.Select("id", "owner_id").First(&item, groupID).Error
+		err := tx.Select("id", "owner_id", "policy").First(&item, groupID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.ErrGroupNotFound
 		}
@@ -94,6 +94,10 @@ func (r *gormRepository) Dismiss(ctx context.Context, groupID, userID uint) erro
 		}
 		if item.OwnerID != userID {
 			return apperrors.ErrGroupDismissDenied
+		}
+
+		if item.Policy == model.Personal {
+			return apperrors.ErrGroupAccessDenied
 		}
 
 		// 先删本群 Todo 的子记录，再删 Todo，最后删群。
@@ -409,7 +413,7 @@ func (r *gormRepository) ListByUserID(
 func (r *gormRepository) Quit(ctx context.Context, groupID uint, userID uint, target *uint) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var group model.Group
-		err := tx.Select("id", "owner_id").First(&group, groupID).Error
+		err := tx.Select("id", "owner_id", "policy").First(&group, groupID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.ErrGroupNotFound
 		}
@@ -427,6 +431,9 @@ func (r *gormRepository) Quit(ctx context.Context, groupID uint, userID uint, ta
 			return apperrors.ErrGroupAccessDenied
 		}
 
+		if group.Policy == model.Personal {
+			return apperrors.ErrGroupAccessDenied
+		}
 		isOwner := (group.OwnerID == userID)
 		//群主退群却没指定下一任群主，以及成员退群却指定下一任群主，都是不行的
 		if isOwner && target == nil {
@@ -576,9 +583,15 @@ func (r *gormRepository) addMember(
 // 只返回可公开查找群组的预览资料，不加载成员和群内内容。
 func (r *gormRepository) ByCode(ctx context.Context, code string) (model.Group, error) {
 	var item model.Group
-	err := r.db.WithContext(ctx).Select("id", "name", "code", "policy").Where("code = ? AND policy <> ?", code, model.Personal).First(&item).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return item, apperrors.ErrGroupNotFound
-	}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.Select("id", "name", "code", "policy", "owner_id").Preload("Owner", func(db *gorm.DB) *gorm.DB { return db.Select("id", "nickname", "avatar") }).Where("code = ? AND policy <> ?", code, model.Personal).First(&item).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.ErrGroupNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return tx.Model(&model.GroupMember{}).Where("group_id = ?", item.ID).Count(&item.MemberCount).Error
+	}, &sql.TxOptions{ReadOnly: true})
 	return item, err
 }

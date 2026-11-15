@@ -76,10 +76,7 @@ button {
   -webkit-app-region: no-drag;
 }
 
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
+button:focus-visible {
   z-index: 40;
   outline: 2px solid var(--accent-ink);
   outline-offset: 2px;
@@ -2565,4 +2562,12 @@ textarea:focus-visible {
   min-height: 40px;
   border-radius: 6px;
   cursor: pointer;
+}
+
+/* 表单聚焦只改变原有边框，不叠加外圈。 */
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus, textarea:focus, .select-trigger:focus-visible {
+  outline:none !important;
+  border-color:color-mix(in srgb, var(--yellow) 70%, var(--line)) !important;
+  box-shadow:none !important;
 }

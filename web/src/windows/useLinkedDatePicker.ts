@@ -14,11 +14,24 @@ function pickerPayload(form: ScheduleForm, customDates: string[], field: "date" 
   };
 }
 
-export default function useLinkedDatePicker<T extends ScheduleForm | null>({ setForm, setCustomDates, setError }: { setForm: Dispatch<SetStateAction<T>>; setCustomDates: Dispatch<SetStateAction<string[]>>; setError: (error: string) => void }) {
+export default function useLinkedDatePicker<T extends ScheduleForm | null>({ setForm, setCustomDates, setError, inline = false }: { inline?: boolean; setForm: Dispatch<SetStateAction<T>>; setCustomDates: Dispatch<SetStateAction<string[]>>; setError: (error: string) => void }) {
   const [active, setActive] = useState(false);
   const [field, setField] = useState<"date" | "endDate">("date");
 
   useEffect(() => {
+    if (inline) {
+      const receive = (event: Event) => {
+        const state = (event as CustomEvent<PickerState>).detail;
+        const key = state.field === "endDate" ? "endDate" : "date";
+        setForm(current => current ? {...current, [key]:validDate(state.date)} : current);
+        if (key === "date") setCustomDates(state.customDates || []);
+        setError("");
+      };
+      const finish = () => setActive(false);
+      window.addEventListener("note-inline-selection", receive);
+      window.addEventListener("note-inline-finished", finish);
+      return () => { window.removeEventListener("note-inline-selection", receive); window.removeEventListener("note-inline-finished", finish); window.dispatchEvent(new CustomEvent("note-inline-picker", {detail:null})); };
+    }
     const removeSelectionListener = window.noteDesktop?.onDatePickerSelection?.((selection) => {
       if (!selection) return;
       const selectedField = selection.field === "endDate" ? "endDate" : "date";
@@ -32,9 +45,10 @@ export default function useLinkedDatePicker<T extends ScheduleForm | null>({ set
       removeSelectionListener?.();
       removeFinishedListener?.();
     };
-  }, [setCustomDates, setError, setForm]);
+  }, [setCustomDates, setError, setForm, inline]);
 
   async function start(form: ScheduleForm, customDates: string[], nextField: "date" | "endDate" = "date") {
+    if (inline) { setActive(true); setField(nextField); window.dispatchEvent(new CustomEvent("note-inline-picker", {detail:pickerPayload(form, customDates, nextField)})); return; }
     if (!window.noteDesktop?.startDatePicker) return;
     try {
       setActive(true);
@@ -47,6 +61,7 @@ export default function useLinkedDatePicker<T extends ScheduleForm | null>({ set
   }
 
   async function update(form: ScheduleForm, customDates: string[]) {
+    if (inline && active) { window.dispatchEvent(new CustomEvent("note-inline-picker", {detail:pickerPayload(form, customDates, field)})); return; }
     if (!active || !window.noteDesktop?.updateDatePicker) return;
     try {
       await window.noteDesktop.updateDatePicker(pickerPayload(form, customDates, field));

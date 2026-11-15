@@ -21,7 +21,8 @@ func (p GroupPolicy) Valid() bool {
 }
 
 type Group struct {
-	ID uint `gorm:"primaryKey" json:"id"`
+	MemberCount int64 `gorm:"-" json:"-"`
+	ID          uint  `gorm:"primaryKey" json:"id"`
 
 	// 不同群组允许重名，使用 ID 区分。
 	Name string `gorm:"size:80;not null" json:"name"`

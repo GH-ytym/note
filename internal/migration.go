@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 
+	"note/internal/group"
 	"note/internal/model"
 
 	"gorm.io/gorm"
@@ -53,7 +54,21 @@ func migrateDatabase(db *gorm.DB) error {
 		return err
 	}
 
-	return nil
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_personal_owner ON groups(owner_id) WHERE policy = 'personal'").Error; err != nil {
+			return err
+		}
+		var ids []uint
+		if err := tx.Model(&model.User{}).Pluck("id", &ids).Error; err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if err := group.EnsurePersonal(tx, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func migrateEventSchema(db *gorm.DB) error {

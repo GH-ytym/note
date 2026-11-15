@@ -35,8 +35,13 @@ func TestFixedGroupCodeLookupAndJoin(t *testing.T) {
 				if err := json.Unmarshal(res.Body.Bytes(), &fields); err != nil {
 					t.Fatal(err)
 				}
-				if len(fields) != 3 || fields["name"] != item.Name || fields["code"] != "ABC123" || fields["policy"] != string(policy) {
+				if len(fields) != 6 || fields["name"] != item.Name || fields["code"] != "ABC123" || fields["policy"] != string(policy) {
 					t.Fatalf("preview leaked fields: %v", fields)
+				}
+				var members int64
+				db.Model(&model.GroupMember{}).Where("group_id = ?", item.ID).Count(&members)
+				if fields["member_count"] != float64(members) || fields["owner_avatar"] != owner.Avatar {
+					t.Fatalf("bad preview: %v", fields)
 				}
 			}
 			res = request(http.MethodPost, "/api/groups/join", member.ID, `{"code":" abc123 "}`)

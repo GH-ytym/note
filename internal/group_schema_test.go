@@ -89,7 +89,7 @@ func TestGroupSchemaMembershipAndPreload(t *testing.T) {
 		t.Fatal("members missing after migration")
 	}
 	var count int64
-	if err := db.Model(&model.GroupMember{}).Where("user_id = ?", owner.ID).Count(&count).Error; err != nil || count != 2 {
+	if err := db.Model(&model.GroupMember{}).Where("user_id = ? AND group_id IN (SELECT id FROM groups WHERE policy <> ?)", owner.ID, model.Personal).Count(&count).Error; err != nil || count != 2 {
 		t.Fatalf("one user must be able to join two groups: count=%d err=%v", count, err)
 	}
 }

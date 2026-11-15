@@ -16,7 +16,7 @@ import WindowFrame from "../windows/WindowFrame";
 import useLinkedDatePicker from "../windows/useLinkedDatePicker";
 import { closeCurrentWindow, notifyDataChanged } from "../windows/window-utils";
 
-export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initialDate?: string; onDone?: () => void }) {
+export default function CreateView({ initialDate = TODAY_KEY, onDone, inline = false }: { initialDate?: string; onDone?: () => void; inline?: boolean }) {
 	const { groups, selected, loading: groupsLoading } = useGroups();
   const [groupID, setGroupID] = useState(Number(new URLSearchParams(window.location.search).get("group_id")) || 0);
   useEffect(() => { if (!groupID && selected) setGroupID(selected.id); }, [groupID, selected]);
@@ -36,7 +36,7 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initia
   const [customDates, setCustomDates] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const datePicker = useLinkedDatePicker({ setForm, setCustomDates, setError });
+  const datePicker = useLinkedDatePicker({ setForm, setCustomDates, setError, inline });
 	const finish = onDone || closeCurrentWindow;
 
 	useEffect(() => {
@@ -158,7 +158,7 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initia
         />
 
 		<div className="form-row">
-          <LinkedDateField
+          <LinkedDateField inline={inline}
             repeat={form.repeat}
             date={form.date}
             customDates={customDates}
@@ -172,7 +172,7 @@ export default function CreateView({ initialDate = TODAY_KEY, onDone }: { initia
 
 		{kind === "event" && (
 			<div className="form-row">
-                <LinkedDateField
+                <LinkedDateField inline={inline}
                   label="结束日期" repeat="仅一次" date={form.endDate}
                   min={form.date || TODAY_KEY} color={form.color}
                   active={datePicker.active && datePicker.field === "endDate"}

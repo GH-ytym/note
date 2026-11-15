@@ -7,6 +7,7 @@ import (
 
 // Service 是通知列表的业务入口，分页读取和恢复由 Reader 完成。
 type Service interface {
+	MarkRead(ctx context.Context, uid uint, ids []uint) error
 	List(
 		ctx context.Context,
 		userID uint,
@@ -27,6 +28,14 @@ type Service interface {
 	) (SnapshotPage, error)
 
 	Revision(ctx context.Context, uid uint) (uint64, error)
+}
+
+// MarkRead 将当前登录用户选中的通知批量标为已读。
+func (s *service) MarkRead(ctx context.Context, uid uint, ids []uint) error {
+	if uid == 0 {
+		return apperrors.ErrNotificationUnauthenticated
+	}
+	return s.repo.MarkRead(ctx, uid, ids)
 }
 
 type service struct {

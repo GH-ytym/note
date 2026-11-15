@@ -1,0 +1,79 @@
+.workspace { height: 100dvh; display: flex; flex-direction: column; background: var(--panel); }
+.workspace-tabs { display:flex; flex-shrink:0; gap:6px; padding:8px 12px 0; height:44px; border-bottom:1px solid var(--line); -webkit-app-region:drag; overflow-x:auto; }
+.workspace-tabs button { -webkit-app-region:no-drag; padding:8px 14px; }
+.workspace-tabs > div { display:flex; border-radius:8px 8px 0 0; }
+.workspace-tabs .active, .workspace-tabs > button[aria-current] { background:var(--yellow); border-radius:8px 8px 0 0; color:var(--on-theme); }
+.workspace-calendar { flex:1; min-height:0; }
+.workspace-calendar .calendar-shell { height:100%; }
+.workspace-page { flex:1; overflow:auto; padding:32px max(24px, calc((100vw - 880px)/2)); }
+.workspace [hidden] { display:none !important; }
+.workspace-page h1 { font-size:25px; margin:0 0 24px; }
+.notification-page .notification-panel { position:static; width:100%; max-height:none; border:0; box-shadow:none; }
+.calendar-actions .notification-anchor { margin:0; }
+.calendar-actions .notification-panel { top:calc(100% + 12px); bottom:auto; right:0; left:auto; }
+.notification-card-link { text-align:left; display:block; width:100%; }
+.notification-actions { display:flex; gap:8px; margin-top:10px; }
+.notification-actions button, .notification-detail button { padding:6px 16px; border:1px solid var(--line); border-radius:6px; }
+.notification-actions button:first-child { background:var(--yellow); }
+.notification-detail { max-width:620px; margin:40px auto; line-height:1.8; }
+.notification-detail > small, .notification-detail time { color:var(--muted); }
+.notification-detail .avatar { width:56px; height:56px; }
+.notification-detail small { display:block; }
+.notification-item.spotlight-card { --spotlight-card-surface:var(--panel) !important; color:var(--text); border-radius:8px; margin:8px 0; }
+.workspace-topbar { display:flex; align-items:stretch; flex-shrink:0; height:44px; border-bottom:1px solid var(--line); -webkit-app-region:drag; }
+.workspace-topbar .workspace-tabs { flex:1; min-width:0; height:auto; border-bottom:0; }
+.workspace-topbar > .window-controls { flex-shrink:0; align-self:center; margin:0; -webkit-app-region:no-drag; }
+.sidebar-account { position:relative; gap:4px; }
+.sidebar-account:hover { background:transparent; }
+.sidebar-profile { display:flex; align-items:center; gap:8px; min-width:0; flex:1; text-align:left; padding:0; }
+.sidebar-profile > span:last-child { display:grid; gap:4px; min-width:0; }
+.sidebar-profile strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sidebar-account-actions { display:flex; align-items:center; flex-shrink:0; gap:2px; }
+.sidebar-account-actions > button { padding:7px; }
+.sidebar-account-actions .notification-anchor { position:static; margin:0; }
+.sidebar-account-actions .notification-panel { left:0; bottom:calc(100% + 8px); }
+.sidebar-account-actions .notification-count { position:absolute; bottom:24px; margin-left:8px; }
+.is-collapsed .sidebar-account { flex-direction:column; }
+.is-collapsed .sidebar-account-actions { gap:0; }
+.is-collapsed .sidebar-account-actions > button, .is-collapsed .notification-trigger { padding:5px; }
+/* 标签先压缩到最小宽度，之后通过横向滚动查看。 */
+.workspace-topbar .workspace-tabs { overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; padding-bottom:2px; -webkit-app-region:no-drag; }
+.workspace-tabs > div { flex:0 1 180px; min-width:96px; max-width:220px; -webkit-app-region:no-drag; }
+.workspace-tabs .tab-title { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; text-align:left; padding:6px 10px; }
+.workspace-tabs .tab-close { flex:0 0 26px; padding:4px; }
+
+.group-row .group-dot { width:7px; height:7px; border-radius:50%; flex:0 0 7px; opacity:.65; }
+.group-row.is-active { background:transparent; font-weight:400; }
+.group-row.is-active .group-dot { opacity:1; filter:brightness(1.2); box-shadow:0 0 5px 1px currentColor; }
+.multi-view-calendar .calendar-header h1 { flex:0 0 190px; width:190px; overflow:hidden; text-overflow:ellipsis; }
+.multi-view-calendar .calendar-header .month-controls { flex-shrink:0; }
+.calendar-view-switch { position:relative; isolation:isolate; }
+.calendar-view-switch .view-slider { position:absolute; z-index:-1; left:2px; top:2px; width:28px; height:26px; border-radius:4px; background:var(--yellow); transition:transform 180ms ease; pointer-events:none; }
+.calendar-view-switch button[aria-pressed="true"] { background:transparent; box-shadow:none; color:var(--on-theme); }
+@media (prefers-reduced-motion: reduce) { .calendar-view-switch .view-slider { transition:none; } }
+
+/* 顶栏空白区域使用窗口拖动，标签仍独立处理排序。 */
+.workspace-topbar { app-region:no-drag; -webkit-app-region:no-drag; }
+.workspace .calendar-header, .workspace .utility-header { app-region:no-drag; -webkit-app-region:no-drag; }
+.workspace-topbar > .window-controls { align-self:stretch; gap:0; padding:0; }
+.workspace-topbar > .window-controls > button { height:100%; width:44px; border-radius:0; }
+.create-sidebar { flex:0 0 350px; width:350px; min-width:0; height:100%; overflow:auto; border-left:1px solid var(--line); background:var(--panel); }
+.create-sidebar .utility-window { width:100%; height:auto; min-height:100%; padding:0; }
+.create-sidebar .utility-panel { border:0; border-radius:0; box-shadow:none; }
+.create-sidebar .utility-header { position:sticky; top:0; z-index:2; background:var(--panel); }
+@media(max-width:850px) { .create-sidebar { flex-basis:300px; width:300px; } .has-group-sidebar:has(.create-sidebar:not([hidden])) > .group-sidebar { display:none; } }
+
+/* 新建侧栏只让表单内容滚动，标题和群组信息固定。 */
+.create-sidebar { overflow:hidden; }
+.create-sidebar .utility-window { height:100%; min-height:0; overflow:hidden; }
+.create-sidebar .utility-panel { display:flex; flex-direction:column; min-height:0; }
+.create-sidebar .utility-header, .create-sidebar .group-context { flex-shrink:0; }
+.create-sidebar .side-form.utility-form { flex:1; height:auto; min-height:0; max-height:none; overflow-y:auto; }
+.workspace-tabs[inert], .group-sidebar[inert], .create-sidebar[inert] { opacity:.3; user-select:none; pointer-events:none; }
+.is-calendar-picking > .workspace-stack { box-shadow:inset 0 0 0 2px var(--yellow), 0 0 14px rgb(var(--theme-rgb) / 18%); z-index:1; border-radius:6px; padding:2px; }
+.picker-actions { display:flex; align-items:center; gap:8px; margin-left:auto; flex-shrink:0; white-space:nowrap; }
+.picker-actions .picker-instruction { margin:0; font-size:12px; color:var(--muted); }
+.picker-actions button { display:grid; place-items:center; width:30px; height:30px; border-radius:6px; }
+.picker-actions button:hover { background:var(--cell-hover); }
+.picker-actions .picker-confirm { background:var(--yellow); color:var(--on-theme); }
+.picker-actions .picker-confirm:hover { background:var(--yellow); filter:brightness(.96); }

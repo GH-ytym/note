@@ -110,14 +110,18 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
+	if req.Policy == "" {
+		req.Policy = "public"
+	}
 	item, err := h.service.Create(
 		c.Request.Context(),
 		userID,
 		req.Name,
+		req.Policy,
 	)
 
 	switch {
-	case errors.Is(err, apperrors.ErrGroupNameInvalid):
+	case errors.Is(err, apperrors.ErrGroupNameInvalid), errors.Is(err, apperrors.ErrGroupPolicyInvalid):
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
@@ -296,6 +300,6 @@ func (h *GroupHandler) Lookup(c *gin.Context) {
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询群组失败"})
 	default:
-		c.JSON(http.StatusOK, gin.H{"name": item.Name, "code": item.Code, "policy": item.Policy})
+		c.JSON(http.StatusOK, gin.H{"name": item.Name, "code": item.Code, "policy": item.Policy, "member_count": item.MemberCount, "owner_avatar": item.Owner.Avatar, "owner_name": item.Owner.Nickname})
 	}
 }

@@ -3,7 +3,8 @@ package apperrors
 import "errors"
 
 var (
-	ErrGroupNameInvalid = errors.New("群名不能为空，且不能超过80个字符")
+	ErrGroupPolicyInvalid = errors.New("加入方式不合法")
+	ErrGroupNameInvalid   = errors.New("群名不能为空，且不能超过80个字符")
 
 	ErrGroupUnauthenticated       = errors.New("用户身份无效")
 	ErrGroupAccessDenied          = errors.New("无权访问该群组")

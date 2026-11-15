@@ -10,7 +10,7 @@ export default function useWindowDrag(allowDialog = false) {
   };
   return {
     onPointerDown(event: React.PointerEvent<HTMLElement>) {
-      if (!window.noteDesktop || event.button !== 0 || (event.target instanceof Element && event.target.closest("button,input,label,select,textarea,.workspace-search" + (allowDialog ? "" : ",[role=dialog]")))) return;
+      if (!window.noteDesktop || event.button !== 0 || (event.target instanceof Element && event.target.closest("button,input,label,select,textarea,[draggable=true],.workspace-search" + (allowDialog ? "" : ",[role=dialog]")))) return;
       event.preventDefault();
       dragging.current = true;
       event.currentTarget.setPointerCapture(event.pointerId);

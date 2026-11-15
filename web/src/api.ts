@@ -62,7 +62,7 @@ export function deleteTodo(id: number) {
 
 export const deleteEvent = (id: number) => request<null>(`/events/${id}`, { method: "DELETE" });
 export const myGroups = () => request<Group[]>("/groups");
-export const createGroup = (name: string) => request<Group>("/groups", { method: "POST", body: JSON.stringify({ name }) });
+export const createGroup = (name: string, policy: "public" | "approval" | "restricted") => request<Group>("/groups", { method: "POST", body: JSON.stringify({ name, policy }) });
 export const joinGroup = (code: string) => request<{ status: string }>("/groups/join", { method: "POST", body: JSON.stringify({ code }) });
 export const groupMembers = (id: number) => request<GroupMember[]>(`/groups/${id}/members`);
 export const quitGroup = (id: number, target?: number) => request<null>(`/groups/${id}/quit`, { method: "POST", body: JSON.stringify(target ? { target } : {}) });
@@ -83,5 +83,5 @@ export const searchTodo = (groupID: number, keyword: string, limit: number, page
 export const searchEvent = (groupID: number, keyword: string, limit: number, page = 1, signal?: AbortSignal) => search(groupID, "events", keyword, limit, page, signal);
 export const searchAll = (groupID: number, keyword: string, limit: number, page = 1, signal?: AbortSignal) => search(groupID, "all", keyword, limit, page, signal);
 
-export type GroupPreview = Pick<Group, "name" | "code" | "policy">;
+export type GroupPreview = Pick<Group, "name" | "code" | "policy"> & { member_count: number; owner_avatar: string; owner_name: string };
 export const lookupGroup = (code: string) => request<GroupPreview>(`/groups/lookup?${new URLSearchParams({ code })}`);

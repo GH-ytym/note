@@ -1,10 +1,8 @@
-// 只识别完整 SSE 事件，用作重新查询通知列表的信号。
-// 不把历史 Card 快照覆盖到数据库返回的当前状态上。
-export async function consumeNotifications(body: ReadableStream<Uint8Array>, changed: () => void) {
+export interface NotificationEvent { name: string; data: unknown }
+export async function consumeNotifications(body: ReadableStream<Uint8Array>, receive: (event: NotificationEvent) => void) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
-  let eventName = "";
+  let buffer = "", name = "", lines: string[] = [];
   try {
     for (;;) {
       const { value, done } = await reader.read();
@@ -15,13 +13,13 @@ export async function consumeNotifications(body: ReadableStream<Uint8Array>, cha
         const line = buffer.slice(0, newline).replace(/\r$/, "");
         buffer = buffer.slice(newline + 1);
         if (!line) {
-          if (eventName === "notification.created" || eventName === "notification.updated") changed();
-          eventName = "";
-        } else if (line.startsWith("event:")) {
-          eventName = line.slice(6).trim();
-        }
+          if (name === "notification.snapshot" || name === "notification.change") {
+            receive({ name, data: JSON.parse(lines.join("\n")) });
+          }
+          name = ""; lines = [];
+        } else if (line.startsWith("event:")) name = line.slice(6).trim();
+        else if (line.startsWith("data:")) lines.push(line.slice(5).replace(/^ /, ""));
       }
-      if (buffer.length > 1024 * 1024) throw new Error("通知消息过大");
     }
   } finally {
     await reader.cancel().catch(() => {});

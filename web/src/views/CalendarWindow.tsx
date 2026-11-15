@@ -1,3 +1,5 @@
+import CreateView from "./CreateView";
+import { openPage } from "../components/Workspace";
 import type { View, CalendarItem, SearchItem } from "../types";
 import type { PickerState, WorkspaceState } from "../desktop";
 type MonthDay = {key: string; day: number; isCurrentMonth: boolean};
@@ -40,8 +42,10 @@ import {
 
 export default function CalendarWindow({
   initialView,
+  onMiniChange,
+  onPickingChange,
   initialDate = TODAY_KEY,
-}: { initialView?: View; initialDate?: string } = {}) {
+}: { initialView?: View; initialDate?: string; onPickingChange?: (picking: boolean) => void; onMiniChange?: (mini: boolean) => void } = {}) {
   const { settings } = useAppearance();
   const { selected: selectedGroup } = useGroups();
   const [currentMonth, setCurrentMonth] = useState(() =>
@@ -53,6 +57,25 @@ export default function CalendarWindow({
   const [handMode, setHandMode] = useState(settings.handMode);
   const [saving, setSaving] = useState(false);
   const [mini, setMini] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createDate, setCreateDate] = useState(initialDate);
+  const localPicker = useRef(false);
+  useEffect(() => { onMiniChange?.(mini); }, [mini, onMiniChange]);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const state = (event as CustomEvent<PickerState | null>).detail;
+      localPicker.current = !!state;
+      desktopPickerRef.current = state; setDesktopPicker(state);
+      if (state) { setView("month"); setCurrentMonth(monthFromKey(state.date)); }
+    };
+    window.addEventListener("note-inline-picker", receive);
+    return () => window.removeEventListener("note-inline-picker", receive);
+  }, []);
+  function closeCreate() {
+    setCreating(false);
+    localPicker.current = false;
+    desktopPickerRef.current = null; setDesktopPicker(null);
+  }
   const [workspaceReady, setWorkspaceReady] = useState(!IS_DESKTOP);
   const now = useNow();
   const eventTracks = useRef(new Map<string, number>());
@@ -117,6 +140,13 @@ export default function CalendarWindow({
   const customPicking = Boolean(desktopPicker) && pickingRepeat === "自定义";
   const startDatePicking = Boolean(desktopPicker) && pickingRepeat !== "自定义";
   const calendarPicking = customPicking || startDatePicking;
+  useEffect(() => { onPickingChange?.(calendarPicking); return () => onPickingChange?.(false); }, [calendarPicking, onPickingChange]);
+  useEffect(() => {
+    if (!calendarPicking) return;
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); finishDesktopDatePicking(); } };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [calendarPicking]);
 
   function matchesStartPattern(day: MonthDay, anchorDate: string | null) {
     if (!anchorDate || isPastDateKey(anchorDate) || isPastDateKey(day.key))
@@ -242,17 +272,8 @@ export default function CalendarWindow({
   function openUtility(role: "create" | "settings") {
     if (role === "create" && !selectedGroup) { setNotice("请先创建、加入或选择一个群组"); return; }
     setSearchOpen(false);
-    const request =
-      role === "create"
-        ? window.noteDesktop?.openCreate?.({ date: selectedDate, groupId: selectedGroup?.id })
-        : window.noteDesktop?.openSettings?.();
-    if (request) request.catch((error) => setNotice(error instanceof Error ? error.message : "操作失败"));
-    else
-      browserAuxiliary.current = window.open(
-        `/?window=${role}&date=${selectedDate}&group_id=${selectedGroup?.id || ""}`,
-        "note-secondary",
-        "width=420,height=650",
-      );
+    if (role === "create") { setCreateDate(selectedDate); setCreating(true); return; }
+    openPage({id: role, title: role === "settings" ? "设置" : "新建", date: selectedDate});
   }
 
   useEffect(() => {
@@ -327,6 +348,7 @@ export default function CalendarWindow({
   function publishDesktopDateSelection(nextState: PickerState) {
     desktopPickerRef.current = nextState;
     setDesktopPicker(nextState);
+    if (localPicker.current) { window.dispatchEvent(new CustomEvent("note-inline-selection", {detail: nextState})); return; }
     const request = window.noteDesktop?.selectDatePicker?.({
       date: nextState.date,
       customDates: nextState.customDates,
@@ -408,6 +430,7 @@ export default function CalendarWindow({
 
   function finishDesktopDatePicking() {
     if (!desktopPickerRef.current) return;
+    if (localPicker.current) { window.dispatchEvent(new CustomEvent("note-inline-picker", {detail:null})); window.dispatchEvent(new Event("note-inline-finished")); return; }
     const request = window.noteDesktop?.finishDatePicker?.();
     request?.catch((error) => setNotice(error instanceof Error ? error.message : "操作失败"));
   }
@@ -428,18 +451,7 @@ export default function CalendarWindow({
 
   function openEvent(item: CalendarItem) {
     setSearchOpen(false);
-    const request = window.noteDesktop?.openDetail?.({
-      todoId: item.todoId,
-      eventId: item.eventId,
-      date: item.date,
-    });
-    if (!window.noteDesktop)
-      browserAuxiliary.current = window.open(
-        `/?window=detail&${item.kind === "event" ? "event_id" : "todo_id"}=${item.eventId || item.todoId}&date=${item.date}`,
-        "note-secondary",
-        "width=360,height=650",
-      );
-    request?.catch((error) => setNotice(error instanceof Error ? error.message : "操作失败"));
+    openPage({id: `${item.kind}-${item.eventId || item.todoId}-${item.date}`, title: "日程详情", todoId: item.todoId, eventId: item.eventId, date: item.date});
   }
 
   const selectionColor = desktopPicker?.color || "#F3B51B";
@@ -453,7 +465,7 @@ export default function CalendarWindow({
         "--selection-ink": readableSelectionInk(selectionColor),
       }}
     >
-      {!mini && <GroupSidebar onSettings={() => openUtility("settings")} />}
+      {!mini && <GroupSidebar disabled={calendarPicking} onSettings={() => openUtility("settings")} />}
       <div className="workspace-stack">
         <div className="month-stack">
           <section
@@ -477,8 +489,7 @@ export default function CalendarWindow({
               onMove={moveMonth}
               onToday={goToday}
               onCreate={() => openUtility("create")}
-              onSettings={() => openUtility("settings")}
-              picker={desktopPicker}
+                  picker={desktopPicker}
               onFinish={finishDesktopDatePicking}
               dayStyle={dayStyle}
               onDayStyle={setDayStyle}
@@ -553,6 +564,7 @@ export default function CalendarWindow({
         </div>
       </div>
 
+      {creating && <aside className="create-sidebar" inert={calendarPicking} hidden={mini} aria-label="新建日程"><CreateView initialDate={createDate} onDone={closeCreate} inline /></aside>}
       {notice && (
         <div className="toast" role="status">
           {notice}

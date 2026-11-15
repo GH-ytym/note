@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./views/CalendarWindow";
+import App from "./components/Workspace";
 import StandaloneWindow from "./windows/StandaloneWindow";
 import { AppearanceProvider } from "./appearance";
 import AuthGate from "./components/AuthGate";

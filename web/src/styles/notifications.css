@@ -28,3 +28,9 @@
 .notification-panel footer { padding: 10px 16px; border-top: 1px solid var(--line); }
 .notification-error { color: var(--danger); padding: 8px 16px; margin: 0; }
 .notification-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+.notification-selection { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.notification-selection label { display: inline-flex; align-items: center; gap: 5px; }
+.notification-selection span { color: var(--muted); }
+.notification-item > input { flex-shrink: 0; align-self: center; }
+.notification-panel button:disabled { opacity: .45; cursor: not-allowed; }

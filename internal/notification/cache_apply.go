@@ -40,6 +40,19 @@ func (r *RedisCache) ApplyChange(
 	if change.UnreadCount < 0 {
 		return "", fmt.Errorf("unread count cannot be negative")
 	}
+	if len(change.ReadIDs) > 0 {
+		if change.ReadAt == nil || change.ReadAt.IsZero() {
+			return "", fmt.Errorf("read time is required")
+		}
+		for _, id := range change.ReadIDs {
+			if id == 0 || uint64(id) > uint64(1<<53-1) {
+				return "", fmt.Errorf("invalid read notification ID: %d", id)
+			}
+		}
+		if len(change.Upserts) > 0 || len(change.RemovedIDs) > 0 {
+			return "", fmt.Errorf("read change must be separate from card updates")
+		}
+	}
 
 	// JSON 中输出[]  免得出现null
 	if change.Upserts == nil {

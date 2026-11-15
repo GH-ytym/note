@@ -30,6 +30,14 @@ revision 为十进制字符串，使用 BigInt 等精确方式比较，避免 Nu
 
 ## 加载旧页
 
+### 批量已读（2026-11-15）
+
+请求 `POST /api/notifications/read`，正文为 `{"ids":[101,103]}`。身份由登录 token 确定，成功返回 204 空正文。缺少 ID、空数组或非正整数返回 400，未登录返回 401，数据库失败返回 500。重复 ID 去重，已读、已删除或属于其他用户的 ID 被忽略。无条数业务上限，SQL 按 500 个 ID 分批，在同一事务中提交；超大选择仍会增加事务和广播负载。
+
+首次实际修改通过 Outbox 发布 notification.change，正文包含 read_ids、read_at、revision 和绝对 unread_count，upserts 和 removed_ids 为空数组。前端按 read_ids 更新已加载卡片的 read_at，直接替换未读角标；未加载的卡片留待分页读取。已读变化独立成一个版本事件。204 表示数据库事务成功，缓存和 SSE 由 Worker 异步推进；重复请求没有实际变化时不产生新事件。
+
+进入多选时固定 ID 集合，操作期间新通知不在本次范围内。冻结界面期间暂存事件，恢复时按顺序应用；请求失败保留选择并允许重试。
+
 现有 `GET /api/notifications?before=981&limit=20` 从 Redis 读取更旧的卡片。响应包含 items、next、revision、unread_count、epoch。分页响应中的 revision 不用于跳过尚未应用的 SSE 事件，epoch 也不作为 SSE 游标。
 
 分页响应到达时，检查请求仍属于当前快照代次，且响应 revision 与当前已应用的 SSE revision 一致。若不一致，丢弃该响应，必要时重新连接以取得新的第一页。Redis 可能暂时落后于 SQLite，旧响应不能覆盖较新的卡片或未读数。接受响应时按 ID 去重，按 ID 倒序显示。

@@ -32,7 +32,7 @@
 .group-dialog p { color: var(--muted); font-size: 13px; line-height: 1.7; }
 .group-dialog form, .group-dialog label { display: grid; gap: 10px; }
 .group-dialog form { gap: 16px; }
-.group-dialog input, .group-dialog select, .group-dialog textarea { width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--cell); padding: 10px; color: var(--text); }
+.group-dialog input:not(.code-slots__input):not([type="radio"]), .group-dialog select, .group-dialog textarea { width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--cell); padding: 10px; color: var(--text); }
 .group-dialog button { padding: 8px 10px; border-radius: 7px; border: 1px solid var(--line); cursor: pointer; font-size: 13px; }
 .group-dialog button:disabled { opacity: .5; cursor: default; }
 .group-dialog .primary { background: var(--yellow); color: var(--on-theme); padding: 11px; }
@@ -62,3 +62,32 @@
 
 .schedule-fields { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 16px; }
 .schedule-fields:disabled { opacity: .8; }
+.group-preview-expand { display:grid; grid-template-rows:0fr; transition:grid-template-rows 220ms ease; }
+.group-preview-expand.is-open { grid-template-rows:1fr; }
+.group-preview-expand > div { overflow:hidden; min-height:0; }
+.preview-owner { display:flex; align-items:center; gap:8px; }
+.group-dialog:has(.code-slots) { top:18vh; bottom:auto; margin:0 auto; }
+@media(prefers-reduced-motion:reduce) { .group-preview-expand { transition:none; } }
+
+.group-dialog { width:min(420px, calc(100vw - 32px)); padding:26px; border-radius:18px; box-shadow:0 18px 70px #0002; }
+.group-dialog::backdrop { background:#17171035; }
+.group-dialog header { margin-bottom:18px; }
+.group-dialog header > button { border:0; padding:6px; color:var(--muted); border-radius:50%; }
+.group-dialog header > button:hover { background:var(--cell-hover); }
+.group-dialog form > p { margin:0 0 6px; }
+.group-dialog form { gap:20px; }
+.group-dialog .primary { font-weight:600; border:0; border-radius:9px; margin-top:4px; }
+.group-policy { border:0; padding:0; margin:0; display:grid; gap:8px; min-width:0; }
+.group-policy legend { font-size:13px; margin-bottom:10px; }
+.group-policy label { display:flex; align-items:center; gap:12px; padding:11px 12px; border:1px solid var(--line); border-radius:9px; cursor:pointer; }
+.group-policy label.is-selected { border-color:var(--yellow); background:rgb(var(--theme-rgb) / 7%); }
+.group-policy input { width:15px; height:15px; margin:0; accent-color:var(--yellow); flex-shrink:0; }
+.group-policy label span { display:grid; gap:3px; }
+.group-policy strong { font-size:13px; font-weight:500; }
+.group-policy small { font-size:11px; color:var(--muted); }
+.group-dialog .code-slots { display:block; width:max-content; max-width:100%; justify-self:center; margin:8px auto; }
+.group-dialog .code-slots__row { display:flex; width:max-content; }
+.group-dialog .code-slots__slot { flex:0 0 var(--cs-size); border:1px solid var(--line); background:var(--cell); }
+.group-dialog .code-slots__row[data-focused] .code-slots__slot[data-active] { border-color:var(--yellow); }
+.group-dialog .code-slots__input, .group-dialog .code-slots__input:focus { padding:0; border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent; }
+.group-dialog .invite-card { background:var(--page); border-radius:10px; box-shadow:none; }

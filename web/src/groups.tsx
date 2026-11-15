@@ -16,7 +16,7 @@ export function GroupsProvider({ children }: { children: ReactNode }) {
   const select = useCallback((id: number) => { setSelectedID(id); try { localStorage.setItem(key, String(id)); } catch { /* 此窗口仍可切换 */ } }, [key]);
   const reload = useCallback(async () => {
     const run = ++generation.current; setError(""); setLoading(true);
-    try { const result = await myGroups(); if (run === generation.current) { setGroups(result); setSelectedID(current => result.some(g => g.id === current) ? current : result[0]?.id || 0); } }
+    try { const result = (await myGroups()).sort((a, b) => Number(b.policy === "personal") - Number(a.policy === "personal")); if (run === generation.current) { setGroups(result); setSelectedID(current => result.some(g => g.id === current) ? current : result[0]?.id || 0); } }
     catch (reason) { if (run === generation.current) setError(reason instanceof Error ? reason.message : "读取群组失败"); }
     finally { if (run === generation.current) setLoading(false); }
   }, []);

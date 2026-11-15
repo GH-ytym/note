@@ -1,97 +1,76 @@
 import { useEffect, useRef, useState } from "react";
 import { auth } from "../auth";
 import { consumeNotifications } from "../lib/notification-stream";
+import { applyChange, mergePage, version } from "../lib/notification-state";
+import type { NotificationPage, NotificationChange } from "../lib/notification-state";
+export type { NotificationCard } from "../lib/notification-state";
 
-export interface NotificationCard {
-  id: number;
-  type: string;
-  actor_id: number;
-  actor_name: string;
-  actor_avatar: string;
-  group_id: number;
-  group_name: string;
-  // 申请／邀请 ID，用于审核；id 仍是通知 ID。
-  join_request_id?: number;
-  request_status?: string;
-  read_at: string | null;
-  created_at: string;
-}
-interface Inbox { items: NotificationCard[]; unread_count: number }
-
+const empty: NotificationPage = { revision: "0", items: [], unread_count: 0, next: 0 };
 export default function useNotifications() {
-  const [inbox, setInbox] = useState<Inbox>({ items: [], unread_count: 0 });
+  const [inbox, setInbox] = useState(empty);
+  const current = useRef(empty);
+  const generation = useRef(0);
+  const ready = useRef(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const moreBusy = useRef(false);
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
-  const reload = useRef<() => void>(() => {});
+  const [attempt, setAttempt] = useState(0);
+  const lifetime = useRef<AbortSignal | null>(null);
+  const reload = () => { generation.current++; ready.current = false; setConnected(false); setAttempt(n=>n+1); };
+  function update(page: NotificationPage) { current.current=page; setInbox(page); }
   useEffect(() => {
     const controller = new AbortController();
-    const { signal } = controller;
-    let running = false;
-    let dirty = false;
-    let retryTimer: ReturnType<typeof setTimeout>;
-    // 请求期间再收到事件，记下来，完成后继续查；不并行覆盖列表。
-    async function refresh() {
-      dirty = true;
-      if (running || signal.aborted) return;
-      running = true;
-      setLoading(true);
-      try {
-        while (dirty && !signal.aborted) {
-          dirty = false;
-          try {
-            const result = await auth.request<Inbox>("/notifications", { signal });
-            if (!signal.aborted) { setInbox(result); setError(""); }
-          } catch (reason) {
-            if (!signal.aborted) setError(reason instanceof Error ? reason.message : "通知加载失败");
-            break;
-          }
-        }
-      } finally {
-        running = false;
-        if (!signal.aborted) setLoading(false);
-      }
-    }
-    reload.current = () => { void refresh(); };
-    let retryDelay = 1000;
+    const {signal}=controller;
+    lifetime.current=signal;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let delay=1000;
     async function connect() {
+      generation.current++; ready.current=false; setConnected(false); setLoading(true);
       try {
-        const response = await auth.response("/notifications/stream", {
-          signal, headers: { Accept: "text/event-stream" },
+        const response=await auth.response("/notifications/stream", {signal,headers:{Accept:"text/event-stream"}});
+        if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error("通知连接响应无效");
+        await consumeNotifications(response.body,event=>{
+          if(signal.aborted)return;
+          if(event.name==="notification.snapshot"){
+            const page=event.data as NotificationPage;
+            version(page.revision);
+            if(!Array.isArray(page.items)||!Number.isSafeInteger(page.next)||page.next<0||!Number.isSafeInteger(page.unread_count)||page.unread_count<0)throw new Error("通知快照无效");
+            generation.current++; update(page); ready.current=true;
+            setConnected(true);setLoading(false);setError("");delay=1000;
+          }else{
+            if(!ready.current)throw new Error("缺少通知快照");
+            update(applyChange(current.current,event.data as NotificationChange));
+          }
         });
-        if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) {
-          await response.body?.cancel();
-          throw new Error("通知连接响应无效");
-        }
-        if (signal.aborted) { await response.body.cancel(); return; }
-        setConnected(true);
-        retryDelay = 1000;
-        // 后端已登记订阅并发送响应头；此后查询列表，事件会触发后续刷新。
-        void refresh();
-        await consumeNotifications(response.body, () => { void refresh(); });
-      } catch {
-        // 列表仍可独立使用。断线后带最新令牌重连，401 由认证层刷新。
-      } finally {
-        if (!signal.aborted) {
-          setConnected(false);
-          retryTimer = setTimeout(() => { void connect(); }, retryDelay);
-          retryDelay = Math.min(retryDelay * 2, 30000);
+      }catch(reason){
+        if(!signal.aborted)setError(reason instanceof Error?reason.message:"通知连接失败");
+      }finally{
+        if(!signal.aborted){
+          ready.current=false;generation.current++;setConnected(false);setLoading(false);
+          timer=setTimeout(()=>void connect(),delay);delay=Math.min(delay*2,30000);
         }
       }
     }
-    void refresh();
     void connect();
-    const onFocus = () => { void refresh(); };
-    window.addEventListener("focus", onFocus);
-    // 临时兜底：Redis 漏推时，即使 SSE 未断，列表也会定期校正。
-    const poll = setInterval(onFocus, 60000);
-    return () => {
-      controller.abort();
-      clearTimeout(retryTimer);
-      clearInterval(poll);
-      window.removeEventListener("focus", onFocus);
-      reload.current = () => {};
-    };
-  }, []);
-  return { ...inbox, loading, error, connected, reload: () => reload.current() };
+    return()=>{controller.abort();clearTimeout(timer);generation.current++;ready.current=false;};
+  },[attempt]);
+  async function loadMore(){
+    const page=current.current, gen=generation.current, signal=lifetime.current;
+    if(moreBusy.current||!ready.current||!page.next||!signal)return;
+    moreBusy.current=true;setLoadingMore(true);
+    try{
+      const next=await auth.request<NotificationPage>("/notifications?before="+page.next+"&limit=20",{signal});
+      if(signal.aborted||generation.current!==gen)return;
+      try{update(mergePage(current.current,next));setError("");}
+      catch{reload();setError("通知已更新，已重新同步第一页，请再次加载");}
+    }catch(reason){if(!signal.aborted)setError(reason instanceof Error?reason.message:"加载失败");}
+    finally{moreBusy.current=false;setLoadingMore(false);}
+  }
+  async function markRead(ids:number[]){
+    await auth.request<void>("/notifications/read",{method:"POST",body:JSON.stringify({ids}),signal:lifetime.current??undefined});
+    reload();
+  }
+  return {...inbox,loading,loadingMore,error,connected,reload,loadMore,markRead};
 }

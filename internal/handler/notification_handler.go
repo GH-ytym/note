@@ -25,6 +25,28 @@ type NotificationHandler struct {
 	hub     *notification.Hub
 }
 
+// MarkRead 接收固定的通知 ID 集合，成功时返回 204。
+func (h *NotificationHandler) MarkRead(c *gin.Context) {
+	uid := c.GetUint(middleware.UserIDKey)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+	var req struct {
+		IDs []uint `json:"ids" binding:"required,min=1,dive,gt=0"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ids 必须是非空的正整数数组"})
+		return
+	}
+	if err := h.service.MarkRead(c.Request.Context(), uid, req.IDs); err != nil {
+		log.Printf("mark notifications read for user %d: %v", uid, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "标记已读失败，请重试"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func NewNotificationHandler(
 	service notification.Service,
 	hub *notification.Hub, //把同一个hub传给handler
@@ -239,6 +261,7 @@ func (h *NotificationHandler) Stream(c *gin.Context) {
 					return
 				}
 
+				//正常情况
 			case "notification.change":
 				var change notification.Change
 				if err := json.Unmarshal(
@@ -303,6 +326,7 @@ func (h *NotificationHandler) Stream(c *gin.Context) {
 		case <-check.C:
 			// 每次检查单独设置查询超时，结束后立即释放。
 			readCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+			//查最新版本
 			current, err := h.service.Revision(readCtx, userID)
 			stop()
 
@@ -319,6 +343,7 @@ func (h *NotificationHandler) Stream(c *gin.Context) {
 			}
 
 			if current > rev {
+				//发现不对，更新一次
 				if err := snapshot(current); err != nil {
 					log.Printf(
 						"refresh notifications for user %d: %v",

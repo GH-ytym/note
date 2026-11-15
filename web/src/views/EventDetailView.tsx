@@ -14,7 +14,7 @@ const inputTime = (value: string) => {
   const p = shanghaiDateTimeParts(value);
   return `${p.date}T${p.time}`;
 };
-export default function EventDetailView({ eventId }: { eventId: number }) {
+export default function EventDetailView({ eventId, onDone }: { eventId: number; onDone?: () => void }) {
   const { groups } = useGroups();
   const [record, setRecord] = useState<CalendarEvent | null>(null),
     [form, setForm] = useState<{title: string; content: string; start: string; end: string} | null>(null),
@@ -70,7 +70,7 @@ export default function EventDetailView({ eventId }: { eventId: number }) {
         version: record.version,
       });
       await notifyDataChanged({ type: "updated", eventId });
-      closeCurrentWindow();
+      (onDone || closeCurrentWindow)();
     } catch (e) {
       setError(e instanceof Error ? e.message : "操作失败");
     } finally {
@@ -82,7 +82,7 @@ export default function EventDetailView({ eventId }: { eventId: number }) {
   const canEdit = record.my_role === "editor";
   const creator = record.creator_id === auth.user?.id;
   return (
-    <WindowFrame title="日程详情" className="is-form-window">
+    <WindowFrame onBack={onDone} title="日程详情" className="is-form-window">
       <form className="side-form utility-form" onSubmit={save}>
         <div className="group-context"><span>{groups.find(group => group.id === record.group_id)?.name || "群组"}</span>{record.creator && <><Avatar url={record.creator.avatar} name={record.creator.nickname || record.creator.username} size={24} /><span>{record.creator.nickname || record.creator.username} 创建</span></>}<small>{canEdit ? "可编辑" : "只读"}</small></div>
         <fieldset className="schedule-fields" disabled={!canEdit || saving}>
@@ -128,7 +128,7 @@ export default function EventDetailView({ eventId }: { eventId: number }) {
         </fieldset>
         {creator && <SchedulePermissions kind="event" id={eventId} groupID={record.group_id} creatorID={record.creator_id} roles={record.member_roles} onChanged={async () => { const item = await getEvent(eventId); setRecord(record => record ? { ...record, my_role: item.my_role, member_roles: item.member_roles } : record); }} />}
         {error && <div role="alert">{error}</div>}
-        {creator && <button type="button" className="delete-button" disabled={saving} onClick={() => { if (!window.confirm("确认删除这条日程及整个重复周期吗？")) return; setSaving(true); setError(""); void deleteEvent(eventId).then(async () => { await notifyDataChanged({ type: "deleted", eventId }); closeCurrentWindow(); }).catch(reason => setError(reason instanceof Error ? reason.message : "删除失败")).finally(() => setSaving(false)); }}>删除日程</button>}
+        {creator && <button type="button" className="delete-button" disabled={saving} onClick={() => { if (!window.confirm("确认删除这条日程及整个重复周期吗？")) return; setSaving(true); setError(""); void deleteEvent(eventId).then(async () => { await notifyDataChanged({ type: "deleted", eventId }); (onDone || closeCurrentWindow)(); }).catch(reason => setError(reason instanceof Error ? reason.message : "删除失败")).finally(() => setSaving(false)); }}>删除日程</button>}
         {canEdit && <button type="submit" className="save-button event-save-button" disabled={saving}>
           {saving ? "保存中" : "保存"}
         </button>}

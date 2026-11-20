@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"note/internal/auth"
+	"note/internal/calendarsync"
 	"note/internal/model"
 	"note/internal/notification"
+	"note/internal/todo"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/alicebob/miniredis/v2/server"
@@ -137,6 +139,32 @@ func TestAppDoesNotReportReadyWhenSubscriptionFails(t *testing.T) {
 	}
 }
 
+func TestAppCleansUpWhenCalendarSubscriptionFails(t *testing.T) {
+	s := miniredis.RunT(t)
+	s.Server().SetPreHook(func(peer *server.Peer, command string, args ...string) bool {
+		if strings.EqualFold(command, "PSUBSCRIBE") && len(args) > 0 && args[0] == "note:calendar:*:live" {
+			peer.WriteError("ERR test calendar subscription rejected")
+			return true
+		}
+		return false
+	})
+	app := startNotificationTestApp(t, filepath.Join(t.TempDir(), "note.db"), s.Addr())
+	if err := app.wait(t); err == nil {
+		t.Fatal("app started despite failed calendar subscription")
+	}
+	if !strings.Contains(app.stderr.String(), "initialize calendar subscriber") {
+		t.Fatalf("unexpected startup error: %s", app.stderr.String())
+	}
+	select {
+	case url := <-app.ready:
+		t.Fatalf("app reported ready before calendar subscription: %s", url)
+	default:
+	}
+	if s.PubSubNumPat() != 0 {
+		t.Fatal("notification subscription leaked")
+	}
+}
+
 func openNotificationTestStream(
 	t *testing.T, ctx context.Context, url, token string,
 ) <-chan notification.Event {
@@ -234,8 +262,8 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("app did not report ready")
 	}
-	if redisServer.PubSubNumPat() != 1 {
-		t.Fatal("app reported ready without a Redis subscription")
+	if redisServer.PubSubNumPat() != 2 {
+		t.Fatal("app reported ready without both Redis subscriptions")
 	}
 	tokens, err := auth.NewTokenManager(noteAppTestSecret, time.Minute)
 	if err != nil {
@@ -354,6 +382,31 @@ func TestAppPushesJoinApplicationAndShutsDown(t *testing.T) {
 		}
 		if card.ID != notice.ID || card.ActorID != applicant.ID || card.RequestStatus != model.Pending {
 			t.Fatalf("cached card: %+v", card)
+		}
+	}
+
+	// A real Todo transaction reaches both owner windows through the calendar subscriber.
+	start := time.Now().UTC()
+	content := "calendar wiring"
+	record := model.Todo{GroupID: item.ID, CreatorID: owner.ID, Title: "calendar wiring", Content: &content, StartsAt: &start}
+	if err := todo.NewGORMRepository(db).Create(ctx, &record); err != nil {
+		t.Fatal(err)
+	}
+	for _, window := range []<-chan notification.Event{firstWindow, secondWindow} {
+		select {
+		case e := <-window:
+			var change calendarsync.Change
+			if e.Name != "cldr" {
+				t.Fatalf("expected calendar event, got %+v", e)
+			}
+			if err := json.Unmarshal([]byte(e.Data), &change); err != nil {
+				t.Fatal(err)
+			}
+			if change.GroupID != item.ID || change.ID != record.ID || change.Kind != "todo" || change.Action != "upsert" {
+				t.Fatalf("unexpected calendar payload: %+v", change)
+			}
+		case <-ctx.Done():
+			t.Fatal("calendar did not reach SSE")
 		}
 	}
 

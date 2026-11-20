@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"note/internal/auth"
 	"note/internal/calendar"
+	"note/internal/calendarsync"
 	"note/internal/event"
 	"note/internal/group"
 	"note/internal/notification"
@@ -161,6 +162,9 @@ func Run() (runErr error) {
 		rebuild,
 	)
 
+	cal := calendarsync.NewDelivery(redisClient)
+	dispatcher := notification.NewDispatcher(delivery, cal)
+
 	// 整个后端进程共用一个 Hub。
 	notificationHub := notification.NewHub()
 	defer notificationHub.Close()
@@ -245,9 +249,15 @@ func Run() (runErr error) {
 		return fmt.Errorf("initialize notification subscriber: %w", err)
 	}
 
+	calendarSub, err := notification.SubscribeCldr(workerCtx, redisClient)
+	if err != nil {
+		_ = notificationSub.Close()
+		return fmt.Errorf("initialize calendar subscriber: %w", err)
+	}
+
 	// subscriberErr：接收循环异常退出时，上报错误。
 	// subscriberDone：接收循环已经结束的信号。
-	subscriberErr := make(chan error, 1)
+	subscriberErr := make(chan error, 2)
 	subscriberDone := make(chan struct{})
 
 	// 2. 持续接收 Redis 广播，交给同一个 notificationHub。
@@ -264,7 +274,17 @@ func Run() (runErr error) {
 		}
 	}()
 
-	// 3. 订阅成功后，再启动 Outbox 投递。
+	calendarDone := make(chan struct{})
+	go func() {
+		defer close(calendarDone)
+		if err := notification.RunCldrSubscriber(
+			workerCtx, calendarSub, notificationHub,
+		); err != nil {
+			subscriberErr <- fmt.Errorf("calendar subscriber: %w", err)
+		}
+	}()
+
+	// 3. 两个订阅都成功后，再启动 Outbox 投递。
 	workerDone := make(chan struct{})
 	go func() {
 		defer close(workerDone)
@@ -272,16 +292,17 @@ func Run() (runErr error) {
 		notification.RunOutboxWorker(
 			workerCtx,
 			notificationRepository,
-			delivery,
+			dispatcher,
 		)
 	}()
 
-	// 退出时通知两个循环停止，并等它们结束。
+	// 退出时通知 Worker 和两个订阅循环停止，并等它们结束。
 	// 然后才会执行前面注册的 Redis、SQLite 关闭操作。
 	defer func() {
 		cancelWorker()
 		<-workerDone
 		<-subscriberDone
+		<-calendarDone
 	}()
 
 	// 订阅确认、后台循环启动后，再接受 HTTP 请求并通知桌面端启动成功。
@@ -313,14 +334,14 @@ func Run() (runErr error) {
 			runErr = fmt.Errorf("serve HTTP: %w", err)
 		}
 	case err := <-subscriberErr:
-		runErr = fmt.Errorf("receive Redis notifications: %w", err)
+		runErr = fmt.Errorf("receive Redis events: %w", err)
 	case <-stopCtx.Done():
 		log.Print("shutdown signal received")
 	case <-parentClosed:
 		log.Print("desktop parent process closed")
 	}
 
-	// Electron 退出或后台异常不会取消 stopCtx，需要主动停止两个后台循环。
+	// Electron 退出或后台异常不会取消 stopCtx，需要主动停止全部后台循环。
 	cancelWorker()
 
 	//最多等待10秒

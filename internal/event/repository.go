@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"note/internal/calendarsync"
 	apperrors "note/internal/errors"
 	"note/internal/model"
 
@@ -84,7 +85,10 @@ func (r *gormRepository) Update(ctx context.Context, item *model.Event, version,
 			return apperrors.ErrEventConcurrentUpdate
 		}
 		// 更新字段仍与原 Event 一致，不改所属群、创建者或重复日期。
-		return eventDetails(tx).First(&updated, item.ID).Error
+		if err := eventDetails(tx).First(&updated, item.ID).Error; err != nil {
+			return err
+		}
+		return calendarsync.EnqueueGroup(tx, calendarsync.Change{GroupID: target.GroupID, Kind: "event", ID: item.ID, Action: "upsert"})
 	})
 	if err != nil {
 		return err
@@ -127,7 +131,10 @@ func (r *gormRepository) Create(
 		if err := tx.Omit("User").CreateInBatches(&item.Members, 200).Error; err != nil {
 			return fmt.Errorf("initialize event permissions: %w", err)
 		}
-		return tx.Select("id", "username", "suffix", "nickname", "avatar").First(&item.Creator, item.CreatorID).Error
+		if err := tx.Select("id", "username", "suffix", "nickname", "avatar").First(&item.Creator, item.CreatorID).Error; err != nil {
+			return err
+		}
+		return calendarsync.EnqueueGroup(tx, calendarsync.Change{GroupID: item.GroupID, Kind: "event", ID: item.ID, Action: "upsert"})
 	})
 }
 
@@ -260,7 +267,10 @@ func (r *gormRepository) Delete(ctx context.Context, id, userID uint) error {
 		if err := tx.Where("event_id = ?", id).Delete(&model.EventMember{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.Event{}, id).Error
+		if err := tx.Delete(&model.Event{}, id).Error; err != nil {
+			return err
+		}
+		return calendarsync.EnqueueGroup(tx, calendarsync.Change{GroupID: item.GroupID, Kind: "event", ID: id, Action: "remove"})
 	})
 }
 
@@ -289,6 +299,9 @@ func (r *gormRepository) PatchRole(ctx context.Context, actorID, eventID uint, u
 		if permissions != int64(len(userIDs)) {
 			return apperrors.ErrEventMemberNotFound
 		}
-		return tx.Model(&model.EventMember{}).Where("event_id = ? AND user_id IN ?", eventID, userIDs).Update("role", role).Error
+		if err := tx.Model(&model.EventMember{}).Where("event_id = ? AND user_id IN ?", eventID, userIDs).Update("role", role).Error; err != nil {
+			return err
+		}
+		return calendarsync.EnqueueCalendar(tx, append([]uint{actorID}, userIDs...), calendarsync.Change{GroupID: item.GroupID, Kind: "event", ID: eventID, Action: "upsert"})
 	})
 }

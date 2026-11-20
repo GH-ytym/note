@@ -251,6 +251,11 @@ func (h *NotificationHandler) Stream(c *gin.Context) {
 			}
 
 			switch event.Name {
+			//是日历那边的更新
+			case "cldr":
+				if err := send(event.Name, event.Data); err != nil {
+					return
+				}
 			//说明发生了缓存重建
 			case "notification.reset":
 				if err := snapshot(rev); err != nil {

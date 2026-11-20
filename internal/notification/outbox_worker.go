@@ -4,16 +4,21 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"note/internal/model"
 	"time"
 )
 
+type Deliverer interface {
+	Deliver(ctx context.Context, task model.Outbox) (bool, error)
+}
+
 // PublishPending 按 ID 顺序串行处理一批未发布的 Outbox，每条完成后单独标记。
 // 遇到错误或 Deliver 返回 false 就结束本轮，未标记的任务会被后续轮次再次查到。
-// 一条任务包含一个用户的一个 Change，里面可以有多张通知卡片。
+// 每条任务交给 Deliverer 分流，通知和日历各自完成投递。
 func PublishPending(
 	ctx context.Context,
 	repo Repository,
-	delivery *Delivery,
+	delivery Deliverer,
 ) error {
 	//查询未投递的任务
 	tasks, err := repo.ListPendingOutbox(ctx)
@@ -51,7 +56,7 @@ func PublishPending(
 func RunOutboxWorker(
 	ctx context.Context,
 	repo Repository,
-	delivery *Delivery,
+	delivery Deliverer,
 ) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -77,7 +82,7 @@ func RunOutboxWorker(
 		}
 		// 失败只结束当前一轮；未标记成功的任务留给下一轮重试。
 		if err != nil {
-			log.Printf("publish pending notifications failed: %v", err)
+			log.Printf("publish pending outbox failed: %v", err)
 			//不return
 		}
 

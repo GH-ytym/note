@@ -21,7 +21,7 @@ func eventRepositoryFixture(t *testing.T) (*gorm.DB, model.User, model.Group) {
 	}
 	pool.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = pool.Close() })
-	if err := db.AutoMigrate(&model.User{}, &model.Group{}, &model.GroupMember{}, &model.Event{}, &model.EventDate{}, &model.EventMember{}); err != nil {
+	if err := db.AutoMigrate(&model.Outbox{}, &model.User{}, &model.Group{}, &model.GroupMember{}, &model.Event{}, &model.EventDate{}, &model.EventMember{}); err != nil {
 		t.Fatal(err)
 	}
 	owner := model.User{Username: "owner", Suffix: 12345, Email: "owner@example.com", PasswordHash: "test-hash"}

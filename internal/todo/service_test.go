@@ -40,7 +40,7 @@ func testService(t *testing.T) Service {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	if err := db.AutoMigrate(&model.Todo{}, &model.TodoDate{}, &model.TodoCompletion{}, &model.TodoMember{}, &model.GroupMember{}); err != nil {
+	if err := db.AutoMigrate(&model.Outbox{}, &model.Todo{}, &model.TodoDate{}, &model.TodoCompletion{}, &model.TodoMember{}, &model.GroupMember{}); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 	owner := model.User{ID: 1, Username: "test_owner", Suffix: 12345, Email: "owner@example.com", PasswordHash: "test-hash"}

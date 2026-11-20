@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"note/internal/calendarsync"
 	"note/internal/model"
 	"slices"
 	"time"
@@ -157,7 +158,9 @@ func (r *gormRepository) PatchRole(ctx context.Context, actorID, todoID uint, us
 			return fmt.Errorf("update todo member roles: %w", err)
 		}
 
-		return nil
+		return calendarsync.EnqueueCalendar(tx, append([]uint{actorID}, userIDs...), calendarsync.Change{
+			GroupID: todo.GroupID, Kind: "todo", ID: todo.ID, Action: "upsert",
+		})
 	})
 }
 
@@ -293,7 +296,9 @@ func (r *gormRepository) Create(ctx context.Context, item *model.Todo) error {
 			return fmt.Errorf("initialize todo member permissions: %w", err)
 		}
 
-		return nil
+		return calendarsync.EnqueueGroup(tx, calendarsync.Change{
+			GroupID: item.GroupID, Kind: "todo", ID: item.ID, Action: "upsert",
+		})
 	})
 }
 
@@ -551,7 +556,9 @@ func (r *gormRepository) Patch(
 			return fmt.Errorf("load patched todo: %w", err)
 		}
 
-		return nil
+		return calendarsync.EnqueueGroup(tx, calendarsync.Change{
+			GroupID: item.GroupID, Kind: "todo", ID: item.ID, Action: "upsert",
+		})
 
 	})
 	if err != nil {
@@ -606,7 +613,9 @@ func (r *gormRepository) Delete(ctx context.Context, id uint, userID uint) error
 				return apperrors.ErrTodoNotFound
 			}
 
-			return nil
+			return calendarsync.EnqueueGroup(tx, calendarsync.Change{
+				GroupID: item.GroupID, Kind: "todo", ID: item.ID, Action: "remove",
+			})
 		})
 }
 
@@ -694,7 +703,9 @@ func (r *gormRepository) SetOccurrenceDone(
 			}
 		}
 
-		return nil
+		return calendarsync.EnqueueGroup(tx, calendarsync.Change{
+			GroupID: todo.GroupID, Kind: "todo", ID: todo.ID, Action: "upsert",
+		})
 	})
 }
 

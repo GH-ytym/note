@@ -60,7 +60,7 @@ func (m *mockEventRepository) Create(_ context.Context, item *model.Event) error
 
 func (m *mockEventRepository) ListInRange(
 	_ context.Context,
-	_ uint,
+	_, _ uint,
 	from time.Time,
 	to time.Time,
 ) ([]model.Event, error) {
@@ -401,7 +401,7 @@ func TestListInRangeExpandsOccurrences(t *testing.T) {
 	}}
 	service := NewService(repo)
 
-	items, err := service.ListInRange(context.Background(), 1, from, to)
+	items, err := service.ListInRange(context.Background(), 1, 0, from, to)
 	if err != nil {
 		t.Fatalf("ListInRange() error = %v", err)
 	}
@@ -437,7 +437,7 @@ func TestListInRangeLongWeeklyEventCanOverlapItself(t *testing.T) {
 	repo := &mockEventRepository{listResult: []model.Event{{
 		ID: 1, Title: "跨月周期", StartsAt: start, EndsAt: start.AddDate(0, 0, 10), RepeatMode: model.RepeatWeekly,
 	}}}
-	items, err := NewService(repo).ListInRange(context.Background(), 1, from, from.AddDate(0, 0, 1))
+	items, err := NewService(repo).ListInRange(context.Background(), 1, 0, from, from.AddDate(0, 0, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +464,7 @@ func TestListInRangeIncludesOccurrenceOverlappingStart(t *testing.T) {
 	}}}
 	service := NewService(repo)
 
-	items, err := service.ListInRange(context.Background(), 1, from, to)
+	items, err := service.ListInRange(context.Background(), 1, 0, from, to)
 	if err != nil {
 		t.Fatalf("ListInRange() error = %v", err)
 	}
@@ -492,7 +492,7 @@ func TestListInRangeExpandsCustomDates(t *testing.T) {
 	}}}
 	service := NewService(repo)
 
-	items, err := service.ListInRange(context.Background(), 1, from, to)
+	items, err := service.ListInRange(context.Background(), 1, 0, from, to)
 	if err != nil {
 		t.Fatalf("ListInRange() error = %v", err)
 	}
@@ -514,7 +514,7 @@ func TestListInRangeRejectsInvalidStoredEvent(t *testing.T) {
 	}}}
 	service := NewService(repo)
 
-	_, err := service.ListInRange(context.Background(), 1, from, from.AddDate(0, 0, 1))
+	_, err := service.ListInRange(context.Background(), 1, 0, from, from.AddDate(0, 0, 1))
 	if !errors.Is(err, apperrors.ErrInvalidEventTimeRange) {
 		t.Fatalf("ListInRange() error = %v, want %v", err, apperrors.ErrInvalidEventTimeRange)
 	}
@@ -538,7 +538,7 @@ func TestListInRangeRejectsInvalidRange(t *testing.T) {
 			repo := &mockEventRepository{}
 			service := NewService(repo)
 
-			_, err := service.ListInRange(context.Background(), 1, test.from, test.to)
+			_, err := service.ListInRange(context.Background(), 1, 0, test.from, test.to)
 			if !errors.Is(err, apperrors.ErrInvalidCalendarRange) {
 				t.Fatalf("ListInRange() error = %v, want %v", err, apperrors.ErrInvalidCalendarRange)
 			}

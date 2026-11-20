@@ -7,6 +7,7 @@ import (
 
 // Service 是通知列表的业务入口，分页读取和恢复由 Reader 完成。
 type Service interface {
+	Detail(context.Context, uint, uint) (Detail, error)
 	MarkRead(ctx context.Context, uid uint, ids []uint) error
 	List(
 		ctx context.Context,
@@ -97,4 +98,31 @@ func (s *service) Revision(
 	}
 
 	return s.repo.Revision(ctx, uid)
+}
+
+// Detail 查询当前用户的通知及最新群资料。
+func (s *service) Detail(ctx context.Context, uid, id uint) (Detail, error) {
+	if uid == 0 {
+		return Detail{}, apperrors.ErrNotificationUnauthenticated
+	}
+	n, err := s.repo.ByIDForReceiver(ctx, uid, id)
+	if err != nil {
+		return Detail{}, err
+	}
+	card, err := NewCard(n)
+	if err != nil {
+		return Detail{}, err
+	}
+	return Detail{Card: card, Group: GroupSummary{ID: n.Group.ID, Name: n.Group.Name, Policy: string(n.Group.Policy), MemberCount: n.Group.MemberCount}}, nil
+}
+
+type Detail struct {
+	Card  Card         `json:"card"`
+	Group GroupSummary `json:"group"`
+}
+type GroupSummary struct {
+	ID          uint   `json:"id"`
+	Name        string `json:"name"`
+	Policy      string `json:"policy"`
+	MemberCount int64  `json:"member_count"`
 }

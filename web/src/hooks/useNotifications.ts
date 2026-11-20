@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { auth } from "../auth";
+import { createReviewer } from "../lib/notification-review";
+import type { Reviews } from "../lib/notification-review";
+import { publishDataChanged } from "../data-events";
 import { consumeNotifications } from "../lib/notification-stream";
 import { applyChange, mergePage, version } from "../lib/notification-state";
 import type { NotificationPage, NotificationChange } from "../lib/notification-state";
@@ -19,6 +22,8 @@ export default function useNotifications() {
   const [attempt, setAttempt] = useState(0);
   const lifetime = useRef<AbortSignal | null>(null);
   const reload = () => { generation.current++; ready.current = false; setConnected(false); setAttempt(n=>n+1); };
+  const [reviews, setReviews] = useState<Reviews>({});
+  const [review] = useState(() => createReviewer((path, options) => auth.request<void>(path, options), setReviews, reload));
   function update(page: NotificationPage) { current.current=page; setInbox(page); }
   useEffect(() => {
     const controller = new AbortController();
@@ -38,10 +43,17 @@ export default function useNotifications() {
             version(page.revision);
             if(!Array.isArray(page.items)||!Number.isSafeInteger(page.next)||page.next<0||!Number.isSafeInteger(page.unread_count)||page.unread_count<0)throw new Error("通知快照无效");
             generation.current++; update(page); ready.current=true;
+            void publishDataChanged({type:"groups"}).catch(()=>{});
             setConnected(true);setLoading(false);setError("");delay=1000;
           }else{
             if(!ready.current)throw new Error("缺少通知快照");
-            update(applyChange(current.current,event.data as NotificationChange));
+            const change = event.data as NotificationChange;
+            const previous = current.current;
+            const page = applyChange(previous, change);
+            update(page);
+            if (page !== previous && change.upserts.some(card => card.type === "join_reviewed" && card.request_status === "accepted")) {
+              void publishDataChanged({type:"groups"}).catch(()=>{});
+            }
           }
         });
       }catch(reason){
@@ -72,5 +84,5 @@ export default function useNotifications() {
     await auth.request<void>("/notifications/read",{method:"POST",body:JSON.stringify({ids}),signal:lifetime.current??undefined});
     reload();
   }
-  return {...inbox,loading,loadingMore,error,connected,reload,loadMore,markRead};
+  return {...inbox,loading,loadingMore,error,connected,reload,loadMore,markRead,reviews,review};
 }

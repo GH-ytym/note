@@ -213,8 +213,10 @@ func (r *gormRepository) ByIDForReceiver(
 			userID,
 		)
 
-		return preloadCardRelations(query).
-			First(&item).Error
+		if err := preloadCardRelations(query).Preload("Group", func(db *gorm.DB) *gorm.DB { return db.Select("id", "name", "policy") }).First(&item).Error; err != nil {
+			return err
+		}
+		return tx.Model(&model.GroupMember{}).Where("group_id = ?", item.GroupID).Count(&item.Group.MemberCount).Error
 	}, &sql.TxOptions{ReadOnly: true})
 
 	if err != nil {

@@ -19,7 +19,7 @@ type Service interface {
 	Delete(ctx context.Context, id uint, userID uint) error
 	CalendarOccurrences(
 		ctx context.Context,
-		userID uint,
+		userID, groupID uint,
 		from time.Time,
 		to time.Time,
 	) ([]CalendarOccurrence, error)

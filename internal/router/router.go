@@ -85,6 +85,7 @@ func registerAPI(
 
 	// 从redis分页读取通知（在线的时候）
 	protected.GET("/notifications", nh.List)
+	protected.GET("/notifications/:notificationID", nh.Detail)
 	protected.POST("/notifications/read", nh.MarkRead)
 	//离线重连，走数据库查完整通知快照
 	protected.GET("/notifications/snapshot", nh.Snapshot)
@@ -108,6 +109,7 @@ func registerAPI(
 		//加群和退群
 		groups.GET("/lookup", gh.Lookup)
 		groups.POST("/join", gh.JoinGroup)
+		groups.POST("/join-requests/:joinRequestID/review", gh.Review)
 		groups.POST("/:groupID/quit", gh.QuitGroup)
 		//解散群组
 		groups.POST("/:groupID/dismiss", gh.DismissGroup)
@@ -141,5 +143,14 @@ func registerAPI(
 		events.PATCH("/:id", eh.PatchEvent)
 		events.DELETE("/:id", eh.DeleteEvent)
 		events.PATCH("/:id/members", eh.PatchRoles)
+	}
+}
+
+// RegisterAvatarFiles 支持直接访问和 /api 前缀；外层部署前缀由代理剥离。
+func RegisterAvatarFiles(r *gin.Engine, files http.Handler) {
+	for _, prefix := range []string{"/media", "/api/media"} {
+		serve := gin.WrapH(http.StripPrefix(prefix, files))
+		r.GET(prefix+"/*file", serve)
+		r.HEAD(prefix+"/*file", serve)
 	}
 }

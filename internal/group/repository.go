@@ -16,6 +16,7 @@ import (
 )
 
 type Repository interface {
+	Review(ctx context.Context, uid, id uint, status model.Status) error
 	ByCode(ctx context.Context, code string) (model.Group, error)
 	Create(ctx context.Context, item *model.Group) error
 	ListByUserID(

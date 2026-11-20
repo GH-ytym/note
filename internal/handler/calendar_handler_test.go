@@ -15,14 +15,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type calendarStub struct{ actorID uint }
+type calendarStub struct{ actorID, groupID uint }
 
-func (s *calendarStub) Get(_ context.Context, actor uint, _, _ time.Time) (calendar.Result, error) {
-	s.actorID = actor
-	return calendar.Result{
-		Todos:  []todo.CalendarOccurrence{{TodoID: 1, GroupID: 10, MyRole: model.TodoViewer}, {TodoID: 2, GroupID: 20, MyRole: model.TodoEditor}},
-		Events: []event.CalendarOccurrence{{EventID: 1, GroupID: 20}, {EventID: 2, GroupID: 10}},
-	}, nil
+func (s *calendarStub) Get(_ context.Context, actor, groupID uint, _, _ time.Time) (calendar.Result, error) {
+	s.actorID, s.groupID = actor, groupID
+	result := calendar.Result{Todos: []todo.CalendarOccurrence{}, Events: []event.CalendarOccurrence{}}
+	for _, id := range []uint{10, 20} {
+		if groupID == 0 || groupID == id {
+			result.Todos = append(result.Todos, todo.CalendarOccurrence{TodoID: id, GroupID: id})
+			result.Events = append(result.Events, event.CalendarOccurrence{EventID: id, GroupID: id})
+		}
+	}
+	return result, nil
 }
 
 func TestCalendarGroupFilterKeepsAuthenticatedIdentity(t *testing.T) {
@@ -35,8 +39,9 @@ func TestCalendarGroupFilterKeepsAuthenticatedIdentity(t *testing.T) {
 		suffix string
 		code   int
 		count  int
+		group  uint
 	}{
-		{"", 200, 2}, {"&group_id=10&user_id=99", 200, 1}, {"&group_id=999", 200, 0}, {"&group_id=-1", 400, 0},
+		{"", 200, 2, 0}, {"&group_id=10&user_id=99", 200, 1, 10}, {"&group_id=999", 200, 0, 999}, {"&group_id=-1", 400, 0, 0},
 	} {
 		res := httptest.NewRecorder()
 		r.ServeHTTP(res, httptest.NewRequest("GET", "/calendar?from=2026-10-01&to=2026-11-01"+tc.suffix, nil))
@@ -52,7 +57,7 @@ func TestCalendarGroupFilterKeepsAuthenticatedIdentity(t *testing.T) {
 		if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
 			t.Fatal(err)
 		}
-		if service.actorID != 7 || len(result.Data.Todos) != tc.count || len(result.Data.Events) != tc.count {
+		if service.actorID != 7 || service.groupID != tc.group || len(result.Data.Todos) != tc.count || len(result.Data.Events) != tc.count {
 			t.Fatalf("%s: %+v", tc.suffix, result)
 		}
 		if tc.count == 1 && (result.Data.Todos[0].GroupID != 10 || result.Data.Events[0].GroupID != 10) {

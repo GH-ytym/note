@@ -550,7 +550,7 @@ func TestEventReadOnlyQueriesAndMigration(t *testing.T) {
 		t.Fatalf("list while writing: %+v %v", page, err)
 	}
 	from := time.Date(2026, 10, 4, 0, 0, 0, 0, time.FixedZone("CST", 8*3600))
-	occurrences, err := es.ListInRange(ctx, member.ID, from, from.AddDate(0, 0, 1))
+	occurrences, err := es.ListInRange(ctx, member.ID, 0, from, from.AddDate(0, 0, 1))
 	if err != nil || len(occurrences) != 1 || occurrences[0].Title != item.Title {
 		t.Fatalf("calendar while writing: %+v %v", occurrences, err)
 	}

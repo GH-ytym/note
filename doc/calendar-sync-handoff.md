@@ -29,7 +29,7 @@ Publish 成功仅代表 Redis 接受，不代表客户端已收到。重复投�
 5. 后台校正不清空已有数据、不展示全屏 loading；成功时替换当前范围，失败保留数据并等待下次触发。
 6. 当前 hook 已有 generation 防旧响应覆盖，但还没有定时器、单请求合并或 SSE cldr 接入。还需结合 CalendarWindow 的活跃标签状态，不能只依赖 document.visibilityState 判断。
 
-注意：现有 GET /calendar 虽然接收 group_id，后端是在 Handler 最后过滤群；SQL 仍查询用户所属群的范围候选。不能声称 SQL 已只查当前群。启用周期查询前，应把 group_id 下推到查询层，并保持群成员资格检查。
+2026-11-20 查询优化：GET /calendar 的 group_id 已贯穿 Service 和 Repository，在 Todo/Event SQL 查询中筛选目标群，同时保留当前成员资格检查。完成记录仅查询筛选后的 Todo ID；重复日程只展开筛选后的候选。不传 group_id（或传 0）仍查询用户所属全部群。非成员、退群或不存在的群返回空列表，保持原接口行为。
 
 ## 验证
 

@@ -34,3 +34,9 @@
 .notification-selection span { color: var(--muted); }
 .notification-item > input { flex-shrink: 0; align-self: center; }
 .notification-panel button:disabled { opacity: .45; cursor: not-allowed; }
+.notification-review { margin-top: 10px; font-size: 12px; }
+.notification-actions { display: flex; gap: 8px; }
+.notification-actions button { padding: 5px 12px; border: 1px solid var(--line); border-radius: 6px; }
+.notification-actions .review-accept { background: var(--yellow); color: var(--on-theme); }
+.notification-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.notification-review .notification-error { padding: 6px 0 0; }

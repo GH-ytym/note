@@ -19,6 +19,42 @@ func NewGroupHandler(service group.Service) *GroupHandler {
 	return &GroupHandler{service: service}
 }
 
+// Review 审核 Card.JoinRequestID 对应的申请，审核人只取登录身份。
+func (h *GroupHandler) Review(c *gin.Context) {
+	uid := c.GetUint(middleware.UserIDKey)
+	if uid == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+		return
+	}
+	var uri ReviewGroupJoinURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "申请 ID 不合法"})
+		return
+	}
+	var req ReviewGroupJoinRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "decision 必须为 accept 或 reject"})
+		return
+	}
+	err := h.service.Review(c.Request.Context(), uid, uri.JoinRequestID, req.Decision)
+	switch {
+	case errors.Is(err, apperrors.ErrGroupUnauthenticated):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+	case errors.Is(err, apperrors.ErrGroupJoinRequestNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, apperrors.ErrGroupReviewDenied):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, apperrors.ErrGroupReviewConflict), errors.Is(err, apperrors.ErrGroupRequestExpired):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	case errors.Is(err, apperrors.ErrGroupReviewInvalid):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "审核申请失败"})
+	default:
+		c.Status(http.StatusNoContent)
+	}
+}
+
 func (h *GroupHandler) ListMembers(c *gin.Context) {
 	userID := c.GetUint(middleware.UserIDKey)
 	if userID == 0 {

@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"note/internal/model"
 	"note/internal/utils"
@@ -16,6 +17,11 @@ func migrateGroupSchema(db *gorm.DB) error {
 			return tx.AutoMigrate(&model.Group{}, &model.GroupMember{})
 		}
 
+		if !tx.Migrator().HasColumn(&model.Group{}, "Avatar") {
+			if err := tx.Migrator().AddColumn(&model.Group{}, "Avatar"); err != nil {
+				return err
+			}
+		}
 		// 有数据的父表显式升级，避免重建 groups 时级联影响成员和 Todo。
 		if !tx.Migrator().HasColumn(&model.Group{}, "Policy") {
 			// 旧群全部保留原来的直接入群行为；CHECK 与新模型一致。
@@ -113,10 +119,19 @@ func migrateNotificationSchema(db *gorm.DB) error {
 			if err := tx.Raw("PRAGMA foreign_key_list(notifications)").Scan(&foreignKeys).Error; err != nil {
 				return err
 			}
+			restrict := false
 			for _, fk := range foreignKeys {
 				if fk.From == "group_id" && fk.OnDelete == "RESTRICT" {
-					return nil
+					restrict = true
 				}
+			}
+			var schema string
+			if err := tx.Raw("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notifications'").Scan(&schema).Error; err != nil {
+				return err
+			}
+			reviewed := strings.Contains(schema, "'join_reviewed'")
+			if restrict && reviewed {
+				return nil
 			}
 			// SQLite 外键变化需要重建表；保存迁移器不会保留的索引和触发器。
 			var objects []struct{ SQL string }
@@ -125,13 +140,26 @@ func migrateNotificationSchema(db *gorm.DB) error {
 				AND sql IS NOT NULL`).Scan(&objects).Error; err != nil {
 				return err
 			}
-			if tx.Migrator().HasConstraint(&model.Notification{}, "Group") {
-				if err := tx.Migrator().DropConstraint(&model.Notification{}, "Group"); err != nil {
-					return fmt.Errorf("drop notification group cascade: %w", err)
+			if !restrict {
+				if tx.Migrator().HasConstraint(&model.Notification{}, "Group") {
+					if err := tx.Migrator().DropConstraint(&model.Notification{}, "Group"); err != nil {
+						return fmt.Errorf("drop notification group cascade: %w", err)
+					}
+				}
+				if err := tx.Migrator().CreateConstraint(&model.Notification{}, "Group"); err != nil {
+					return err
 				}
 			}
-			if err := tx.Migrator().CreateConstraint(&model.Notification{}, "Group"); err != nil {
-				return err
+			// 同名 CHECK 不会自动升级，显式替换后才允许保存审核结果。
+			if !reviewed {
+				if tx.Migrator().HasConstraint(&model.Notification{}, "ck_notifications_type") {
+					if err := tx.Migrator().DropConstraint(&model.Notification{}, "ck_notifications_type"); err != nil {
+						return err
+					}
+				}
+				if err := tx.Migrator().CreateConstraint(&model.Notification{}, "ck_notifications_type"); err != nil {
+					return err
+				}
 			}
 			for _, object := range objects {
 				if err := tx.Exec(object.SQL).Error; err != nil {

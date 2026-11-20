@@ -124,9 +124,12 @@ func Run() (runErr error) {
 	}
 
 	refreshStore := auth.NewRefreshStore(redisClient)
-	avatarStore, err := profile.NewCOSStoreFromEnv()
+	avatarStore, err := profile.NewStoreFromEnv()
 	if err != nil {
 		return fmt.Errorf("initialize avatar storage: %w", err)
+	}
+	if local, ok := avatarStore.(*profile.LocalStore); ok {
+		defer local.Close()
 	}
 	profileHandler := handler.NewProfileHandler(profile.NewService(profile.NewRepository(db), avatarStore))
 
@@ -205,22 +208,14 @@ func Run() (runErr error) {
 		serverAddress = "127.0.0.1:8080"
 	}
 
-	server := &http.Server{
-		Addr: serverAddress,
-		Handler: router.NewWithWeb(
-			todoHandler,
-			eventHandler,
-			calendarHandler,
-			searchHandler,
-			authHandler,
-			groupHandler,
-			notificationHandler,
-			tokenManager,
-			os.Getenv("NOTE_WEB_DIR"),
-			profileHandler,
-		),
-		ReadHeaderTimeout: 5 * time.Second,
+	routes := router.NewWithWeb(
+		todoHandler, eventHandler, calendarHandler, searchHandler, authHandler,
+		groupHandler, notificationHandler, tokenManager, os.Getenv("NOTE_WEB_DIR"), profileHandler,
+	)
+	if local, ok := avatarStore.(*profile.LocalStore); ok {
+		router.RegisterAvatarFiles(routes, local)
 	}
+	server := &http.Server{Addr: serverAddress, Handler: routes, ReadHeaderTimeout: 5 * time.Second}
 	listener, err := net.Listen("tcp", server.Addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", server.Addr, err)

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import useNotifications from "../hooks/useNotifications";
 import type { NotificationCard } from "../hooks/useNotifications";
 import NotificationMenu from "./NotificationMenu";
-import Avatar from "./Avatar";
+import NotificationDetail from "./NotificationDetail";
 import useWindowDrag from "../hooks/useWindowDrag";
 import WindowControls from "./WindowControls";
 import CalendarWindow from "../views/CalendarWindow";
@@ -25,6 +25,19 @@ export default function Workspace() {
   const [picking, setPicking] = useState(false);
   const [mini, setMini] = useState(false);
   const [active, setActive] = useState("calendar");
+  // 保留详情页最近一次收到的卡片，避免重连仅加载第一页后退回旧状态。
+  useEffect(() => {
+    setTabs(old => {
+      let changed = false;
+      const next = old.map(tab => {
+        const card = inbox.items.find(item => item.id === tab.card?.id);
+        if (!card || card === tab.card) return tab;
+        changed = true;
+        return {...tab, card};
+      });
+      return changed ? next : old;
+    });
+  }, [inbox.items]);
   useEffect(() => {
     const open = (event: Event) => { const page = (event as CustomEvent<Page>).detail; setTabs(old => old.some(tab => tab.id === page.id) ? old : [...old, page]); setActive(page.id); };
     window.addEventListener("note-open-page", open);
@@ -52,7 +65,7 @@ export default function Workspace() {
     if (tab.todoId) return <DetailView todoId={tab.todoId} date={tab.date} onDone={done} />;
     const card = inbox.items.find(item => item.id === tab.card?.id) ?? tab.card;
     if (!card) return null;
-    return <section className="notification-detail"><small>通知详情</small><h1>{card.type === "join_requested" ? "入群申请" : "群组通知"}</h1><Avatar url={card.actor_avatar} name={card.actor_name} /><h2>{card.actor_name}</h2><p>{card.type === "join_requested" ? "申请加入" : "加入了"}「{card.group_name}」</p><time>{new Date(card.created_at).toLocaleString("zh-CN")}</time>{card.request_status === "pending" && <p title="审核功能尚未开放"><button disabled>同意</button> <button disabled>拒绝</button><small>审核功能尚未开放</small></p>}<button onClick={() => openPage({id: "notifications", title: "通知"})}>查看全部通知</button></section>;
+    return <NotificationDetail card={card} active={active === tab.id && !mini}/>;
   }
   return <InboxContext.Provider value={inbox}><div className="workspace"><header className="workspace-topbar" hidden={mini} {...drag}><nav inert={picking} ref={strip} className="workspace-tabs" aria-label="页面标签" onWheel={event => {
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY;

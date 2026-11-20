@@ -34,7 +34,7 @@ type Notification struct {
 	JoinRequestID *uint             `gorm:"index" json:"join_request_id"`
 	JoinRequest   *GroupJoinRequest `gorm:"foreignKey:JoinRequestID;constraint:OnDelete:SET NULL" json:"-"`
 
-	Type NotificationType `gorm:"not null;check:ck_notifications_type,type IN ('joined','join_requested')" json:"type"`
+	Type NotificationType `gorm:"not null;check:ck_notifications_type,type IN ('joined','join_requested','join_reviewed')" json:"type"`
 
 	// nil 表示通知未读；与 GroupJoinRequest.Status 是否已处理相互独立。
 	ReadAt *time.Time `gorm:"index:idx_notifications_receiver_read,priority:2" json:"read_at"`

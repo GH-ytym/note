@@ -13,7 +13,7 @@ const transport: AuthTransport = async (action, body, token) => {
   const run = async () => {
     if (action === "refresh" && auth.user?.access_token !== token) return auth.user;
     const path = action === "restore" ? "refresh" : action;
-    const response = await fetch(`/api/auth/${path}`, {
+    const response = await fetch(`${import.meta.env.BASE_URL}api/auth/${path}`, {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json", "X-Note-Request": "1" },
       body: body ? JSON.stringify(body) : undefined,
@@ -33,7 +33,7 @@ const transport: AuthTransport = async (action, body, token) => {
   return navigator.locks ? navigator.locks.request("note-auth", run) : run();
 };
 
-export const auth = new AuthClient(transport);
+export const auth = new AuthClient(transport, `${import.meta.env.BASE_URL}api`);
 channel?.addEventListener("message", event => auth.accept(event.data));
 window.noteDesktop?.onAuthChanged(user => auth.accept(user));
 export { APIError };

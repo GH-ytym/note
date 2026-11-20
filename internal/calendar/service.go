@@ -14,7 +14,7 @@ type TodoSource interface {
 	//实际上就是service那个CalendarOccurrences
 	CalendarOccurrences(
 		ctx context.Context,
-		userID uint,
+		userID, groupID uint,
 		from time.Time,
 		to time.Time,
 	) ([]todo.CalendarOccurrence, error)
@@ -25,7 +25,7 @@ type EventSource interface {
 	//实际上就是service实现的那个ListInRange
 	ListInRange(
 		ctx context.Context,
-		userID uint,
+		userID, groupID uint,
 		from time.Time,
 		to time.Time,
 	) ([]event.CalendarOccurrence, error)
@@ -38,11 +38,12 @@ type Result struct {
 }
 
 // Service 声明 Calendar 对 Handler 提供的能力。
+// groupID 为 0 时查询用户所属的全部群，否则仅查询指定群；始终检查当前成员资格。
 type Service interface {
 	//聚合todo和event的函数
 	Get(
 		ctx context.Context,
-		userID uint,
+		userID, groupID uint,
 		from time.Time,
 		to time.Time,
 	) (Result, error)
@@ -65,7 +66,7 @@ func NewService(
 
 func (s *service) Get(
 	ctx context.Context,
-	userID uint,
+	userID, groupID uint,
 	from time.Time,
 	to time.Time,
 ) (Result, error) {
@@ -78,12 +79,12 @@ func (s *service) Get(
 		return Result{}, apperrors.ErrInvalidCalendarRange
 	}
 
-	todos, err := s.todos.CalendarOccurrences(ctx, userID, from, to)
+	todos, err := s.todos.CalendarOccurrences(ctx, userID, groupID, from, to)
 	if err != nil {
 		return Result{}, err
 	}
 
-	events, err := s.events.ListInRange(ctx, userID, from, to)
+	events, err := s.events.ListInRange(ctx, userID, groupID, from, to)
 	if err != nil {
 		return Result{}, err
 	}

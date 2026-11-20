@@ -76,7 +76,7 @@ func TestReadOnlyQueriesDoNotWaitForWriter(t *testing.T) {
 			}
 		}},
 		{"calendar", func(t *testing.T, ctx context.Context) {
-			rows, err := service.CalendarOccurrences(ctx, owner.ID, date, date.AddDate(0, 0, 1))
+			rows, err := service.CalendarOccurrences(ctx, owner.ID, 0, date, date.AddDate(0, 0, 1))
 			if err != nil || len(rows) != 1 || rows[0].Title != item.Title || !rows[0].OccurrenceDone {
 				t.Fatalf("calendar: %+v %v", rows, err)
 			}
@@ -136,7 +136,7 @@ func TestCalendarReadsOneSnapshotDuringEdit(t *testing.T) {
 	}
 	results := make(chan result, 1)
 	go func() {
-		rows, err := service.CalendarOccurrences(context.WithValue(ctx, calendarReadKey{}, true), owner.ID, date, date.AddDate(0, 0, 2))
+		rows, err := service.CalendarOccurrences(context.WithValue(ctx, calendarReadKey{}, true), owner.ID, 0, date, date.AddDate(0, 0, 2))
 		results <- result{rows, err}
 	}()
 	select {
@@ -169,7 +169,7 @@ func TestCalendarReadsOneSnapshotDuringEdit(t *testing.T) {
 		t.Fatalf("mixed calendar snapshot: %+v", row)
 	}
 	// 事务结束后的新查询，应取得完整的新版本和新完成状态。
-	fresh, err := service.CalendarOccurrences(ctx, owner.ID, date, date.AddDate(0, 0, 2))
+	fresh, err := service.CalendarOccurrences(ctx, owner.ID, 0, date, date.AddDate(0, 0, 2))
 	if err != nil || len(fresh) != 1 {
 		t.Fatalf("new snapshot: %+v %v", fresh, err)
 	}

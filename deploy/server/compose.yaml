@@ -1,0 +1,53 @@
+name: note
+services:
+  api:
+    image: ${NOTE_IMAGE:?set NOTE_IMAGE to the release image}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 2
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    environment:
+      NOTE_REDIS_ADDR: redis:6379
+      NOTE_JWT_SECRET: ${NOTE_JWT_SECRET:?set a persistent random JWT secret}
+      NOTE_COOKIE_SECURE: "true"
+      NOTE_AVATAR_DIR: /data/uploads
+      NOTE_AVATAR_URL: ${NOTE_AVATAR_URL:-/p/note/api/media}
+    volumes:
+      - sqlite:/data
+    ports:
+      - "${NOTE_BIND:?platform assigned gateway address}:${NOTE_PORT:?platform assigned gateway port}:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/api/ping]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    cap_drop: [ALL]
+    # Redis entrypoint initializes the owned persistent volume before dropping privileges.
+    cap_add: [CHOWN, SETUID, SETGID]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+volumes:
+  sqlite:
+  redis:

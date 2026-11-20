@@ -24,7 +24,7 @@ const MaxUploadBytes = 5 << 20
 var ErrInvalidImage = errors.New("请选择 JPEG 或 PNG 图片，大小不超过 5MB，宽高不超过 4096 像素")
 var ErrStorageUnavailable = errors.New("头像存储暂未配置或不可用")
 
-// Store 可替换为其他云对象存储；没有本地文件存储实现。
+// Store 支持服务器本地目录或云对象存储，数据库只保存返回的图片 URL。
 type Store interface {
 	Put(context.Context, string, []byte) (string, error)
 	Delete(context.Context, string) error

@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-contrib/sse"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type NotificationHandler struct {
@@ -388,4 +389,24 @@ func (h *NotificationHandler) Snapshot(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, inbox)
+}
+
+func (h *NotificationHandler) Detail(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	id, err := strconv.ParseUint(c.Param("notificationID"), 10, 32)
+	if err != nil || id == 0 {
+		c.JSON(400, gin.H{"error": "通知 ID 不合法"})
+		return
+	}
+	detail, err := h.service.Detail(c.Request.Context(), c.GetUint(middleware.UserIDKey), uint(id))
+	switch {
+	case errors.Is(err, apperrors.ErrNotificationUnauthenticated):
+		c.JSON(401, gin.H{"error": "请先登录"})
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		c.JSON(404, gin.H{"error": "通知不存在"})
+	case err != nil:
+		c.JSON(500, gin.H{"error": "读取通知详情失败"})
+	default:
+		c.JSON(200, detail)
+	}
 }

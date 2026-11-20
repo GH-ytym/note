@@ -12,6 +12,7 @@ import (
 )
 
 type Service interface {
+	Review(ctx context.Context, uid, id uint, decision string) error
 	Lookup(ctx context.Context, userID uint, code string) (model.Group, error)
 	Create(
 		ctx context.Context,
@@ -43,6 +44,26 @@ type service struct {
 
 func NewService(repo Repository) Service {
 	return &service{repo: repo}
+}
+
+// Review 将接口的审核决定转换为申请状态，事务由仓库负责。
+func (s *service) Review(ctx context.Context, uid, id uint, decision string) error {
+	if uid == 0 {
+		return apperrors.ErrGroupUnauthenticated
+	}
+	if id == 0 {
+		return apperrors.ErrGroupJoinRequestNotFound
+	}
+	var status model.Status
+	switch decision {
+	case "accept":
+		status = model.Accepted
+	case "reject":
+		status = model.Rejected
+	default:
+		return apperrors.ErrGroupReviewInvalid
+	}
+	return s.repo.Review(ctx, uid, id, status)
 }
 
 func (s *service) ListMembers(ctx context.Context, groupID, userID uint) ([]model.GroupMember, error) {

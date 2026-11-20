@@ -19,7 +19,7 @@ import (
 type Repository interface {
 	Create(ctx context.Context, item *model.Event) error
 	List(ctx context.Context, query ListQuery) ([]model.Event, int64, error)
-	ListInRange(ctx context.Context, userID uint, from, to time.Time) ([]model.Event, error)
+	ListInRange(ctx context.Context, userID, groupID uint, from, to time.Time) ([]model.Event, error)
 	Get(ctx context.Context, id, userID uint) (model.Event, error)
 	Update(ctx context.Context, item *model.Event, version, userID uint) error
 	Delete(ctx context.Context, id, userID uint) error
@@ -148,7 +148,7 @@ func normalizeEventTimes(item *model.Event) {
 
 func (r *gormRepository) ListInRange(
 	ctx context.Context,
-	userID uint,
+	userID, groupID uint,
 	from, to time.Time,
 ) ([]model.Event, error) {
 	items := make([]model.Event, 0)
@@ -162,6 +162,9 @@ func (r *gormRepository) ListInRange(
 	}
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if groupID != 0 {
+			tx = tx.Where("events.group_id = ?", groupID)
+		}
 		return tx.Preload("Members", "user_id = ?", userID).
 			Where(`EXISTS (SELECT 1 FROM group_members gm
 			WHERE gm.group_id = events.group_id AND gm.user_id = ?)`, userID).

@@ -42,9 +42,7 @@
 .workspace-tabs .tab-title { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; text-align:left; padding:6px 10px; }
 .workspace-tabs .tab-close { flex:0 0 26px; padding:4px; }
 
-.group-row .group-dot { width:7px; height:7px; border-radius:50%; flex:0 0 7px; opacity:.65; }
 .group-row.is-active { background:transparent; font-weight:400; }
-.group-row.is-active .group-dot { opacity:1; filter:brightness(1.2); box-shadow:0 0 5px 1px currentColor; }
 .multi-view-calendar .calendar-header h1 { flex:0 0 190px; width:190px; overflow:hidden; text-overflow:ellipsis; }
 .multi-view-calendar .calendar-header .month-controls { flex-shrink:0; }
 .calendar-view-switch { position:relative; isolation:isolate; }
@@ -77,3 +75,43 @@
 .picker-actions button:hover { background:var(--cell-hover); }
 .picker-actions .picker-confirm { background:var(--yellow); color:var(--on-theme); }
 .picker-actions .picker-confirm:hover { background:var(--yellow); filter:brightness(.96); }
+.group-list-entry { display:flex; align-items:center; position:relative; }
+.group-list-entry .group-row { flex:1; min-width:0; }
+.group-info-trigger { opacity:0; flex:0 0 26px; padding:3px; color:var(--muted); }
+.group-list-entry:hover .group-info-trigger, .group-list-entry:focus-within .group-info-trigger { opacity:1; }
+.group-dialog.group-info-drawer { position:fixed; inset:44px 0 0 auto; margin:0; width:min(390px, 100vw); height:calc(100dvh - 44px); max-height:none; max-width:100vw; border:0; border-left:1px solid var(--line); border-radius:0; padding:24px; box-shadow:-12px 0 32px #0000000c; z-index:100; overflow-y:auto; box-sizing:border-box; }
+.group-info-hero { display:flex; align-items:center; gap:16px; margin:24px 0 12px; }
+.group-info-hero h3 { margin:0; overflow-wrap:anywhere; }
+.group-owner { display:grid; gap:8px; margin:20px 0; }
+.group-owner > span { display:flex; gap:10px; align-items:center; }
+.notification-story { max-width:640px; text-align:center; padding:8px 0 40px; }
+.notification-story .story-back { display:flex; align-items:center; gap:8px; border:0; padding:4px 0; color:var(--muted); }
+.story-people { display:flex; justify-content:center; align-items:flex-start; margin:56px 0 28px; }
+.story-people > div:not(.story-link) { display:flex; flex-direction:column; align-items:center; gap:10px; width:120px; min-width:0; }
+.story-people span:not(.user-avatar) { max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.story-link { width:100px; height:64px; display:flex; align-items:center; color:var(--yellow); }
+.story-link i { height:2px; flex:1; background:var(--line); position:relative; overflow:hidden; }
+.story-link i::after { content:""; position:absolute; height:2px; width:28px; background:var(--yellow); animation:story-connect 2.4s ease-in-out 3; }
+@keyframes story-connect { from {left:-28px} to {left:100%} }
+.notification-story h1 { margin-bottom:12px; font-size:24px; }
+.story-message { margin-bottom:4px; overflow-wrap:anywhere; }
+.notification-story time { font-size:12px; }
+.notification-story .notification-review { margin:24px 0 32px; }
+.notification-story .notification-actions { justify-content:center; }
+.story-group { text-align:left; display:flex; gap:14px; align-items:center; padding:20px; border:1px solid var(--line); border-radius:12px; margin-top:32px; }
+.story-group > div { flex:1; min-width:0; overflow-wrap:anywhere; }
+.story-group small { color:var(--muted); font-size:12px; }
+.story-group button { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+.story-hint { color:var(--muted); font-size:12px; }
+@media (prefers-reduced-motion:reduce) { .story-link i::after { animation:none; left:calc(50% - 14px); } }
+@media (hover:none) { .group-info-trigger {opacity:1;} }
+@media(max-width:600px) { .story-group {flex-wrap:wrap;} }
+/* 桌面宽度下给资料栏留出位置，日历仍能完整显示七天。 */
+@media(min-width:1000px) {
+ body:has(.group-info-drawer[open]) .workspace-calendar { margin-right:390px; }
+ body:has(.group-info-drawer[open]) .workspace-page { margin-right:390px; padding-inline:28px; }
+}
+.group-info-drawer .member-list { max-height:none; overflow:visible; }
+
+.group-info-hero p { color:var(--muted); font-size:12px; }
+.group-row.is-active .group-icon { box-shadow:0 0 0 2px var(--panel), 0 0 0 3px var(--yellow); }

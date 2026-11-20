@@ -28,7 +28,8 @@ export class AuthClient {
   private restoring: Promise<void> | null = null;
   private listeners = new Set<() => void>();
   private transport: AuthTransport;
-  constructor(transport: AuthTransport) { this.transport = transport; }
+  private apiBase: string;
+  constructor(transport: AuthTransport, apiBase = "/api") { this.transport = transport; this.apiBase = apiBase; }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   snapshot = () => this.user;
   accept(user: AuthUser | null) {
@@ -90,7 +91,7 @@ export class AuthClient {
       const headers = new Headers(options.headers);
       if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
       headers.set("Authorization", `Bearer ${accessToken}`);
-      return fetcher(`/api${path}`, { ...options, headers, credentials: "include" });
+      return fetcher(`${this.apiBase}${path}`, { ...options, headers, credentials: "include" });
     };
     let response = await send(token);
     if (!this.user || this.user.id !== user.id) throw new APIError("登录状态已变更", 401);

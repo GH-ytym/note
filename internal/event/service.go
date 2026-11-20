@@ -18,7 +18,7 @@ import (
 type Service interface {
 	Create(ctx context.Context, command CreateCommand) (model.Event, error)
 	List(ctx context.Context, query ListQuery) (Page, error)
-	ListInRange(ctx context.Context, userID uint, from, to time.Time) ([]CalendarOccurrence, error)
+	ListInRange(ctx context.Context, userID, groupID uint, from, to time.Time) ([]CalendarOccurrence, error)
 	Get(ctx context.Context, id, userID uint) (model.Event, error)
 	Patch(ctx context.Context, id, userID uint, command PatchCommand) (model.Event, error)
 	Delete(ctx context.Context, id, userID uint) error
@@ -238,7 +238,7 @@ func (s *service) PatchRole(ctx context.Context, actorID, eventID uint, userIDs 
 
 func (s *service) ListInRange(
 	ctx context.Context,
-	userID uint,
+	userID, groupID uint,
 	from time.Time,
 	to time.Time,
 ) ([]CalendarOccurrence, error) {
@@ -251,7 +251,7 @@ func (s *service) ListInRange(
 		return nil, apperrors.ErrInvalidCalendarRange
 	}
 	//找到所有可能的event集合
-	items, err := s.repo.ListInRange(ctx, userID, from, to)
+	items, err := s.repo.ListInRange(ctx, userID, groupID, from, to)
 	if err != nil {
 		return nil, err
 	}

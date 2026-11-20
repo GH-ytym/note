@@ -4,11 +4,10 @@ import type { NotificationCard } from "../hooks/useNotifications";
 import { InboxContext, openPage } from "./Workspace";
 import SpotlightCard from "./react-bits/SpotlightCard";
 import Avatar from "./Avatar";
+import NotificationReview from "./NotificationReview";
+import { notificationAction, reviewLabels as statusLabels } from "../lib/notification-review";
 import "../styles/notifications.css";
 
-const statusLabels: Record<string, string> = {
-  pending: "待审核", accepted: "已同意", rejected: "已拒绝", cancelled: "已撤销",
-};
 
 function NotificationContent({ collapsed = true, page = false }: { collapsed?: boolean; page?: boolean }) {
   const { items, unread_count, loading, error, connected, reload, next, loadingMore, loadMore, markRead } = useContext(InboxContext)!;
@@ -71,9 +70,9 @@ function NotificationContent({ collapsed = true, page = false }: { collapsed?: b
           {frozen && <input type="checkbox" aria-label={`选择通知：${item.actor_name} ${item.group_name}`} disabled={saving || !!item.read_at}
             checked={selected.has(item.id)} onChange={e => { const ids = new Set(selected); if(e.target.checked) ids.add(item.id); else ids.delete(item.id); setSelected(ids); }} />}
           <Avatar url={item.actor_avatar} name={item.actor_name} />
-          <div><button className="notification-card-link" onClick={() => { openPage({id: `notification-${item.id}`, title: "通知详情", card: item}); setOpen(false); }}><p><strong>{item.actor_name}</strong>{item.type === "join_requested" ? " 申请加入 " : item.type === "joined" ? " 加入了 " : " 更新了 "}<strong>{item.group_name}</strong></p></button>
+          <div><button className="notification-card-link" onClick={() => { openPage({id: `notification-${item.id}`, title: "通知详情", card: item}); setOpen(false); }}><p><strong>{item.actor_name}</strong> {notificationAction(item)} <strong>{item.group_name}</strong></p></button>
             <div className="notification-meta"><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>{item.request_status && <span>{statusLabels[item.request_status] || item.request_status}</span>}{!item.read_at && <span>未读</span>}</div>
-            {item.type === "join_requested" && item.request_status === "pending" && <div className="notification-actions" title="审核功能尚未开放"><button disabled>同意</button><button disabled>拒绝</button></div>}
+            <NotificationReview card={item} disabled={!!frozen} />
           </div>
         </SpotlightCard>)}
       </div>

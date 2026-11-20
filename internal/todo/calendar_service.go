@@ -19,7 +19,7 @@ type occurrenceKey struct {
 
 func (s *service) CalendarOccurrences(
 	ctx context.Context,
-	userID uint,
+	userID, groupID uint,
 	from time.Time,
 	to time.Time,
 ) ([]CalendarOccurrence, error) {
@@ -33,7 +33,7 @@ func (s *service) CalendarOccurrences(
 	// Todo、自定义日期和完成记录来自同一个数据库快照
 	items, completions, err := s.repo.CalendarData(
 		ctx,
-		userID,
+		userID, groupID,
 		from,
 		to,
 	)

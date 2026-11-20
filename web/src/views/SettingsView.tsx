@@ -15,7 +15,7 @@ import { AccountSettings } from "../components/AuthGate";
 import { closeCurrentWindow } from "../windows/window-utils";
 
 export default function SettingsView({ onDone }: { onDone?: () => void }) {
-  const [section, setSection] = useState("appearance");
+  const [section, setSection] = useState("account");
   const finish = onDone || closeCurrentWindow;
   const sections: [string, string, Icon][] = [
     ["account", "账号", GearSix],

@@ -91,3 +91,7 @@
 .group-dialog .code-slots__row[data-focused] .code-slots__slot[data-active] { border-color:var(--yellow); }
 .group-dialog .code-slots__input, .group-dialog .code-slots__input:focus { padding:0; border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent; }
 .group-dialog .invite-card { background:var(--page); border-radius:10px; box-shadow:none; }
+.account-avatar-controls .avatar-picker { position:relative; display:inline-flex; padding:9px 16px; border:1px solid var(--line); border-radius:7px; cursor:pointer; background:var(--yellow); color:var(--on-theme); }
+.avatar-picker input[type=file] { position:absolute; opacity:0; inset:0; width:100%; cursor:pointer; }
+.avatar-picker:focus-within { outline:2px solid var(--yellow); outline-offset:3px; }
+.avatar-picker.is-disabled { opacity:.5; cursor:default; }

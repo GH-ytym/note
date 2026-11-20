@@ -41,6 +41,10 @@ function harness(platform: string = process.platform, packaged = false) {
     close() { let prevented = false; this.emit("close", {preventDefault() {prevented = true;}}); if(!prevented) {this.destroyed = true; this.emit("closed");} }
   }
   const electron = {
+    session: {defaultSession: {
+      fetch: async () => ({status:200, ok:true, json:async () => ({id:1, name:"Test", account:"test#12345", access_token:"test-token"})}),
+      cookies: {flushStore:async () => {}},
+    }},
     BrowserWindow: Window,
     app: { isPackaged: packaged, requestSingleInstanceLock: () => true, on() {}, whenReady: () => new Promise(() => {}), getPath: () => "C:/temp" },
     ipcMain: { handle: (name: string, handler: (event: SenderEvent, payload?: unknown) => unknown) => handlers.set(name, handler) },
@@ -57,6 +61,7 @@ function harness(platform: string = process.platform, packaged = false) {
   const invoke = (window: Window, name: string, payload?: unknown) => handlers.get(name)!({sender: window.webContents, senderFrame: {url:"http://127.0.0.1:12345/"}}, payload);
   type HarnessAPI = {
     resolveRuntimePaths(): {backend: string; web: string};
+    hideApplicationWindows(): void; restoreApplicationWindows(): void;
     createCalendarWindow(): Window; createCreateWindow(date: string): Window;
     createDetailWindow(id: number,date: string): Window; createSettingsWindow(): Window;
     createReminderWindow(state: {todoId: number; occursAt: string}): Window;
@@ -154,4 +159,30 @@ test("mini and restored workspace sizes, last-style wake", () => {
   assert.equal(wakeWorkspace("mini",last,"2026-09-10",{}).date,"2026-09-10");
   assert.equal(wakeWorkspace("mini",last,"2026-09-10",{}).dayStyle,"tags");
   assert.equal(wakeWorkspace("mini",last,"2026-09-10",{miniViewMode:"clock"}).dayStyle,"clock");
+});
+
+
+test("reopening while signed out restores the full calendar size", () => {
+  const h = harness();
+  const calendar = h.createCalendarWindow();
+  const original = calendar.getBounds();
+  h.invoke(calendar, "note:mini-mode", true);
+  assert.equal(calendar.getBounds().width, 360);
+  h.hideApplicationWindows();
+  h.restoreApplicationWindows();
+  assert.deepEqual(calendar.getBounds(), original);
+  assert.equal(calendar.isVisible(), true);
+});
+
+
+test("login expands the workspace while token refresh preserves mini mode", async () => {
+  const h = harness();
+  const calendar = h.createCalendarWindow();
+  const original = calendar.getBounds();
+  h.invoke(calendar, "note:mini-mode", true);
+  await h.invoke(calendar, "note:auth", {action:"login",body:{account:"test#12345",password:"test-only"}});
+  assert.deepEqual(calendar.getBounds(), original);
+  h.invoke(calendar, "note:mini-mode", true);
+  await h.invoke(calendar, "note:auth", {action:"refresh",token:"test-token"});
+  assert.equal(calendar.getBounds().width, 360);
 });

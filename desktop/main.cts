@@ -26,6 +26,7 @@ import electron = require("electron");
 import { AuthSession } from "./auth-session.cjs";
 import type { AuthCommand, AuthUser } from "./contracts.cjs";
 import crypto = require("node:crypto");
+import { serverURL, apiURL } from "./server-config.cjs";
 const {
   app,
   BrowserWindow,
@@ -37,6 +38,12 @@ const {
   screen,
   Tray,
 } = electron;
+
+const remoteMode = Boolean(process.env?.NOTE_SERVER_URL || (app.isPackaged && fs.existsSync(path.join(process.resourcesPath, "server.json"))));
+if (remoteMode) {
+  app.setName("Note Server");
+  app.setPath("userData", path.join(app.getPath("appData"), "Note-Server"));
+}
 
 // The calendar is the single primary surface; editors and reminders are auxiliary windows.
 const PRIMARY_WINDOW_KEY = "calendar";
@@ -85,7 +92,7 @@ let lastWorkspaceState: WorkspaceState | null = null;
 let normalWorkspaceState: WorkspaceState | null = null;
 let reminderAccountID: number | null = null;
 const authSession = new AuthSession(async (action, body) => {
-  const response = await electron.session.defaultSession.fetch(new URL(`/api/auth/${action}`, backendURL).toString(), {
+  const response = await electron.session.defaultSession.fetch(apiURL(backendURL, `auth/${action}`), {
     method: "POST", credentials: "include",
     headers: { "Content-Type": "application/json", "X-Note-Request": "1" },
     body: body ? JSON.stringify(body) : undefined,
@@ -96,6 +103,12 @@ const authSession = new AuthSession(async (action, body) => {
   await electron.session.defaultSession.cookies.flushStore().catch(error => console.error("Cookie persistence:", error));
   return { user: data as AuthUser | null, status: response.status };
 }, user => {
+  // 新登录进入完整面板；同一会话刷新令牌时不打断用户的小窗操作。
+  if (user && reminderAccountID !== user.id && workspaceState) {
+    workspaceState = { ...workspaceState, mini: false };
+    applyWorkspaceSize(windows.get(PRIMARY_WINDOW_KEY));
+    sendToWindow(windows.get(PRIMARY_WINDOW_KEY), "note:workspace-view-changed", workspaceState);
+  }
   for (const target of windows.values()) sendToWindow(target, "note:auth-changed", user);
   if (!user) {
 	if (workspaceState) workspaceState = { ...workspaceState, mini: false };
@@ -148,13 +161,19 @@ if (!hasSingleInstanceLock) {
 }
 
 async function startApplication() {
-  app.setAppUserModelId("cn.note.calendar");
+  app.setAppUserModelId(remoteMode ? "cn.note.calendar.server" : "cn.note.calendar");
   app.setAppLogsPath();
   appearanceSettings = loadAppearanceSettings();
   try { lastWorkspaceState = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "workspace.json"), "utf8")); } catch {}
   workspaceState = wakeWorkspace(appearanceSettings.wakeStyle, lastWorkspaceState, todayKey(), appearanceSettings);
+  // 登录页使用主面板尺寸，不能套用托盘的小窗唤醒设置。
+  if (!authSession.user) workspaceState = { ...workspaceState, mini: false };
 
-  backendURL = await startBackend();
+  const configPath = app.isPackaged ? path.join(process.resourcesPath, "server.json") : "";
+  // 服务器版不会创建本地数据库、JWT 密钥，也不会启动内置后端。
+  const remote = process.env.NOTE_SERVER_URL || (configPath && fs.existsSync(configPath)
+    ? JSON.parse(fs.readFileSync(configPath, "utf8")).url : "");
+  backendURL = remote ? serverURL(remote) : await startBackend();
   registerIPC();
   installApplicationMenu();
   installTray();
@@ -534,7 +553,8 @@ function registerIPC() {
 
 function assertTrustedSender(event: IpcMainInvokeEvent) {
   const senderURL = new URL(event.senderFrame?.url || "about:blank");
-  if (senderURL.origin !== new URL(backendURL).origin) throw new Error("untrusted renderer");
+  const base = new URL(backendURL);
+  if (senderURL.origin !== base.origin || !senderURL.pathname.startsWith(base.pathname)) throw new Error("untrusted renderer");
 }
 
 function normalizeDate(value: unknown) {
@@ -637,7 +657,7 @@ function normalizeReminderOccurrence(value: ReminderOccurrence): ReminderState {
 }
 
 async function loadReminderOccurrences(from: string, to: string): Promise<ReminderOccurrence[]> {
-  const url = new URL("/api/calendar", backendURL);
+  const url = new URL(apiURL(backendURL, "calendar"));
   url.searchParams.set("from", from);
   url.searchParams.set("to", to);
 
@@ -1013,7 +1033,17 @@ function createWindow({
   url.searchParams.set("window", role);
   for (const [name, value] of Object.entries(query)) url.searchParams.set(name, String(value));
 
-  target.loadURL(url.toString());
+  target.webContents.on("did-fail-load", async (_event, code, _description, _url, mainFrame) => {
+    if (!mainFrame || code === -3 || target.isDestroyed() || quitting) return;
+    const result = await dialog.showMessageBox(target, {
+      type: "error", title: "无法连接 Note", message: "暂时无法连接服务器",
+      detail: "请确认已连接校园网或 Tailnet，然后重试。", buttons: ["重试", "关闭"], defaultId: 0, cancelId: 1,
+    });
+    if (!target.isDestroyed() && result.response === 0) void target.loadURL(url.toString()).catch(() => {});
+    else if (key === PRIMARY_WINDOW_KEY) void requestQuit();
+    else if (!target.isDestroyed()) target.close();
+  });
+  void target.loadURL(url.toString())?.catch(() => {});
   target.once("ready-to-show", () => {
     if (role === "reminder" && hiddenToTray) {
       for (const other of windows.values()) {
@@ -1160,6 +1190,8 @@ function hideApplicationWindows() {
 function restoreApplicationWindows() {
   hiddenToTray = false;
   workspaceState = wakeWorkspace(appearanceSettings.wakeStyle, lastWorkspaceState, todayKey(), appearanceSettings);
+  // 登录页使用主面板尺寸，不能套用托盘的小窗唤醒设置。
+  if (!authSession.user) workspaceState = { ...workspaceState, mini: false };
   const { calendar } = createWorkspace(todayKey());
   applyWorkspaceSize(calendar);
   sendToWindow(calendar, "note:workspace-view-changed", workspaceState);

@@ -75,7 +75,7 @@ func TestTodoCompletionPersonalStateAndHistory(t *testing.T) {
 		}
 	}
 	for _, user := range []model.User{owner, viewer} {
-		occurrences, err := service.CalendarOccurrences(ctx, user.ID, date, date.AddDate(0, 0, 1))
+		occurrences, err := service.CalendarOccurrences(ctx, user.ID, 0, date, date.AddDate(0, 0, 1))
 		if err != nil || len(occurrences) != 1 || !occurrences[0].OccurrenceDone {
 			t.Fatalf("calendar user %d: %#v %v", user.ID, occurrences, err)
 		}
@@ -85,7 +85,7 @@ func TestTodoCompletionPersonalStateAndHistory(t *testing.T) {
 	if got := list(); len(got) != 1 || got[0].User.ID != owner.ID {
 		t.Fatalf("undo removed another user: %#v", got)
 	}
-	occurrences, err := service.CalendarOccurrences(ctx, viewer.ID, date, date.AddDate(0, 0, 1))
+	occurrences, err := service.CalendarOccurrences(ctx, viewer.ID, 0, date, date.AddDate(0, 0, 1))
 	if err != nil || len(occurrences) != 1 || occurrences[0].OccurrenceDone {
 		t.Fatalf("another user's completion affects calendar: %#v %v", occurrences, err)
 	}
@@ -168,7 +168,7 @@ func TestTodoCompletionHTTPIdentityAndMembership(t *testing.T) {
 		}
 		request(http.MethodGet, user.ID, get, "", 403)
 		request(http.MethodPatch, user.ID, patch, `{"done":false}`, 403)
-		occurrences, err := service.CalendarOccurrences(context.Background(), user.ID, date, date.AddDate(0, 0, 1))
+		occurrences, err := service.CalendarOccurrences(context.Background(), user.ID, 0, date, date.AddDate(0, 0, 1))
 		if err != nil || len(occurrences) != 0 {
 			t.Fatalf("calendar exposed former group's todos: %#v %v", occurrences, err)
 		}

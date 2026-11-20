@@ -49,7 +49,7 @@ func (m *mockEventService) Create(
 
 func (m *mockEventService) ListInRange(
 	_ context.Context,
-	_ uint,
+	_, _ uint,
 	_ time.Time,
 	_ time.Time,
 ) ([]event.CalendarOccurrence, error) {

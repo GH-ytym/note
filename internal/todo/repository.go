@@ -23,7 +23,7 @@ type Repository interface {
 	//在指定时间段找所有可能出现的Todo（只缩小范围不保证全对）
 	CalendarCandidates(
 		ctx context.Context,
-		userID uint,
+		userID, groupID uint,
 		from time.Time,
 		to time.Time,
 	) ([]model.Todo, error)
@@ -63,7 +63,7 @@ type Repository interface {
 	// 一次取得日历所需的数据，保证来自同一个数据库快照
 	CalendarData(
 		ctx context.Context,
-		userID uint,
+		userID, groupID uint,
 		from time.Time,
 		to time.Time,
 	) ([]model.Todo, []model.TodoCompletion, error)
@@ -170,7 +170,7 @@ func NewGORMRepository(db *gorm.DB) Repository {
 
 func (r *gormRepository) CalendarCandidates(
 	ctx context.Context,
-	userID uint,
+	userID, groupID uint,
 	from time.Time,
 	to time.Time,
 ) ([]model.Todo, error) {
@@ -178,8 +178,12 @@ func (r *gormRepository) CalendarCandidates(
 	fromDate := from.Format(time.DateOnly)
 	toDate := to.Format(time.DateOnly)
 
-	err := r.db.
-		WithContext(ctx).
+	db := r.db.WithContext(ctx)
+	if groupID != 0 {
+		db = db.Where("todos.group_id = ?", groupID)
+	}
+
+	err := db.
 		Preload("Members", "user_id = ?", userID).
 		Where(`EXISTS (SELECT 1 FROM group_members gm
 			WHERE gm.group_id = todos.group_id AND gm.user_id = ?)`, userID).
@@ -887,7 +891,7 @@ func todoOccursOn(item model.Todo, date time.Time) (bool, error) {
 // 在同一事务内聚合CalendarCandidates和CompletionsInRange
 func (r *gormRepository) CalendarData(
 	ctx context.Context,
-	userID uint,
+	userID, groupID uint,
 	from time.Time,
 	to time.Time,
 ) ([]model.Todo, []model.TodoCompletion, error) {
@@ -900,7 +904,7 @@ func (r *gormRepository) CalendarData(
 		txRepo := &gormRepository{db: tx}
 
 		var err error
-		items, err = txRepo.CalendarCandidates(ctx, userID, from, to)
+		items, err = txRepo.CalendarCandidates(ctx, userID, groupID, from, to)
 		if err != nil {
 			return err
 		}

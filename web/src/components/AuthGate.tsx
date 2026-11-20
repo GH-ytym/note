@@ -27,7 +27,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     setError(""); setBusy(true);
     try {
       if (registering) {
-        const response = await fetch("/api/auth/register", {
+        const response = await fetch(`${import.meta.env.BASE_URL}api/auth/register`, {
           method: "POST", credentials: "include",
           headers: { "Content-Type": "application/json", "X-Note-Request": "1" },
           body: JSON.stringify({ name, email: account, password }),
@@ -85,7 +85,7 @@ export function AccountSettings() {
   return <div className="account-settings">
     <h2>个人资料</h2>
     <div className="account-avatar-controls"><Avatar url={profile?.avatar} name={profile?.nickname || user?.name || "我"} size={72} />
-      <label>更换头像<input type="file" accept="image/jpeg,image/png" disabled={busy || !profile?.avatar_upload_enabled} onChange={event => {
+      <label className={`avatar-picker ${busy || !profile?.avatar_upload_enabled ? "is-disabled" : ""}`}>{profile?.avatar ? "更换头像" : "选择头像"}<input aria-label="选择个人头像" type="file" accept="image/jpeg,image/png" disabled={busy || !profile?.avatar_upload_enabled} onChange={event => {
         const file = event.target.files?.[0]; event.target.value = "";
         if (!file) return;
         if (file.size > 5 * 1024 * 1024) { setError("请选择不超过 5MB 的图片"); return; }

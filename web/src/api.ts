@@ -32,10 +32,10 @@ export function getTodo(id: number) {
   return request<TodoDetail>(`/todos/${id}`);
 }
 
-export function getCalendar(from: string, to: string, groupID?: number) {
+export function getCalendar(from: string, to: string, groupID?: number, signal?: AbortSignal) {
   const params = new URLSearchParams({ from, to });
   if (groupID) params.set("group_id", String(groupID));
-  return request<CalendarResponse>(`/calendar?${params}`);
+  return request<CalendarResponse>(`/calendar?${params}`, { signal });
 }
 
 export function patchTodo(id: number, changes: TodoChanges) {

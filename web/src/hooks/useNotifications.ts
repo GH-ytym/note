@@ -1,3 +1,5 @@
+import { publishCalendarSync } from "../calendar-events";
+import { parseCalendarChange } from "../lib/calendar-change";
 import { useEffect, useRef, useState } from "react";
 import { auth } from "../auth";
 import { createReviewer } from "../lib/notification-review";
@@ -32,17 +34,21 @@ export default function useNotifications() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let delay=1000;
     async function connect() {
+      let initial = true;
       generation.current++; ready.current=false; setConnected(false); setLoading(true);
       try {
         const response=await auth.response("/notifications/stream", {signal,headers:{Accept:"text/event-stream"}});
         if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error("通知连接响应无效");
         await consumeNotifications(response.body,event=>{
           if(signal.aborted)return;
-          if(event.name==="notification.snapshot"){
+          if(event.name==="cldr"){
+            publishCalendarSync(parseCalendarChange(event.data));
+          }else if(event.name==="notification.snapshot"){
             const page=event.data as NotificationPage;
             version(page.revision);
             if(!Array.isArray(page.items)||!Number.isSafeInteger(page.next)||page.next<0||!Number.isSafeInteger(page.unread_count)||page.unread_count<0)throw new Error("通知快照无效");
             generation.current++; update(page); ready.current=true;
+            if (initial) { initial = false; publishCalendarSync(null); }
             void publishDataChanged({type:"groups"}).catch(()=>{});
             setConnected(true);setLoading(false);setError("");delay=1000;
           }else{

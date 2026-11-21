@@ -13,7 +13,7 @@ export async function consumeNotifications(body: ReadableStream<Uint8Array>, rec
         const line = buffer.slice(0, newline).replace(/\r$/, "");
         buffer = buffer.slice(newline + 1);
         if (!line) {
-          if (name === "notification.snapshot" || name === "notification.change") {
+          if (name === "notification.snapshot" || name === "notification.change" || name === "cldr") {
             receive({ name, data: JSON.parse(lines.join("\n")) });
           }
           name = ""; lines = [];

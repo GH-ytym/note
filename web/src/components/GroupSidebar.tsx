@@ -6,7 +6,7 @@ import { auth } from "../auth";
 import { useGroups } from "../groups";
 import { useProfile } from "../profile";
 import type { Group, GroupMember } from "../types";
-import { createGroup, joinGroup, groupMembers, lookupGroup, quitGroup, dismissGroup } from "../api";
+import { createGroup, joinGroup, groupMembers, lookupGroup, quitGroup } from "../api";
 import { publishDataChanged } from "../data-events";
 import { groupColor, groupInitial, parseInvite, invitationValue } from "../lib/groups";
 import type { GroupPreview } from "../api";
@@ -80,7 +80,7 @@ function GroupPanel({ mode, group, close }: { mode: "create" | "join" | "manage"
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(mode === "manage");
-  const [confirm, setConfirm] = useState<"quit" | "dismiss" | null>(null);
+  const [confirm, setConfirm] = useState<"quit" | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const owner = Boolean(group && group.owner_id === auth.user?.id);
   const personal = group?.policy === "personal";
@@ -143,8 +143,8 @@ function GroupPanel({ mode, group, close }: { mode: "create" | "join" | "manage"
         {group.policy !== "personal" && code && <section className="invite-card"><div><small>分享群号</small><strong className="invite-code">{code}</strong><span>群号固定不变</span><button disabled={busy} onClick={() => void run(async () => { await navigator.clipboard.writeText(link); setNotice("群号已复制"); })}>复制群号／链接</button></div><QRCodeSVG value={link} size={108} marginSize={2} title="群号二维码" /></section>}
         <div className="group-owner"><small>群主</small>{members.filter(m => m.id === group.owner_id).map(m => <span key={m.id}><Avatar url={m.avatar} name={m.nickname || m.username}/>{m.nickname || m.username}</span>)}</div><h3>成员 · {members.length}</h3><ul className="member-list">{members.map(member => <li key={member.id}><Avatar url={member.avatar} name={member.nickname || member.username} /><span><strong>{member.nickname || member.username}</strong><small>{member.username}#{member.suffix}</small></span><small>{member.id === group.owner_id ? "群主" : member.id === auth.user?.id ? "我" : "成员"}</small></li>)}</ul>
         {owner && !personal && <label>转让群主后退出<select value={target} onChange={event => { setTarget(event.target.value); setConfirm(null); }} disabled={busy}><option value="">选择新的群主</option>{members.filter(member => member.id !== auth.user?.id).map(member => <option key={member.id} value={member.id}>{member.nickname || member.username}</option>)}</select></label>}
-        {!personal && <div className="group-danger-actions"><button disabled={busy || (owner && !target)} onClick={() => setConfirm("quit")}>{owner ? "转让并退出群组" : "退出群组"}</button>{owner && <button disabled={busy} onClick={() => setConfirm("dismiss")}>解散群组</button>}</div>}
-        {confirm && <section className="group-confirm" role="alert"><p>{confirm === "dismiss" ? "解散后会删除群组内全部 Todo、Event 和完成记录。确认解散？" : owner ? "确认转让群主并退出？退出后将无法访问群内内容。" : "确认退出？退出后将无法访问群内内容。"}</p><button disabled={busy} onClick={() => void run(async () => { if (confirm === "dismiss") await dismissGroup(group.id); else await quitGroup(group.id, owner ? Number(target) : undefined); await changed(); })}>{busy ? "处理中…" : "确认"}</button><button disabled={busy} onClick={() => setConfirm(null)}>取消</button></section>}
+        {!personal && <div className="group-danger-actions"><button disabled={busy || (owner && !target)} onClick={() => setConfirm("quit")}>{owner ? "转让并退出群组" : "退出群组"}</button></div>}
+        {confirm && <section className="group-confirm" role="alert"><p>{owner ? "确认转让群主并退出？退出后将无法访问群内内容。" : "确认退出？退出后将无法访问群内内容。"}</p><button disabled={busy} onClick={() => void run(async () => { await quitGroup(group.id, owner ? Number(target) : undefined); await changed(); })}>{busy ? "处理中…" : "确认"}</button><button disabled={busy} onClick={() => setConfirm(null)}>取消</button></section>}
       </>}
     </>}
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}

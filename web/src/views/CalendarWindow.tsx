@@ -41,11 +41,12 @@ import {
 } from "../lib/calendar";
 
 export default function CalendarWindow({
+  active = true,
   initialView,
   onMiniChange,
   onPickingChange,
   initialDate = TODAY_KEY,
-}: { initialView?: View; initialDate?: string; onPickingChange?: (picking: boolean) => void; onMiniChange?: (mini: boolean) => void } = {}) {
+}: { active?: boolean; initialView?: View; initialDate?: string; onPickingChange?: (picking: boolean) => void; onMiniChange?: (mini: boolean) => void } = {}) {
   const { settings } = useAppearance();
   const { selected: selectedGroup } = useGroups();
   const [currentMonth, setCurrentMonth] = useState(() =>
@@ -190,7 +191,7 @@ export default function CalendarWindow({
     loading: calendarLoading,
     error: calendarError,
     refresh: refreshCalendar,
-  } = useCalendarItems(range.from, range.to, selectedGroup?.id ?? null);
+  } = useCalendarItems(range.from, range.to, selectedGroup?.id ?? null, active);
   const events = useMemo(() => assignEventTracks(rawEvents, eventTracks.current), [rawEvents]);
 
   useEffect(() => {

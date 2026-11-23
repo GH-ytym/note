@@ -1,118 +1,69 @@
-# Note
-
-**把个人计划和群组协作，放进同一张日历。**
-
-Note 是一款支持多人协作的日历与待办应用。用个人空间整理日常安排，用群组共享课程、会议和任务；在年、月、周、日视图间切换，也可以把今天的安排留在桌面小窗中。
-
-<p align="center"><img src="desktop/build/icon.svg" alt="Note" width="88"></p>
+<p align="center"><img src="desktop/build/icon.svg" width="80" alt=""></p>
+<h1 align="center">Note</h1>
+<p align="center"><strong>个人日程与群组待办，共用一张日历。</strong></p>
 <p align="center">
-  <a href="https://github.com/GH-ytym/note/releases/tag/v1.0.0">下载 v1.0.0</a> ·
-  <a href="https://124.220.23.245/">打开网页版</a> ·
-  <a href="deploy/cloud/README.md">自部署</a> ·
-  <a href="https://github.com/GH-ytym/note/issues">反馈问题</a>
+  <a href="https://124.220.23.245/"><strong>打开网页版</strong></a> ·
+  <a href="https://github.com/GH-ytym/note/releases/download/v1.0.0/Note-Server-Setup-1.0.0.exe"><strong>下载 Windows x64 版</strong></a> ·
+  <a href="https://github.com/GH-ytym/note/releases/download/v1.0.0/Note-Server-1.0.0.exe">便携版</a>
 </p>
 
-![Note 月历与群组工作区](docs/images/v1.0.0/month.jpg)
+![Note 月历，侧栏可切换个人空间和群组，右侧列出选中日期的安排](docs/images/v1.0.0/month.jpg)
 
-## 开始使用
+## 从全年看到这一周
 
-| 方式 | 入口 | 说明 |
-| --- | --- | --- |
-| Windows x64 安装版 | [下载安装包](https://github.com/GH-ytym/note/releases/download/v1.0.0/Note-Server-Setup-1.0.0.exe) | 安装到电脑，支持桌面快捷方式与托盘 |
-| Windows x64 便携版 | [下载便携版](https://github.com/GH-ytym/note/releases/download/v1.0.0/Note-Server-1.0.0.exe) | 无需安装，直接运行 |
-| 网页版 | [打开 Note](https://124.220.23.245/) | 使用浏览器访问同一服务 |
-| 自部署 | [部署指南](deploy/cloud/README.md) | 在自己的服务器保存数据，构建连接自己服务的客户端 |
+排一个学期的课程时，先翻年历找开课日期，再切到周视图。周一到周日并排，每列都是一天的时间轴。两门课之间隔了多久、哪天下午适合约讨论，看它们在格子里的位置就知道。
 
-本次桌面包连接 Note 公网服务，使用时需要联网。使用者无需安装 Go、Redis 或数据库。首次注册会创建个人空间；可以通过邮箱或完整的 `用户名#12345` 登录。
-
-1. 在个人空间新建待办或日程。
-2. 创建群组，选择自由加入或需要审核，再把六位群号分享给伙伴。
-3. 伙伴输入群号即可查看群信息并加入或申请；群主在通知中同意或拒绝。
-4. 切换群组，查看共同的安排。每个人独立记录自己的待办完成状态。
-
-v1.0.0 提供 Windows x64 成品包；macOS 尚未提供本版本的验收安装包。Windows 包未进行代码签名，请核对下载来源及 Release 中的 SHA256 校验文件。
-
-## 为日常安排准备的功能
-
-### 一张日历，多种视角
-
-年视图总览日期，月视图查看安排分布，周视图对比一周计划，日视图聚焦今天。日视图支持标签、时间轴和 24 小时时钟，跨天日程会在对应日期展示。
-
-- **待办**：带时间点的事项，支持按日期标记自己的完成状态、查看已完成成员。
-- **日程**：有开始和结束时间的活动，适合课程、会议与专注时间。
-- **重复安排**：仅一次、每天、工作日、周末、每周、每月及自定义日期。
-- **快速改期**：有编辑权限时，可在时间轴或时钟中拖动调整时间。
-- **群内搜索**：在当前群组中查找待办与日程。
-
-**今日清单与 24 小时时钟**
-
-| 按状态查看今日安排 | 用时钟查看时间分布 |
+| 年视图 · 找日期 | 周视图 · 比较每天的安排 |
 | --- | --- |
-| ![今日清单：未完成、日程与已完成](docs/images/v1.0.0/day.jpg) | ![24 小时时钟中的待办与日程](docs/images/v1.0.0/clock.jpg) |
+| ![年历中的月份与日期网格](docs/images/v1.0.0/year.jpg) | ![七天并排的时间轴与跨时段安排](docs/images/v1.0.0/week.jpg) |
 
-新建表单在当前日历的右侧展开，选择日期时可直接操作日历。详情、通知和设置通过顶部标签页管理，标签支持拖动排序。
+## 看看今天还有多少时间
 
-![在日历旁新建待办](docs/images/v1.0.0/create.jpg)
+早上打开日历，用清单看今天要做的事。切到 **24 小时时钟**，课程和会议各占一段，空出来的时段也一眼可见。临时改约？在时钟或时间轴上拖动日程，就能调整时间。
 
-### 个人空间与群组协作
-
-个人空间固定在群组列表首位。群组资料展示群名、群号、加入方式、群主和成员；群图标使用颜色与群名首字符，个人头像可在设置中上传或更换。
-
-群成员可查看群内安排。每条待办／日程分别设置只读或编辑权限，创建者默认可编辑，群主身份不会自动覆盖记录的编辑权限。成员离开后，其创建的安排仍保留在原群中。
-
-![群资料：群号、二维码、加入方式与成员](docs/images/v1.0.0/group.jpg)
-
-### 通知与同步
-
-通知按钮位于侧边栏底部的设置按钮旁。打开后查看最近未读通知，通过“更多”进入完整列表，支持分页、批量已读和通知详情。
-
-入群申请可在通知卡片中同意或拒绝，处理结果同步到申请人。打开通知详情会标记该通知已读；未读数量以服务端为准。
-
-群内日历变更通过实时事件触发更新，并以低频刷新补偿遗漏。通知连接恢复时从数据库重新同步，配合版本检查处理重复和遗漏。网络恢复后客户端会重新校正状态。
-
-![入群申请详情与同意、拒绝操作](docs/images/v1.0.0/notification.jpg)
-
-以上功能截图来自本机运行的真实应用，使用独立演示数据，未包含线上用户资料。
-
-### 留在桌面的今日安排
-
-桌面小窗支持标签、时间轴与时钟展示。完整面板与小窗可随时切换，登录后默认进入完整面板。
-
-待办支持系统通知与弹窗提醒。应用运行或驻留托盘时可提醒；完全退出应用后不会继续提醒。设置中可调整主题色、背景、透明度、默认视图和时间轴布局。
-
-![Note 个人资料与 COS 头像](docs/images/v1.0.0/profile.jpg)
-
-## 数据属于哪里
-
-v1.0.0 的协作版使用共享后端：
-
-| 数据 | 存储位置 |
+| 今日清单 · 做完一项，勾掉一项 | 24 小时时钟 · 看两场会议之间的空档 |
 | --- | --- |
-| 账号、群组、日程、待办、完成记录、通知 | 服务端 SQLite |
-| 登录刷新会话、通知缓存、实时广播 | 服务端 Redis |
-| 个人头像 | 腾讯云 COS（也支持服务端本地目录方案） |
-| 桌面外观与窗口偏好 | 当前电脑的应用数据目录 |
+| ![按未完成、日程与已完成分组的今日清单](docs/images/v1.0.0/day.jpg) | ![一天的待办和日程分布在圆形时钟上](docs/images/v1.0.0/clock.jpg) |
 
-头像支持 JPEG / PNG，最大 5 MiB；上传后裁剪为 512×512 JPEG。COS 方案仅对头像目录开放读取，上传密钥只保存在后端，不随客户端分发。头像是公开图片，请勿用作私密附件存储。
+## 把日历缩成桌面时钟
 
-公网服务适合小规模协作使用，目前没有服务可用性承诺。需要自行控制数据、备份和服务地址时，请选择自部署。
+在完整日历里排好一天，切到**桌面小窗**，就能把当前时间和下一项安排留在屏幕一角。喜欢逐项查看，可以换成标签或时间轴。要给待办设个提醒，选好提醒时间后，让 Note 驻留托盘即可。
 
-## 自部署
+| 日视图 · 沿时间轴查看日程的起止 | 桌面小窗 · 表盘上的色段对应日程 |
+| --- | --- |
+| ![日视图的时间刻度和相邻日程块](docs/images/v1.0.0/day-timeline.jpg) | <img src="docs/images/v1.0.0/mini-clock.jpg" width="245" alt="桌面小窗，中央显示当前时间，外圈显示当天安排"> |
 
-推荐架构为 **Caddy + Go API + SQLite + Redis + COS**，使用 Docker Compose 管理。SQLite 与 Redis 使用持久卷；Caddy 提供 HTTPS；头像直接存入 COS。
+## 对着日历，把下次活动定下来
 
-```powershell
-# 在项目根目录构建 Linux x64 后端及部署文件
-./deploy/cloud/build.ps1
+选中周五，在日历旁写下「读书会」，填好开始和结束时间。每周见面，就把日程设为**每周重复**。再添一条「读完第三章」的待办，给自己留一个勾选的位置。
 
-# 构建连接自己服务的 Windows 客户端
-$env:NOTE_SERVER_URL = 'https://note.example.com/'
-npm run dist:server --prefix desktop
-```
+![月历右侧展开新建表单，可对照已有安排选择日期](docs/images/v1.0.0/create.jpg)
 
-完整配置、IP HTTPS、头像权限、启动、备份、升级与恢复见 [公有云部署指南](deploy/cloud/README.md)。自部署时必须替换服务地址和密钥，不要直接使用示例凭据。
+### 在日历上点选日期
 
-## 本地开发
+**待办**适合有截止时间的事。比如「交初稿」，点「开始日期」，在日历上选周五，再填交稿时间。遇到几次日期各异的排练，把「重复」设为「自定义」，逐个点选排练日，表单会显示已选天数。
+
+**日程**可以跨天。比如周五下午出发、周日中午返程的旅行，先点「开始日期」选周五，再点「结束日期」选周日，两端分别填写时间。
+
+| 待办 · 选择开始日期 | 日程 · 选择结束日期 |
+| --- | --- |
+| ![新建待办时，左侧月历进入开始日期选择模式](docs/images/v1.0.0/todo-date-picker.jpg) | ![新建日程时，左侧月历进入结束日期选择模式](docs/images/v1.0.0/event-date-picker.jpg) |
+
+## 一起约时间，各自记进度
+
+在个人空间留好自己的阅读时间，再切到读书会群组，把见面时间分享给大家。把**六位群号**发给新伙伴，对方就能找到群组。开启入群审核后，在通知里点一下就能处理申请。
+
+| 分享群号，查看成员 | 在通知里处理入群申请 |
+| --- | --- |
+| ![群资料中的群号、加入方式和成员列表](docs/images/v1.0.0/group.jpg) | ![入群申请详情和审核按钮](docs/images/v1.0.0/notification.jpg) |
+
+共享日程可以交给几位组织者一起编辑，改期后成员的日历会同步更新。共享待办则**每人单独勾选**，打开详情就能看到谁已经读完了这一章。
+
+首次使用时，注册账号即可进入个人空间。网页版和 Windows 版共用账号，换台电脑也能接着安排。[v1.0.0 发布说明](docs/releases/v1.0.0.md) · [使用反馈](https://github.com/GH-ytym/note/issues)
+
+## To Developer
+
+### 本地运行
 
 需要 Go 1.26+、Node.js 24、npm 和 Redis。前后端分开运行：
 
@@ -121,7 +72,7 @@ npm ci --prefix web
 npm ci --prefix desktop
 
 # 如果没有本地 Redis
- docker run -d --name note-dev-redis -p 127.0.0.1:6379:6379 redis:8-alpine
+docker run -d --name note-dev-redis -p 127.0.0.1:6379:6379 redis:8-alpine
 
 $env:NOTE_JWT_SECRET = node -e "process.stdout.write(require('node:crypto').randomBytes(48).toString('base64url'))"
 $env:NOTE_DB_PATH = 'data/note-dev.db'
@@ -133,13 +84,12 @@ go run ./cmd/api
 
 ```powershell
 # 验证源码
- go test ./cmd/... ./internal/...
+go test ./cmd/... ./internal/...
 npm test --prefix web
 npm run build --prefix web
 npm test --prefix desktop
 ```
 
-测试命令明确选择业务源码目录，避免本地未纳入 Git 的临时脚本参与构建。全新检出也可运行 `go test ./...`。
 
 | 目录 | 内容 |
 | --- | --- |
@@ -148,26 +98,12 @@ npm test --prefix desktop
 | `desktop` | Electron、窗口管理、提醒与打包 |
 | `deploy/cloud` | 公有云 Compose、构建与备份脚本 |
 | `docs` | 数据结构、认证与验收文档 |
-| `doc` | 开发计划和历史讨论，不作为产品功能承诺 |
+| `doc` | 开发计划与历史讨论 |
 
 技术栈：Go · Gin · GORM · SQLite · Redis · React · TypeScript · Vite · Electron。
 
-## 当前边界
+### 自部署与技术文档
 
-- 指定用户邀请尚未完成；“仅限邀请”群组目前不能通过群号主动加入。新建协作群组建议选择自由加入或需要审核。
-- 群解散的通知失效流程尚未完成；已有通知关联的群组会被数据库阻止物理删除，事务回滚并保留数据。
-- 修改重复事项时间会影响整个重复规则，暂不支持仅改某一次的时间。
-- 旧版 v0.5.0 单机数据不会自动迁入共享服务，升级前请保留原始数据备份。
-- 邮箱找回密码、自动更新客户端及大规模容量验证不在本次发布范围内。
+使用 Docker Compose 部署自己的服务，按需配置 HTTPS、头像存储、备份与恢复。构建桌面客户端时，用 `NOTE_SERVER_URL` 指向自己的服务地址。[公有云部署指南](deploy/cloud/README.md) · [认证机制](docs/authentication.md) · [数据库结构](docs/database-schema.md)
 
-## 文档与反馈
-
-- [v1.0.0 发布说明](docs/releases/v1.0.0.md)
-- [部署与备份](deploy/cloud/README.md)
-- [认证机制](docs/authentication.md)
-- [数据库结构](docs/database-schema.md)
-- [提交问题](https://github.com/GH-ytym/note/issues)
-
-反馈问题时请附上版本、操作步骤和预期结果；涉及同步问题时说明是否为不同账号、设备或群组。不要提交密码、访问令牌或云服务密钥。
-
-部分界面组件基于 [React Bits](https://github.com/DavidHDev/react-bits)，来源与许可见 [组件说明](web/src/components/react-bits/README.md)。
+部分界面组件基于 React Bits。[组件来源与许可](web/src/components/react-bits/README.md)

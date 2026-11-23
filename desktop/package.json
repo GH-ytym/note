@@ -1,11 +1,11 @@
 {
   "name": "note-desktop",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Note 独立窗口桌面日历",
   "main": "dist/main.cjs",
   "scripts": {
-	"dist:server": "npm run build && node dist/scripts/prepare-server.cjs && electron-builder --config electron-builder.server.cjs --win --x64",
+    "dist:server": "npm run build && node dist/scripts/prepare-server.cjs && electron-builder --config electron-builder.server.cjs --win --x64",
     "prepare:app": "npm run build && node dist/scripts/prepare.cjs",
     "test": "npm run build && node --test dist/*.test.cjs",
     "start": "npm run prepare:app && electron .",

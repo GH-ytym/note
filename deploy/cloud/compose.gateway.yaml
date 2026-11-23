@@ -1,0 +1,23 @@
+# Bootstrap HTTPS before COS/API setup. Same project/service/volumes as compose.yaml.
+name: note-cloud
+services:
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    environment:
+      NOTE_DOMAIN: ${NOTE_DOMAIN:?set public IP or domain}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  caddy_data:
+  caddy_config:

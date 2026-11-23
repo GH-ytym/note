@@ -1,14 +1,15 @@
-name: macOS release
+name: macOS server client
 
 on:
   workflow_dispatch:
+    inputs:
+      server_url:
+        description: HTTPS server URL
+        required: true
+        default: https://124.220.23.245/
 
 permissions:
   contents: read
-
-concurrency:
-  group: macos-release-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,48 +28,21 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: |
-            web/package-lock.json
-            desktop/package-lock.json
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: npm ci --prefix web && npm ci --prefix desktop
-      - name: Validate architecture and release version
-        run: |
-          test "$(node -p 'process.arch')" = '${{ matrix.arch }}'
-          test "$(node -p 'require("./desktop/package.json").version')" = '0.5.0'
-      - run: go test ./...
-      - run: node --test web/src/lib/*.test.js && npm test --prefix desktop
-      - name: Build native macOS packages
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --prefix desktop
+      - run: npm test --prefix desktop
+      - name: Build server client
         working-directory: desktop
         env:
+          NOTE_SERVER_URL: ${{ inputs.server_url }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run dist:mac
-      - name: Smoke test packaged application
-        run: npm run smoke:mac --prefix desktop
+        run: |
+          node dist/scripts/prepare-server.cjs
+          npx electron-builder --config electron-builder.server.cjs --mac --${{ matrix.arch }} --publish never
       - uses: actions/upload-artifact@v4
         with:
-          name: mac-${{ matrix.arch }}
+          name: note-server-mac-${{ matrix.arch }}
           path: |
-            desktop/release/*-mac-${{ matrix.arch }}.dmg
-            desktop/release/*-mac-${{ matrix.arch }}.zip
+            desktop/release/server/*.dmg
+            desktop/release/server/*.zip
           if-no-files-found: error
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: mac-*
-          path: packages
-          merge-multiple: true
-      - name: Append macOS downloads to existing v0.5.0
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh release view v0.5.0
-          gh release upload v0.5.0 packages/*.dmg packages/*.zip --clobber

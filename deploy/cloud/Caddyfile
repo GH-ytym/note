@@ -1,0 +1,18 @@
+{
+    # IP clients may omit SNI; the server's local address is a private IP.
+    default_sni {$NOTE_DOMAIN}
+}
+
+https://{$NOTE_DOMAIN} {
+    tls {
+        issuer acme {
+            dir https://acme-v02.api.letsencrypt.org/directory
+            profile shortlived
+        }
+    }
+    encode zstd gzip
+    respond /healthz "Note HTTPS gateway ready" 200
+    reverse_proxy api:8080 {
+        flush_interval -1
+    }
+}

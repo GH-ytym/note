@@ -290,14 +290,20 @@ func TestEventGroupJoinQuitAndDismiss(t *testing.T) {
 	}
 	checkEventRole(t, db, owned.ID, owner.ID, model.EventEditor)
 	checkEventRole(t, db, item.ID, owner.ID, model.EventViewer)
-	if err := gs.Dismiss(ctx, first.ID, member.ID); err != nil {
-		t.Fatal(err)
+	// 入群已产生历史通知，RESTRICT 应阻止物理删除并回滚前面的清理。
+	if err := gs.Dismiss(ctx, first.ID, member.ID); err == nil {
+		t.Fatal("dismiss must preserve a group referenced by notifications")
+	}
+	for _, id := range []uint{item.ID, owned.ID} {
+		if _, err := es.Get(ctx, id, member.ID); err != nil {
+			t.Fatalf("failed dismiss did not roll back event %d: %v", id, err)
+		}
 	}
 	for _, table := range []any{&model.Event{}, &model.EventDate{}, &model.EventMember{}} {
 		var count int64
-		want := int64(1)
+		want := int64(3)
 		if _, ok := table.(*model.EventMember); ok {
-			want = 2
+			want = 8
 		}
 		if err := db.Model(table).Count(&count).Error; err != nil || count != want {
 			t.Fatalf("dismiss count %T: %d want=%d err=%v", table, count, want, err)

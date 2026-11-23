@@ -1,0 +1,77 @@
+name: note-cloud
+
+x-logs: &logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    environment:
+      NOTE_DOMAIN: ${NOTE_DOMAIN:?set NOTE_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *logs
+  api:
+    image: ${NOTE_IMAGE:?set NOTE_IMAGE}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 768m
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    environment:
+      NOTE_REDIS_ADDR: redis:6379
+      NOTE_JWT_SECRET: ${NOTE_JWT_SECRET:?set a persistent random secret}
+      NOTE_COOKIE_SECURE: "true"
+      NOTE_COS_BUCKET_URL: ${NOTE_COS_BUCKET_URL:?set COS bucket HTTPS URL}
+      NOTE_COS_PUBLIC_URL: ${NOTE_COS_PUBLIC_URL:-}
+      NOTE_COS_SECRET_ID: ${NOTE_COS_SECRET_ID:?set COS subaccount secret ID}
+      NOTE_COS_SECRET_KEY: ${NOTE_COS_SECRET_KEY:?set COS subaccount secret key}
+    volumes:
+      - sqlite:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/api/ping]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging: *logs
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *logs
+
+volumes:
+  sqlite:
+  redis:
+  caddy_data:
+  caddy_config:
